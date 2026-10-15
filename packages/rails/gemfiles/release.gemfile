@@ -1,0 +1,8 @@
+# The release configuration: ../Gemfile on its default Rails (8.1), with the
+# versions locked in release.gemfile.lock. The release workflow and CI's Rails 8.1
+# job install from this lockfile, so they never resolve gems afresh; the other CI
+# jobs pick their Rails line with RAILS_VERSION and ../Gemfile.
+#
+# Update the lock with Ruby 3.4, from packages/rails:
+#   BUNDLE_GEMFILE=gemfiles/release.gemfile bundle lock --update
+eval_gemfile File.expand_path("../Gemfile", __dir__)

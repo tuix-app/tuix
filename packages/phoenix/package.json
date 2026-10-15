@@ -1,0 +1,13 @@
+{
+  "name": "@tuix/phoenix",
+  "version": "0.2.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build:assets": "node scripts/build-assets.mjs",
+    "test": "node --test test/bootstrap.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

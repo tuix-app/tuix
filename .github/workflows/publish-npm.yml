@@ -1,0 +1,138 @@
+name: npm release
+# Publishes @tuix/widget, @tuix/server, @tuix/react or @tuix/mcp to npm with
+# provenance. Release the widget before React, which needs it as a peer.
+# Run it by hand from main with the exact version committed in the package.
+# With publish off (the default) it builds, tests and keeps the tarball for
+# review; with publish on, a second job publishes those exact bytes.
+#
+# The publish job authenticates with npm trusted publishing (OIDC): each package's
+# trusted publisher names this repository, this file and the npm environment. A
+# package's first version, before npm lets a trusted publisher be configured for
+# it, can use a short-lived token in the npm environment's NPM_TOKEN secret.
+# Delete that secret right after the first release.
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to release
+        required: true
+        type: choice
+        options: [widget, server, react, mcp]
+      version:
+        description: Exact version in packages/<package>/package.json
+        required: true
+        type: string
+      publish:
+        description: Publish the verified tarball to npm
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      tarball_sha256: ${{ steps.pack.outputs.sha256 }}
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate source and release request
+        env:
+          RELEASE_PACKAGE: ${{ inputs.package }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: node scripts/validate-release.mjs
+      - run: npm install --global npm@11.12.0 --ignore-scripts
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=moderate
+      # Packs the four packages and checks them installed as a consumer would.
+      - run: npm run prepare:js
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:next
+      - name: Pick the tested tarball
+        id: pack
+        env:
+          RELEASE_PACKAGE: ${{ inputs.package }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp "output/releases/js/tuix-$RELEASE_PACKAGE-$RELEASE_VERSION.tgz" release/package.tgz
+          tar -xzOf release/package.tgz package/package.json | jq -e --arg name "@tuix/$RELEASE_PACKAGE" --arg version "$RELEASE_VERSION" \
+            '.name == $name and .version == $version and (has("private") | not)' > /dev/null
+          printf 'sha256=%s\n' "$(sha256sum release/package.tgz | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          tar -tzf release/package.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-release
+          path: release/package.tgz
+  publish:
+    needs: package
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Only the people in .github/release-actors publish, in addition to the environment's rules.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-actors
+          sparse-checkout-cone-mode: false
+      - name: Only a release actor publishes
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          allowed=$(sed 's/#.*//' .github/release-actors | tr -s ' \t' '\n' | sed '/^$/d')
+          for who in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if ! printf '%s\n' "$allowed" | grep -qixF -- "$who"; then
+              echo "::error::$who may not publish. The logins that may are in .github/release-actors."
+              exit 1
+            fi
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - run: npm install --global npm@11.12.0 --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-release
+          path: prepared
+      - name: Verify the reviewed tarball
+        env:
+          EXPECTED_SHA256: ${{ needs.package.outputs.tarball_sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" prepared/package.tgz | sha256sum --check --strict
+      - name: Use the first-release token, if there is one
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            # npm reads the token from the environment at publish time; it is not written here.
+            # shellcheck disable=SC2016
+            printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > "$HOME/.npmrc"
+            echo '::warning::Publishing with the NPM_TOKEN secret. Once this package has a trusted publisher on npm, delete the secret and revoke the token.'
+          fi
+      - name: Publish with provenance
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_DIST_TAG: ${{ contains(inputs.version, '-') && 'next' || 'latest' }}
+        run: npm publish prepared/package.tgz --provenance --access public --ignore-scripts --tag="$NPM_DIST_TAG" --registry=https://registry.npmjs.org

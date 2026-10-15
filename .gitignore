@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+output/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tgz
+*.gem
+.playwright/
+.playwright-cli/
+test-results/
+playwright-report/

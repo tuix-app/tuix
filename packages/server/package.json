@@ -1,0 +1,24 @@
+{
+  "name": "@tuix/server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Server-only Tuix identity signing for Node.js and Next.js",
+  "license": "MIT",
+  "homepage": "https://tuix.app",
+  "bugs": { "url": "https://github.com/tuix-app/tuix/issues" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=22.12.0" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "node": "./dist/index.js" },
+    "./next": { "types": "./dist/next.d.ts", "default": "./dist/next.js" }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "server-only": "0.0.1" },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "^5.9.0", "vitest": "5.0.1" },
+  "repository": { "type": "git", "url": "git+https://github.com/tuix-app/tuix.git", "directory": "packages/server" },
+  "publishConfig": { "access": "public" }
+}

@@ -1,0 +1,229 @@
+/* tuix widget, Evening Light. Colors come from tokens.ts (--tx-*), which follow the
+   visitor's light or dark setting. Class names are part of the tested surface: restyle
+   here, keep the markup in core.tsx stable. */
+.tuix-app{all:initial;font:15px/1.5 var(--tx-font);color:var(--tx-ink);pointer-events:none;-webkit-font-smoothing:antialiased;--rule:var(--tx-line-soft);--muted:var(--tx-muted)}
+.tuix-app *{box-sizing:border-box}
+.tuix-app [hidden]{display:none!important}
+.tuix-app button,.tuix-app input,.tuix-app textarea,.tuix-app select{all:revert;box-sizing:border-box;font:inherit;letter-spacing:normal;color:inherit}
+.tuix-app button{cursor:pointer;border:1.5px solid var(--tx-line-control);background:transparent;color:var(--tx-ink);padding:0 16px;border-radius:12px;min-height:42px;font-weight:700;font-size:14px;pointer-events:auto;transition:border-color .2s,background-color .2s}
+.tuix-app button:hover{border-color:var(--tx-peach)}
+.tuix-app button:disabled{opacity:.5;cursor:wait}
+.tuix-app button.primary{background:var(--tx-peach);color:var(--tx-on-peach);border-color:var(--tx-peach)}
+.tuix-app button.primary:hover{box-shadow:0 10px 24px -12px var(--tx-glow)}
+.tuix-app :focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}
+.tuix-app ::selection{background:var(--tx-glow-soft);color:var(--tx-ink)}
+.tuix-app input,.tuix-app textarea{caret-color:var(--tx-peach)}
+.tuix-app h2{font-size:20px;line-height:1.25;letter-spacing:-.015em;margin:0;font-weight:700;text-wrap:balance}
+.tuix-app h3{font-size:15px;font-weight:700;margin:0 0 10px}
+.tuix-app p{margin:0 0 12px;overflow-wrap:anywhere}
+.tuix-app .muted{color:var(--tx-muted);font-size:12.5px}
+.tuix-app code{font-family:var(--tx-mono);font-size:.88em;color:var(--tx-peach-text)}
+.tuix-app a{color:var(--tx-peach-text)}
+
+/* Side panel */
+.tuix-app .panel,.tuix-app .composer{position:fixed;pointer-events:auto;background:var(--tx-surface);color:var(--tx-ink);overflow:auto;scrollbar-color:var(--tx-line) transparent;overscroll-behavior:contain}
+.tuix-app .panel{right:0;top:0;bottom:calc(72px + env(safe-area-inset-bottom,0px));width:360px;max-width:100vw;display:flex;flex-direction:column;border-left:1px solid var(--tx-line);border-bottom-left-radius:18px;box-shadow:var(--tx-shadow-panel);animation:tuix-enter .45s cubic-bezier(.2,.8,.2,1)}
+.tuix-app .panel.left{right:auto;left:0;border-left:0;border-right:1px solid var(--tx-line);border-radius:0 0 18px 0}
+.tuix-app header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px;border-bottom:1px solid var(--tx-line-soft)}
+.tuix-app .icon-button{padding:0;min-height:38px;width:38px;flex:none;display:grid;place-items:center;border:1px solid var(--tx-line-control);border-radius:12px;background:transparent}
+.tuix-app svg{width:20px;height:20px;display:block}
+.tuix-app .icon-button svg{width:16px;height:16px}
+.tuix-app .content{padding:20px;overflow:auto;flex:1}
+.tuix-app .toolbar{padding:14px 20px;border-bottom:1px solid var(--tx-line-soft);display:flex;flex-wrap:wrap;gap:12px}
+.tuix-app label{display:grid;gap:6px;font-size:13px;font-weight:700}
+.tuix-app input,.tuix-app textarea,.tuix-app select{width:100%;border:1.5px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg);color:var(--tx-ink);padding:10px 12px;font-size:15px;font-weight:400;min-height:42px;color-scheme:var(--tx-scheme)}
+/* The drawn chevron keeps a gap from the right border (the native one sits against it). */
+.tuix-app select:not([multiple]){appearance:none;background-image:var(--tx-chevron);background-repeat:no-repeat;background-size:10px 6px;background-position:right 14px center;padding-right:38px}
+.tuix-app textarea{resize:vertical;min-height:100px;line-height:1.5}
+.tuix-app form{display:grid;gap:16px}
+.tuix-app .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tuix-app .actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
+.tuix-app .notice{padding:12px 14px;background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink);margin-bottom:16px;border-radius:14px}
+.tuix-app .error{color:var(--tx-err)}
+.tuix-app .empty{padding:36px 0}
+@keyframes tuix-enter{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+
+/* Report list */
+.tuix-app .issue-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.tuix-app .issue-item{display:block;text-align:left;width:100%;background:var(--tx-bg);border:1px solid var(--tx-line-soft);border-radius:14px;padding:12px 14px;min-height:0;font-weight:400}
+.tuix-app .issue-item:hover{border-color:var(--tx-peach)}
+.tuix-app .issue-item strong{display:block;line-height:1.4;margin-bottom:6px;overflow-wrap:anywhere;font-weight:700}
+.tuix-app .issue-meta{display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--tx-muted)}
+.tuix-app .report-kind{display:block;color:var(--tx-muted);font-size:12.5px;font-weight:600;margin:4px 0 8px}
+.tuix-app .status{display:inline-flex;align-items:center;min-height:22px;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;line-height:1.3;background:var(--tx-s-done-bg);color:var(--tx-s-done-ink);white-space:nowrap}
+.tuix-app [data-status=open]>.status,.tuix-app .status[data-status=open]{background:var(--tx-s-open-bg);color:var(--tx-s-open-ink)}
+.tuix-app .status[data-status=in_progress]{background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink)}
+.tuix-app .status[data-status=in_review]{background:var(--tx-s-verify-bg);color:var(--tx-s-verify-ink)}
+.tuix-app .status[data-status=team]{background:var(--tx-aqua);color:var(--tx-on-aqua);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
+.tuix-app .report-filters{display:flex;flex-wrap:wrap;gap:4px 16px}
+.tuix-app .report-filter{border:0;padding:0;margin:0 0 16px;display:flex;flex-wrap:wrap;gap:6px}
+.tuix-app .report-filter legend{margin-bottom:6px;font-size:12.5px;font-weight:700;color:var(--tx-muted)}
+.tuix-app .segmented button{min-height:34px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600}
+.tuix-app .segmented button[aria-pressed=true]{background:var(--tx-s-open-bg);border-color:var(--tx-peach);color:var(--tx-ink)}
+.tuix-app .page-report-group{padding-block:16px;border-bottom:1px solid var(--tx-line-soft)}
+.tuix-app .page-report-group h3{margin:0;font-size:15px;overflow-wrap:anywhere}
+.tuix-app .page-report-group p{margin:4px 0 12px}
+.tuix-app .page-report-group ul{list-style:none;margin:0;padding:0}
+.tuix-app .page-report-group li{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-block:12px}
+.tuix-app .page-report-group a{color:var(--tx-peach-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.tuix-app .page-report-group li a{min-width:0}
+.tuix-app .page-report-group .status{flex-shrink:0}
+
+/* Thread */
+.tuix-app .thread-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;padding:12px 14px;border-radius:14px;background:var(--tx-bg)}
+.tuix-app .comment{margin:12px 0;padding:12px 14px;border-radius:14px;background:var(--tx-bg)}
+.tuix-app .comment:has(.status[data-status=team]){background:var(--tx-raised)}
+.tuix-app .comment p{white-space:pre-wrap;margin:0}
+.tuix-app .comment .issue-meta{margin-bottom:6px}
+.tuix-app .comment .issue-meta strong{color:var(--tx-ink);font-size:13px}
+/* Mentions: a soft "@Name" chip in replies (the "@" stays, so it never relies on color) and the reply
+   composer's suggestions, listed under the textarea at full width, up to six rows. */
+.tuix-app .mention{background:var(--tx-glow-soft);color:var(--tx-peach-text);border-radius:999px;padding:0 .3em;font-weight:600;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tuix-app .mention-field{display:grid;gap:8px}
+.tuix-app .mention-field p{margin:0}
+.tuix-app .mention-list{list-style:none;margin:0;padding:4px;scroll-margin:12px;max-height:236px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--tx-line);border-radius:12px;background:var(--tx-surface);box-shadow:var(--tx-shadow)}
+.tuix-app .mention-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:38px;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:14px;overflow-wrap:anywhere}
+.tuix-app .mention-list li:hover{background:var(--tx-raised)}
+.tuix-app .mention-list [aria-selected=true]{background:var(--tx-s-open-bg);outline:1.5px solid var(--tx-peach);outline-offset:-1.5px}
+.tuix-app .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.tuix-app .thread-state{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:16px 0 4px;font-size:13px;color:var(--tx-muted)}
+.tuix-app .thread-state strong{color:var(--tx-ink);font-weight:700}
+.tuix-app .thread-state button{min-height:32px;padding:0 12px;font-size:13px;border-radius:999px;margin-left:auto}
+.tuix-app .fix-pending{display:inline-flex;align-items:center;gap:8px;margin:8px 0 0;padding:5px 12px;border-radius:999px;background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink);font-size:12.5px;font-weight:600}
+.tuix-app .fix-pending:before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-gold)}
+.tuix-app .thread-actions{margin:16px 0;display:flex;flex-wrap:wrap;gap:8px}
+.tuix-app .thread-actions button{min-height:36px;padding:0 14px;font-size:13.5px;border-radius:999px}
+.tuix-app .state-note{margin:16px 0}
+.tuix-app details{border-top:1px solid var(--tx-line-soft);padding:14px 0;font-size:13px}
+.tuix-app summary{cursor:pointer;font-weight:700;margin-bottom:12px}
+.tuix-app img{max-width:100%;height:auto;border-radius:8px;display:block;margin:12px 0}
+.tuix-app .evidence{margin:16px 0}
+.tuix-app .evidence figcaption{font-size:12.5px;font-weight:700;margin-bottom:8px;color:var(--tx-muted)}
+.tuix-app .content img{max-height:220px;width:100%;object-fit:contain;background:var(--tx-bg)}
+.tuix-app .evidence-preview{display:block;overflow:hidden;border:1px solid var(--tx-line);border-radius:10px;background:var(--tx-bg);margin-block:10px;text-decoration:none;min-height:100px}
+.tuix-app .evidence-preview img[hidden]{display:none}
+.tuix-app .evidence-preview img{display:block;width:100%;height:auto;max-height:240px;object-fit:contain;margin:0}
+.tuix-app .evidence-unavailable{display:block;padding:20px;color:var(--tx-muted);font-size:13px;overflow-wrap:anywhere}
+.tuix-app .evidence-empty{padding:16px;border:1.5px dashed var(--tx-line);border-radius:10px;color:var(--tx-muted)}
+.tuix-app .text-button{min-height:32px;padding:4px 6px;border:0;background:transparent;color:var(--tx-peach-text);font-size:12.5px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.tuix-app .text-button:hover{background:transparent}
+
+/* Updates on your reports */
+.tuix-app .updates{margin:0 0 20px;padding:14px;border:1px solid var(--tx-line-soft);border-radius:14px;background:var(--tx-raised)}
+.tuix-app .updates-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:0 12px;margin-bottom:8px}
+.tuix-app .updates-head .text-button{white-space:nowrap;margin-left:auto}
+.tuix-app .updates-head h3{margin:0;font-size:14px}
+.tuix-app .update-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;overscroll-behavior:contain;scrollbar-color:var(--tx-line) transparent}
+.tuix-app .update-list li+li{border-top:1px solid var(--tx-line-soft)}
+.tuix-app .update-item{display:grid;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-radius:0;padding:10px 0;min-height:0;color:inherit;text-decoration:none;font-weight:400}
+.tuix-app .update-item:hover strong{text-decoration:underline;text-underline-offset:3px}
+.tuix-app .update-item strong{font-size:13px;overflow-wrap:anywhere}
+.tuix-app .update-kind{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tx-aqua-text)}
+.tuix-app .update-item time{font-size:11.5px;color:var(--tx-muted)}
+.tuix-app .switch-row{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:12px;border-top:1px solid var(--tx-line-soft);font-size:12.5px;font-weight:500}
+.tuix-app .switch-row input[role=switch]{appearance:none;flex:none;position:relative;width:34px;min-height:0;height:20px;padding:0;margin:0;border:1.5px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg);cursor:pointer}
+.tuix-app .switch-row input[role=switch]:after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--tx-muted);transition:left .2s}
+.tuix-app .switch-row input[role=switch]:checked{background:var(--tx-aqua);border-color:var(--tx-aqua)}
+.tuix-app .switch-row input[role=switch]:checked:after{left:16px;background:var(--tx-on-aqua)}
+.tuix-app .schedule-row{display:grid;gap:6px;margin-top:10px;font-size:12.5px;font-weight:500}
+.tuix-app .schedule-row select{min-height:36px;padding-block:7px;font-size:13px}
+
+/* Settings flyout: updates and the quiet Open tuix.app link render into its slot */
+.tuix-app.flyout-extra{display:block;pointer-events:auto;font:13px/1.5 var(--tx-font);color:var(--tx-ink)}
+.tuix-app.flyout-extra .updates{margin:0;padding:12px}
+.tuix-app.flyout-extra p{margin:8px 0 0}
+.tuix-app .app-link-row,.tuix-app.flyout-extra .app-link-row{margin:12px 0 0}
+.tuix-app .app-link{font-size:12.5px;font-weight:600;color:var(--tx-muted);text-decoration:underline;text-decoration-color:var(--tx-line-control);text-underline-offset:3px;cursor:pointer}
+.tuix-app .app-link:after{content:" ↗"}
+.tuix-app .app-link:hover{color:var(--tx-peach-text);text-decoration-color:currentColor}
+.tuix-app .app-link[aria-disabled=true]{cursor:wait;opacity:.7}
+
+/* Developer tools, fix and verify */
+.source-tools{margin-top:16px;padding-top:16px;border-top:1px solid var(--tx-line-soft)}.source-tools code{overflow-wrap:anywhere}.source-tools>a{display:inline-flex;align-items:center;min-height:40px;color:var(--tx-peach-text);text-decoration:underline;text-underline-offset:3px;font-weight:700}.source-tools form{display:grid;gap:12px}.source-tools input{width:100%;box-sizing:border-box}
+.fix-tools{margin:16px 0;padding:16px 0;border-top:1px solid var(--tx-line-soft);border-bottom:1px solid var(--tx-line-soft)}.fix-tools form{display:grid;gap:12px;margin-top:12px}.fix-tools p{margin:0}.fix-tools code{overflow-wrap:anywhere}.fix-tools>summary{min-height:40px;padding:10px 0;box-sizing:border-box}
+.verify-tools{margin:16px 0;padding:14px;border-radius:14px;background:var(--tx-s-verify-bg)}.verify-tools h3{font-size:15px;margin:0 0 8px;color:var(--tx-s-verify-ink)}.verify-tools .muted{color:var(--tx-ink)}.verify-tools form{display:grid;gap:16px}.fix-note{margin:16px 0}.fix-note p{white-space:pre-wrap;overflow-wrap:anywhere}.verification-actions{display:flex;flex-wrap:wrap;gap:8px}.verification-actions button{flex:1}.tuix-app .verify-tools img{max-height:180px}
+
+/* Composer */
+.tuix-app .panel.composer{width:360px;max-width:100vw;max-height:none!important;padding:0;top:0!important;bottom:calc(72px + env(safe-area-inset-bottom,0px));left:auto!important;right:0!important;display:flex;flex-direction:column;overflow:hidden}
+.tuix-app .panel.composer.left{left:0!important;right:auto!important}
+.tuix-app .panel.composer header{flex:none;padding:20px;margin:0}
+.tuix-app .panel.composer form{padding:20px;overflow:auto;scrollbar-color:var(--tx-line) transparent}
+.tuix-app .composer .actions{position:sticky;bottom:-20px;background:var(--tx-surface);padding:12px 0 4px;margin-bottom:-4px}
+.tuix-app .selection-summary{display:grid;gap:8px;padding:10px 12px;border-radius:12px;background:var(--tx-bg);font-size:13px;color:var(--tx-muted)}
+.tuix-app .selection-summary p{margin:0}
+.tuix-app .selection-summary button{justify-self:start;min-height:32px;padding:0 12px;font-size:13px}
+.tuix-app .composer-evidence{display:grid;gap:10px;padding:12px 14px;border-radius:14px;border:1px solid var(--tx-line);background:var(--tx-raised)}
+.tuix-app .composer-evidence h3{margin:0;font-size:14px}
+.tuix-app .composer-evidence p{margin:0;font-size:13px;color:var(--tx-muted)}
+.tuix-app .composer-evidence img{max-height:200px;width:100%;object-fit:contain;margin:0;border:1px solid var(--tx-line);background:var(--tx-bg)}
+.tuix-app .composer details img{border:1px solid var(--tx-line)}
+
+/* Picking */
+.tuix-app .pick-surface{position:fixed;inset:0;pointer-events:auto;cursor:crosshair;box-shadow:inset 0 0 0 3px var(--tx-peach),inset 0 0 0 4px var(--tx-glow-soft)}
+.tuix-app .pick-surface.touch{pointer-events:none}
+.tuix-app .highlight{position:fixed;pointer-events:none;border:2px solid var(--tx-peach);border-radius:8px;background:var(--tx-hl-fill);box-shadow:0 0 0 5px var(--tx-glow-soft),0 0 30px -4px var(--tx-glow)}
+.tuix-app .highlight span{position:absolute;left:-2px;bottom:calc(100% + 6px);background:var(--tx-peach);color:var(--tx-on-peach);font:500 11.5px/1 var(--tx-mono);padding:6px 9px;border-radius:8px;white-space:nowrap}
+.tuix-app .picker-hint{position:fixed;top:20px;left:50%;transform:translateX(-50%);pointer-events:none;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;padding:12px 18px;max-width:calc(100vw - 24px);width:max-content;display:flex;align-items:center;gap:20px;box-shadow:var(--tx-shadow);animation:tuix-hint .3s cubic-bezier(.2,.8,.2,1)}
+.tuix-app .picker-hint p{margin:0;display:grid;gap:2px}
+.tuix-app .picker-hint strong{font-size:14px;font-weight:700}
+.tuix-app .picker-hint small{font-size:12.5px;color:var(--tx-muted)}
+.tuix-app .picker-hint[data-state=error]{background:var(--tx-s-open-bg);color:var(--tx-err);border-color:var(--tx-err)}
+.tuix-app .pick-confirm{position:fixed;z-index:4;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px));pointer-events:auto;display:grid;gap:10px;padding:14px;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;box-shadow:var(--tx-shadow);animation:tuix-hint-up .3s cubic-bezier(.2,.8,.2,1)}
+.tuix-app .pick-confirm p{margin:0;display:grid;gap:2px;font-size:13px}
+.tuix-app .pick-confirm .muted{font-size:11.5px}
+.tuix-app .pick-confirm strong{overflow-wrap:anywhere;font-family:var(--tx-mono);font-weight:500;color:var(--tx-peach-text)}
+.tuix-app .pick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tuix-app .pick-actions button{min-height:44px}
+@keyframes tuix-hint{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes tuix-hint-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(min-width:560px){.tuix-app .pick-confirm{left:auto;right:76px;width:360px}.tuix-app .pick-confirm.left{right:auto;left:76px}}
+
+/* Pins: a small light on the page. Color says where the conversation is:
+   peach open, gold in progress, an aqua ring in review (a fix waits for a check). */
+.tuix-app button.pin{position:fixed;width:28px;height:28px;min-height:0;padding:0;border:2px solid var(--tx-pin-ring);border-radius:50%;background:var(--tx-peach);color:var(--tx-on-peach);font-size:11px;font-weight:700;display:grid;place-items:center;box-shadow:var(--tx-shadow-pin),0 0 14px 2px var(--tx-glow);animation:tuix-breathe 9s ease-in-out infinite}
+.tuix-app button.pin[data-state=warm]{background:var(--tx-gold);color:var(--tx-on-gold);box-shadow:var(--tx-shadow-pin),0 0 16px 3px var(--tx-glow-warm)}
+.tuix-app button.pin.verify-pin{background:var(--tx-surface);color:var(--tx-aqua-text);border-color:var(--tx-aqua);box-shadow:var(--tx-shadow-pin),0 0 0 2px var(--tx-pin-ring);animation:none}
+.tuix-app button.pin.verify-pin svg{width:14px;height:14px}
+.tuix-app button.pin.orphan{outline:2px dashed var(--tx-muted);outline-offset:3px}
+.tuix-app button.pin:hover,.tuix-app button.pin:focus-visible,.tuix-app button.pin.active{animation:none;outline:2px solid var(--tx-focus);outline-offset:3px}
+.tuix-app .pin.active{animation:tuix-pin .7s cubic-bezier(.3,1.5,.5,1)}
+@keyframes tuix-breathe{0%,100%{box-shadow:var(--tx-shadow-pin),0 0 8px 1px var(--tx-glow)}50%{box-shadow:var(--tx-shadow-pin),0 0 18px 5px var(--tx-glow)}}
+@keyframes tuix-pin{from{transform:translateY(-10px) scale(.6)}to{transform:none}}
+.tuix-app .marker{position:fixed;box-sizing:border-box;pointer-events:none;border:4px solid var(--tx-peach);border-radius:6px;box-shadow:0 0 0 1px var(--tx-pin-ring),inset 0 0 0 1px var(--tx-pin-ring),0 0 18px -2px var(--tx-glow)}
+.tuix-app .marker[data-state=warm]{border-color:var(--tx-gold);box-shadow:0 0 0 1px var(--tx-pin-ring),inset 0 0 0 1px var(--tx-pin-ring),0 0 18px -2px var(--tx-glow-warm)}
+.tuix-app .marker.verify-marker{border-color:var(--tx-aqua);border-width:6px;border-style:double}
+.tuix-app .marker.orphan{border-style:dashed}
+.tuix-app .marker.active{border-width:6px}
+.tuix-app .marker-card{position:fixed;z-index:4;pointer-events:none;overflow:hidden;display:grid;align-content:start;gap:4px;padding:10px 14px;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:14px;box-shadow:var(--tx-shadow);font-size:13.5px;line-height:1.45;animation:tuix-card .15s ease-out}
+.tuix-app .marker-card p{margin:0}
+.tuix-app .marker-card-meta{font-size:12px;font-weight:600;color:var(--tx-muted)}
+.tuix-app .marker-card-body{white-space:pre-line;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;line-clamp:6;overflow:hidden}
+@keyframes tuix-card{from{opacity:0}to{opacity:1}}
+/* A finger needs a larger target than the drawn dot. */
+@media(pointer:coarse){.tuix-app button.pin:before{content:"";position:absolute;inset:-10px;border-radius:50%}.tuix-app button.pin{animation:none}}
+
+/* Around the launcher */
+.tuix-app .badge{position:fixed;bottom:calc(46px + env(safe-area-inset-bottom,0px));right:10px;min-width:20px;height:20px;padding:0 5px;line-height:16px;border-radius:999px;border:2px solid var(--tx-pin-ring);background:var(--tx-surface);color:var(--tx-ink);text-align:center;font-size:10.5px;font-weight:700;box-shadow:var(--tx-shadow-pin)}
+.tuix-app .badge.left{right:auto;left:42px}
+.tuix-app .badge.attention-dot{min-width:12px;width:12px;height:12px;padding:0;bottom:calc(50px + env(safe-area-inset-bottom,0px));right:14px;background:var(--tx-peach);animation:tuix-lantern 6s ease-in-out infinite}
+.tuix-app .badge.attention-dot.left{right:auto;left:46px}
+.tuix-app .reply-dot{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));width:12px;height:12px;min-height:0;padding:0;background:var(--tx-gold);border:2px solid var(--tx-pin-ring);border-radius:50%;box-shadow:0 0 10px 2px var(--tx-glow-warm)}
+.tuix-app .reply-dot.left{right:auto;left:14px}
+/* The reply dot opens settings; a finger-sized target around the small light. */
+.tuix-app button.reply-dot:before{content:"";position:absolute;inset:-9px;border-radius:50%}
+.tuix-app button.reply-dot:hover,.tuix-app button.reply-dot:focus-visible{border-color:var(--tx-pin-ring);box-shadow:0 0 0 3px var(--tx-glow-warm),0 0 14px 3px var(--tx-glow-warm)}
+@keyframes tuix-lantern{0%,100%{box-shadow:0 0 4px 1px var(--tx-glow)}50%{box-shadow:0 0 12px 4px var(--tx-glow)}}
+
+/* Local stacking inside the isolated widget host: page < markers < selection
+   surface/highlight < panels < menu (10) and launcher controls (12). */
+.tuix-app .pin,.tuix-app .marker{z-index:1}
+.tuix-app .pick-surface{z-index:2}
+.tuix-app .highlight{z-index:3}
+.tuix-app .panel,.tuix-app .composer,.tuix-app .picker-hint{z-index:4}
+.tuix-app .attention-dot,.tuix-app .reply-dot{z-index:13}
+/* Dots stay clickable while selecting, so an existing thread opens instead of a new comment. */
+.tuix-app .pin{z-index:3}
+#tuix-launcher{z-index:12}
+
+@media(prefers-reduced-motion:reduce){.tuix-app .marker-card,.tuix-app .panel,.tuix-app .picker-hint,.tuix-app .pick-confirm,.tuix-app button.pin,.tuix-app .pin.active,.tuix-app .badge.attention-dot{animation:none}}
+@media(max-width:480px){.tuix-app .panel,.tuix-app .panel.composer{width:100vw;border-radius:0}.tuix-app .picker-hint{align-items:flex-start;gap:12px}.tuix-app .picker-hint small{display:block;max-width:220px}}

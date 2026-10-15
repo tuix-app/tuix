@@ -1,0 +1,84 @@
+{
+  "secret": "test-secret-test-secret-test-secret-test-secret-",
+  "cases": [
+    {
+      "label": "v1 string ID without email",
+      "user": {
+        "id": "42",
+        "name": "Ada"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "hash": "ca6e750e1b8ca60d2b17dd3f0a5cd7a590666a20c8543ee39ba30054c3a1030b"
+      }
+    },
+    {
+      "label": "v1 integer ID without email",
+      "user": {
+        "id": 42,
+        "name": "Ada"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "hash": "ca6e750e1b8ca60d2b17dd3f0a5cd7a590666a20c8543ee39ba30054c3a1030b"
+      }
+    },
+    {
+      "label": "v2 trims and lowercases verified email",
+      "user": {
+        "id": 42,
+        "name": "Ada",
+        "email": "  ADA@example.com  "
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "email": "ada@example.com",
+        "hash": "8d8d3ed9ee65fd8c51a7f7f0248d512cfd32a1f462afb8cf2afcdfc18b9e53be"
+      }
+    },
+    {
+      "label": "v2 preserves the exact ID including spaces",
+      "user": {
+        "id": " user-42 ",
+        "name": "Ada",
+        "email": "ada@example.com"
+      },
+      "signed": {
+        "id": " user-42 ",
+        "name": "Ada",
+        "email": "ada@example.com",
+        "hash": "853dce2860f8d17d84a222281b16fa68ae80c612e2d0377c7c6d681cdec19bb0"
+      }
+    },
+    {
+      "label": "UTF-8 identity",
+      "user": {
+        "id": "użytkownik-猫",
+        "name": "Żaneta",
+        "email": "zaneta@example.com"
+      },
+      "signed": {
+        "id": "użytkownik-猫",
+        "name": "Żaneta",
+        "email": "zaneta@example.com",
+        "hash": "1e5332b8e0b87b65f55aefb092639b18748b0101bc615f0ab818d089e8a18eed"
+      }
+    },
+    {
+      "label": "null email selects v1",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "email": null
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "hash": "ca6e750e1b8ca60d2b17dd3f0a5cd7a590666a20c8543ee39ba30054c3a1030b"
+      }
+    }
+  ]
+}

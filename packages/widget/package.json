@@ -1,0 +1,49 @@
+{
+  "name": "@tuix/widget",
+  "version": "0.2.5",
+  "type": "module",
+  "description": "Element-anchored feedback for web applications",
+  "license": "MIT",
+  "homepage": "https://tuix.app",
+  "bugs": {
+    "url": "https://github.com/tuix-app/tuix/issues"
+  },
+  "files": [
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build && tsc -p tsconfig.build.json && node build-loader.mjs"
+  },
+  "dependencies": {
+    "modern-screenshot": "^4.6.0",
+    "phoenix": "^1.8.14",
+    "preact": "^10.27.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/karla": "^5.3.0",
+    "@fontsource-variable/public-sans": "^5.2.7",
+    "@types/phoenix": "^1.6.7",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0",
+    "vitest": "5.0.1"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuix-app/tuix.git",
+    "directory": "packages/widget"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

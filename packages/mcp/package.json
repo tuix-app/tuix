@@ -1,0 +1,22 @@
+{
+  "name": "@tuix/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local read-only MCP stdio adapter for Tuix",
+  "license": "MIT",
+  "homepage": "https://tuix.app",
+  "bugs": { "url": "https://github.com/tuix-app/tuix/issues" },
+  "files": ["src", "README.md", "LICENSE"],
+  "bin": { "tuix-mcp": "src/index.mjs" },
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "repository": { "type": "git", "url": "git+https://github.com/tuix-app/tuix.git", "directory": "packages/mcp" },
+  "publishConfig": { "access": "public" }
+}

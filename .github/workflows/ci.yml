@@ -1,0 +1,168 @@
+name: CI
+# Pull requests run once (as pull_request); pushes run only on main. A newer
+# push to a pull request cancels its older run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  # The widget, @tuix/react, @tuix/server and the Next.js example.
+  javascript:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=moderate
+      # Packs the three npm packages and checks them as a consumer installs them.
+      - run: npm run prepare:js
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:next
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          retention-days: 14
+          path: output/releases/js/
+  phoenix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: '28.2'
+          elixir-version: '1.19.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:phoenix
+      - run: npm test -w @tuix/phoenix
+      - run: mix deps.get
+        working-directory: packages/phoenix
+      - run: mix check
+        working-directory: packages/phoenix
+      - run: mix hex.audit
+        working-directory: packages/phoenix
+      # A new Phoenix application, the Igniter installer run twice, and its tests.
+      - run: mix archive.install hex phx_new 1.8.14 --force
+      - run: bash packages/phoenix/scripts/smoke.sh
+      - run: mix hex.build
+        working-directory: packages/phoenix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-package
+          retention-days: 14
+          path: packages/phoenix/tuix_phoenix-*.tar
+  rails:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rails: '~> 7.2.0'
+            ruby: '3.2'
+          - rails: '~> 8.0.0'
+            ruby: '3.3'
+          # The release configuration, from gemfiles/release.gemfile and its lockfile.
+          - rails: '~> 8.1.0'
+            ruby: '3.4'
+            artifact: true
+            gemfile: gemfiles/release.gemfile
+    defaults:
+      run:
+        working-directory: packages/rails
+    env:
+      RAILS_VERSION: ${{ matrix.rails }}
+      BUNDLE_GEMFILE: ${{ github.workspace }}/packages/rails/${{ matrix.gemfile || 'Gemfile' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: packages/rails
+          cache-version: ${{ matrix.rails }}
+      - run: bundle exec ruby -Ilib test/integration_test.rb
+      - uses: actions/setup-node@v4
+        if: matrix.artifact
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci && npm run build -w @tuix/widget
+        if: matrix.artifact
+        working-directory: .
+      - run: npx playwright install --with-deps chromium
+        if: matrix.artifact
+        working-directory: .
+      - run: npm run test:browser -w @tuix/rails
+        if: matrix.artifact
+        working-directory: .
+      - run: bundle exec ruby ../../scripts/package-rails.rb
+        if: matrix.artifact
+      - uses: actions/upload-artifact@v4
+        if: matrix.artifact
+        with:
+          name: rails-gem
+          retention-days: 14
+          path: output/releases/tuix_rails-*.gem
+  wordpress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci
+      - name: PHP lint (7.4 and 8.3)
+        run: |
+          for image in php:7.4-cli php:8.3-cli; do
+            docker run --rm -v "$PWD/apps/wordpress/tuix-feedback:/plugin:ro" -w /plugin "$image" \
+              sh -c 'for f in $(find . -name "*.php"); do php -l "$f" >/dev/null || exit 1; done'
+          done
+      # Plugin Check is the tool the wordpress.org review runs.
+      - name: Plugin Check
+        run: bash scripts/wordpress-plugin-check.sh
+      - run: npm run build -w @tuix/widget
+      - run: npm run build:wordpress
+      - run: node_modules/.bin/playwright install --with-deps chromium
+        timeout-minutes: 5
+      - name: Plugin in real WordPress
+        run: node scripts/wordpress-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wordpress-evidence
+          retention-days: 7
+          path: output/playwright/wordpress/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wordpress-plugin
+          retention-days: 14
+          path: output/releases/tuix-feedback.zip

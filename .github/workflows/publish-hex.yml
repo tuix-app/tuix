@@ -1,0 +1,166 @@
+name: Hex release
+# Publishes tuix_phoenix to Hex. Run it by hand from main with the exact version
+# in packages/phoenix/mix.exs. With publish off (the default) it builds, tests and
+# keeps the package for review; with publish on, a second job uploads those exact
+# bytes to the Hex API. That job runs no third-party code.
+#
+# Authentication, in the hex environment:
+# - HEX_API_KEY secret: a Hex key with the api:write permission. Hex's Workload
+#   Identity cannot publish a package's first release, so the first one needs it.
+# - Without it: Hex Workload Identity (OIDC), once hex.pm accepts it and the
+#   package has a workload identity naming this repository, this file and the hex
+#   environment. Then delete the HEX_API_KEY secret and revoke the key.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact version in packages/phoenix/mix.exs
+        required: true
+        type: string
+      publish:
+        description: Publish the verified package to Hex
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: hex-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      tarball_sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: '28.2'
+          elixir-version: '1.19.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate source and release request
+        env:
+          RELEASE_PACKAGE: phoenix
+          RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: node scripts/validate-release.mjs
+      - run: npm ci
+      # The bundled widget assets go into priv/static, so the package holds both modes.
+      - run: npm run build:phoenix
+      - run: npm test -w @tuix/phoenix
+      - run: mix deps.get
+        working-directory: packages/phoenix
+      - run: mix check
+        working-directory: packages/phoenix
+      - run: mix hex.audit
+        working-directory: packages/phoenix
+      - run: mix archive.install hex phx_new 1.8.14 --force
+      - run: bash packages/phoenix/scripts/smoke.sh
+      - run: mix hex.build
+        working-directory: packages/phoenix
+      - name: Check and keep the package
+        id: pack
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp "packages/phoenix/tuix_phoenix-$RELEASE_VERSION.tar" release/package.tar
+          metadata=$(tar -xOf release/package.tar metadata.config)
+          printf '%s\n' "$metadata" | grep -qF '{<<"name">>,<<"tuix_phoenix">>}.'
+          printf '%s\n' "$metadata" | grep -qF "{<<\"version\">>,<<\"$RELEASE_VERSION\">>}."
+          # grep reads everything, so tar never gets SIGPIPE under pipefail.
+          tar -xOf release/package.tar contents.tar.gz | tar -tzf - | grep -x 'priv/manifest.json' > /dev/null
+          printf 'sha256=%s\n' "$(sha256sum release/package.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hex-release
+          path: release/package.tar
+  publish:
+    needs: package
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: hex
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      HEX_API_URL: https://hex.pm/api
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      # Only the people in .github/release-actors publish, in addition to the environment's rules.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-actors
+          sparse-checkout-cone-mode: false
+      - name: Only a release actor publishes
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          allowed=$(sed 's/#.*//' .github/release-actors | tr -s ' \t' '\n' | sed '/^$/d')
+          for who in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if ! printf '%s\n' "$allowed" | grep -qixF -- "$who"; then
+              echo "::error::$who may not publish. The logins that may are in .github/release-actors."
+              exit 1
+            fi
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: hex-release
+          path: prepared
+      - name: Verify the reviewed package
+        env:
+          EXPECTED_SHA256: ${{ needs.package.outputs.tarball_sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" prepared/package.tar | sha256sum --check --strict
+      - name: Publish
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          set -euo pipefail
+          revoke=
+          if [ -n "$HEX_API_KEY" ]; then
+            authorization=$HEX_API_KEY
+            echo '::notice::Publishing with the HEX_API_KEY secret.'
+          else
+            # Hex Workload Identity: exchange this job's OIDC token for a 15-minute
+            # token that can publish tuix_phoenix only.
+            audience=$(curl -fsS --max-time 30 "$HEX_API_URL/oidc/audience" | jq -er .audience) || {
+              echo '::error::hex.pm does not offer Workload Identity here. Put a Hex key in the HEX_API_KEY secret of the hex environment.'
+              exit 1
+            }
+            oidc=$(curl -fsS --max-time 30 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" | jq -er .value)
+            token=$(curl -fsS --max-time 30 -X POST "$HEX_API_URL/oauth/token" \
+              --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+              --data-urlencode "assertion=$oidc" \
+              --data-urlencode 'scope=package:hexpm/tuix_phoenix' | jq -er .access_token)
+            echo "::add-mask::$token"
+            authorization="Bearer $token"
+            revoke=$token
+          fi
+          status=$(curl -sS --max-time 300 -o response.json -w '%{http_code}' -X POST \
+            "$HEX_API_URL/packages/tuix_phoenix/releases?replace=false" \
+            -H "Authorization: $authorization" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/octet-stream' \
+            --data-binary @prepared/package.tar)
+          if [ -n "$revoke" ]; then
+            curl -fsS --max-time 30 -X POST "$HEX_API_URL/oauth/revoke" --data-urlencode "token=$revoke" > /dev/null || true
+          fi
+          if [ "$status" != 200 ] && [ "$status" != 201 ]; then
+            echo "::error::Hex answered $status."
+            jq . response.json || cat response.json
+            exit 1
+          fi
+          echo "Published tuix_phoenix $RELEASE_VERSION: https://hex.pm/packages/tuix_phoenix/$RELEASE_VERSION"

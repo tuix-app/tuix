@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+gemspec
+gem "railties", ENV.fetch("RAILS_VERSION", "~> 8.1.0")
+gem "minitest", "~> 5.0"
+gem "turbo-rails", "~> 2.0"
+gem "webrick", "~> 1.9"

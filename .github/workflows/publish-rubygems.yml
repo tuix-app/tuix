@@ -1,0 +1,136 @@
+name: RubyGems release
+# Publishes tuix_rails to RubyGems.org. Run it by hand from main with the exact
+# version in packages/rails/lib/tuix_rails/version.rb. With publish off (the
+# default) it builds, tests and keeps the gem for review; with publish on, a second
+# job pushes those exact bytes.
+#
+# The push uses RubyGems trusted publishing (OIDC): the gem's trusted publisher
+# names this repository, this file and the rubygems environment. Before the first
+# release, add it as a pending trusted publisher with the gem name tuix_rails. The
+# build installs gems only from gemfiles/release.gemfile.lock.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact version in packages/rails/lib/tuix_rails/version.rb
+        required: true
+        type: string
+      publish:
+        description: Publish the verified gem to RubyGems.org
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: rubygems-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      gem_sha256: ${{ steps.pack.outputs.sha256 }}
+    env:
+      # The release configuration: Rails 8.1, installed from its lockfile only.
+      BUNDLE_GEMFILE: ${{ github.workspace }}/packages/rails/gemfiles/release.gemfile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate source and release request
+        env:
+          RELEASE_PACKAGE: rails
+          RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: node scripts/validate-release.mjs
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: packages/rails
+          cache-version: release
+      - run: bundle exec ruby -Ilib test/integration_test.rb
+        working-directory: packages/rails
+      - run: npm ci && npm run build -w @tuix/widget
+      - run: npx playwright install --with-deps chromium
+      - run: npm test -w @tuix/rails
+      - run: npm run test:browser -w @tuix/rails
+      # Builds the gem, checks its files and reruns the integration tests against it installed.
+      - run: bundle exec ruby ../../scripts/package-rails.rb
+        working-directory: packages/rails
+      - name: Check and keep the gem
+        id: pack
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp "output/releases/tuix_rails-$RELEASE_VERSION.gem" "release/tuix_rails-$RELEASE_VERSION.gem"
+          gem specification "release/tuix_rails-$RELEASE_VERSION.gem" version | grep -qx "version: $RELEASE_VERSION"
+          printf 'sha256=%s\n' "$(sha256sum "release/tuix_rails-$RELEASE_VERSION.gem" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rubygems-release
+          path: release/tuix_rails-${{ inputs.version }}.gem
+  # Runs no third-party action: the runner's own Ruby pushes, with a key that
+  # trusted publishing gives this job only.
+  publish:
+    needs: package
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: rubygems
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      # Only the people in .github/release-actors publish, in addition to the environment's rules.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-actors
+          sparse-checkout-cone-mode: false
+      - name: Only a release actor publishes
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          allowed=$(sed 's/#.*//' .github/release-actors | tr -s ' \t' '\n' | sed '/^$/d')
+          for who in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if ! printf '%s\n' "$allowed" | grep -qixF -- "$who"; then
+              echo "::error::$who may not publish. The logins that may are in .github/release-actors."
+              exit 1
+            fi
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: rubygems-release
+          path: prepared
+      - name: Verify the reviewed gem
+        env:
+          EXPECTED_SHA256: ${{ needs.package.outputs.gem_sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" "prepared/tuix_rails-$RELEASE_VERSION.gem" | sha256sum --check --strict
+      # RubyGems trusted publishing: this job's OIDC token (audience rubygems.org)
+      # buys a short-lived key that can push only what the trusted publisher allows.
+      - name: Push with a short-lived key
+        run: |
+          set -euo pipefail
+          oidc=$(curl -fsS --max-time 30 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=rubygems.org" | jq -er .value)
+          key=$(jq -n --arg jwt "$oidc" '{jwt: $jwt}' | curl -fsS --max-time 30 -X POST \
+            -H 'Content-Type: application/json' -H 'Accept: application/json' --data @- \
+            https://rubygems.org/api/v1/oidc/trusted_publisher/exchange_token | jq -er .rubygems_api_key) || {
+            echo '::error::RubyGems.org gave no key. Check the trusted publisher of tuix_rails: owner, repository, workflow publish-rubygems.yml and environment rubygems.'
+            exit 1
+          }
+          echo "::add-mask::$key"
+          ruby -v
+          GEM_HOST_API_KEY=$key gem push "prepared/tuix_rails-$RELEASE_VERSION.gem"

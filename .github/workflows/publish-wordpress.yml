@@ -1,0 +1,148 @@
+name: wordpress.org release
+# Deploys the WordPress plugin to its wordpress.org Subversion repository: trunk
+# and tags/<version>. Run it by hand from main with the exact Version of
+# apps/wordpress/tuix-feedback/tuix-feedback.php. With publish off (the default) it checks, tests and
+# keeps the plugin zip for review; with publish on, a second job commits the
+# contents of that exact zip.
+#
+# wordpress.org gives Subversion access only after it approved the plugin, and the
+# first version goes through its upload form; this workflow is for the releases
+# after that. The wordpress environment holds SVN_USERNAME and SVN_PASSWORD (the
+# account's SVN password from its wordpress.org profile, not its login password).
+# WORDPRESS_ORG_SLUG below is the slug wordpress.org assigns to the name Tuix Feedback.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact Version in apps/wordpress/tuix-feedback/tuix-feedback.php
+        required: true
+        type: string
+      publish:
+        description: Commit the verified plugin to wordpress.org
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: wordpress-release
+  cancel-in-progress: false
+env:
+  WORDPRESS_ORG_SLUG: tuix-feedback
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      zip_sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate source and release request
+        env:
+          RELEASE_PACKAGE: wordpress
+          RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: node scripts/validate-release.mjs
+      - run: npm ci
+      - name: PHP lint (7.4 and 8.3)
+        run: |
+          for image in php:7.4-cli php:8.3-cli; do
+            docker run --rm -v "$PWD/apps/wordpress/tuix-feedback:/plugin:ro" -w /plugin "$image" \
+              sh -c 'for f in $(find . -name "*.php"); do php -l "$f" >/dev/null || exit 1; done'
+          done
+      - name: Plugin Check
+        run: bash scripts/wordpress-plugin-check.sh
+      - run: npm run build -w @tuix/widget
+      - run: npx playwright install --with-deps chromium
+      - name: Plugin in real WordPress
+        run: node scripts/wordpress-smoke.mjs
+      - run: npm run build:wordpress
+      - name: Check and keep the zip
+        id: pack
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(cat output/releases/version)" = "$RELEASE_VERSION"
+          mkdir -p release
+          cp output/releases/tuix-feedback.zip release/tuix-feedback.zip
+          unzip -l release/tuix-feedback.zip
+          printf 'sha256=%s\n' "$(sha256sum release/tuix-feedback.zip | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wordpress-release
+          path: release/tuix-feedback.zip
+  publish:
+    needs: package
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: wordpress
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      # Only the people in .github/release-actors publish, in addition to the environment's rules.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-actors
+          sparse-checkout-cone-mode: false
+      - name: Only a release actor publishes
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          allowed=$(sed 's/#.*//' .github/release-actors | tr -s ' \t' '\n' | sed '/^$/d')
+          for who in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if ! printf '%s\n' "$allowed" | grep -qixF -- "$who"; then
+              echo "::error::$who may not publish. The logins that may are in .github/release-actors."
+              exit 1
+            fi
+          done
+      - run: sudo apt-get update -q && sudo apt-get install -y -q subversion
+      - uses: actions/download-artifact@v4
+        with:
+          name: wordpress-release
+          path: prepared
+      - name: Verify the reviewed zip
+        env:
+          EXPECTED_SHA256: ${{ needs.package.outputs.zip_sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" prepared/tuix-feedback.zip | sha256sum --check --strict
+      - name: Prepare trunk and the tag
+        run: |
+          set -euo pipefail
+          url="https://plugins.svn.wordpress.org/$WORDPRESS_ORG_SLUG"
+          if svn ls "$url/tags/$RELEASE_VERSION" > /dev/null 2>&1; then
+            echo "::error::wordpress.org already has tags/$RELEASE_VERSION. Raise the version and run again."
+            exit 1
+          fi
+          unzip -q prepared/tuix-feedback.zip -d plugin
+          test -f plugin/tuix-feedback/tuix-feedback.php
+          svn checkout -q --depth immediates "$url" svn
+          svn update -q --set-depth infinity svn/trunk
+          # Trunk becomes exactly the plugin: changed files, new files added, gone files removed.
+          rsync -a --delete --exclude .svn plugin/tuix-feedback/ svn/trunk/
+          svn add -q --force svn/trunk
+          svn status svn/trunk | awk '/^!/ { print substr($0, 9) }' | while IFS= read -r gone; do svn rm -q "$gone"; done
+          svn cp -q svn/trunk "svn/tags/$RELEASE_VERSION"
+          svn status svn
+      - name: Commit to wordpress.org
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SVN_USERNAME" ] || [ -z "$SVN_PASSWORD" ]; then
+            echo '::error::The wordpress environment needs the SVN_USERNAME and SVN_PASSWORD secrets.'
+            exit 1
+          fi
+          svn commit svn -m "Release $RELEASE_VERSION" --non-interactive --no-auth-cache \
+            --username "$SVN_USERNAME" --password-from-stdin <<< "$SVN_PASSWORD"
+          echo "Released $RELEASE_VERSION: https://wordpress.org/plugins/$WORDPRESS_ORG_SLUG/"

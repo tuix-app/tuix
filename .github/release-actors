@@ -1,0 +1,5 @@
+# GitHub logins that may publish a release from this repository, one per line.
+# The publish-*.yml workflows check both the person who started a run and the one
+# who re-ran it, before they build and again before they publish. The npm, hex,
+# rubygems and wordpress environments add their own reviewers and branch rule.
+inou

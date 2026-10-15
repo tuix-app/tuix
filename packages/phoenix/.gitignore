@@ -1,0 +1,6 @@
+/_build/
+/deps/
+/priv/static/
+/priv/manifest.json
+/*.tar
+/erl_crash.dump

@@ -1,0 +1,29 @@
+{
+  "name": "tuix-integrations",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/widget",
+    "packages/react",
+    "packages/server",
+    "packages/mcp",
+    "packages/phoenix",
+    "packages/rails",
+    "examples/nextjs"
+  ],
+  "scripts": {
+    "build": "npm run build -w @tuix/widget && npm run build -w @tuix/server && npm run build -w @tuix/react",
+    "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
+    "typecheck": "npm run build && npm run typecheck --workspaces --if-present",
+    "prepare:js": "npm run build && node scripts/package-js.mjs",
+    "test:next": "node scripts/nextjs-smoke.mjs",
+    "build:phoenix": "npm run build -w @tuix/widget && npm run build:assets -w @tuix/phoenix",
+    "build:wordpress": "python3 scripts/package-wordpress.py output/releases/tuix-feedback.zip"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@playwright/cli": "0.1.21"
+  }
+}

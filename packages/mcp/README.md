@@ -30,8 +30,8 @@ the server's configured URL for hosted apps such as claude.ai.
 For clients without remote OAuth support, use this adapter with a manually
 created token.
 
-MIT licensed. Requires Node.js 22.12 or newer. Until `@tuix/mcp` is on npm, run
-it from a checkout of this repository after `npm ci` at its root.
+MIT licensed, on npm as `@tuix/mcp`. Requires Node.js 22.12 or newer. The client
+starts it with `npx -y @tuix/mcp`; nothing else to install.
 The maintained MCP SDK handles initialization, validation, and stdio framing.
 
 ## AI client configuration
@@ -43,8 +43,8 @@ configuration file varies by client):
 {
   "mcpServers": {
     "tuix": {
-      "command": "node",
-      "args": ["/absolute/path/to/tuix/packages/mcp/src/index.mjs"],
+      "command": "npx",
+      "args": ["-y", "@tuix/mcp"],
       "env": {
         "TUIX_API_URL": "https://tuix.example.com",
         "TUIX_MCP_TOKEN": "<operator-issued-read-credential>"
@@ -54,8 +54,8 @@ configuration file varies by client):
 }
 ```
 
-Use the Node executable's absolute path if the client does not inherit your
-shell's `PATH`. Configuration is **environment-only**: no CLI options or token
+Use the absolute path of `npx` if the client does not inherit your shell's
+`PATH`. To pin a version, write `@tuix/mcp@0.1.0`. Configuration is **environment-only**: no CLI options or token
 files. The URL must be a bare HTTPS origin, optionally with a port or trailing
 slash, without credentials, path, query, or fragment. HTTP is allowed only for
 `localhost`, `127.0.0.1`, and `::1`, for local development.
@@ -69,11 +69,12 @@ prompts, issue reports, or logs. Store it using the AI client's local secret
 mechanism where available. Project and environment authorization is always
 enforced by the Tuix server, not by the model or this adapter.
 
-Run `node packages/mcp/src/index.mjs` from the repository root, with those two
-environment variables supplied by your client or shell. Do not use `npm start`
-as the client's command: npm can print banners to stdout. The direct Node
-entrypoint reserves stdout exclusively for MCP; startup errors are generic
-and go to stderr.
+The client supplies those two environment variables. The command reserves
+stdout exclusively for MCP; npm's own notices and startup errors go to stderr,
+and startup errors are generic. To try a change before its release, run
+`node packages/mcp/src/index.mjs` from a checkout of this repository after `npm ci`
+instead. Do not use `npm start` as the client's command: npm can print banners to
+stdout.
 
 ## Read-only tools and pagination
 

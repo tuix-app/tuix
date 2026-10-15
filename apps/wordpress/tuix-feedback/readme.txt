@@ -1,5 +1,5 @@
 === Tuix Feedback ===
-Contributors: PLACEHOLDER-wordpress-org-username
+Contributors: inou
 Tags: feedback, review, qa, annotations, bug reporting
 Requires at least: 6.3
 Tested up to: 7.1
@@ -49,7 +49,7 @@ Tuix terms of service: https://tuix.app/terms. Tuix privacy policy: https://tuix
 You need a Tuix project and a Tuix admin account. Tuix → Project settings → Install tuix → WordPress plugin shows these steps with your project's values filled in.
 
 1. **Allow your site in Tuix.** In Tuix → Project settings, add the site's exact address, such as https://www.example.com, to Allowed origins and save. Add both the www and bare domain if the site answers on both. Use a separate Tuix environment (uat) for a staging site.
-2. **Install the plugin.** Download tuix-feedback.zip from Tuix → Project settings → Install tuix → WordPress plugin. In WordPress open Plugins → Add New Plugin → Upload Plugin, choose the zip, then Install Now and Activate.
+2. **Install the plugin.** In WordPress open Plugins → Add New Plugin, search for Tuix Feedback, then Install Now and Activate. A site that cannot reach wordpress.org can download tuix-feedback.zip from Tuix → Project settings → Install tuix → WordPress plugin and add it with Upload Plugin.
 3. **Connect it.** In WordPress open Settings → Tuix and enter:
    * Tuix address: where your Tuix runs, for example https://tuix.app
    * Public project key: Tuix → Project settings → Public project key (starts with pk_)

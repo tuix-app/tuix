@@ -5,9 +5,11 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, 
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// esbuild is the widget's build dependency. Load it from there: the root's copy is only another
+// package's optional peer, which npm 11 does not install.
+const { build } = createRequire(join(root, 'packages/widget/package.json'))('esbuild');
 const output = join(root, 'output/releases/js');
 mkdirSync(output, { recursive: true });
 const stage = mkdtempSync(join(output, '.prepare-'));

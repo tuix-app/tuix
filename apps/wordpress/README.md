@@ -1,12 +1,14 @@
 # Tuix Feedback, the WordPress plugin
 
 `tuix-feedback/` is the plugin Tuix Feedback (wordpress.org slug `tuix-feedback`), under
-the GNU General Public License, version 2 or later (`tuix-feedback/LICENSE`).
+the GNU General Public License, version 2 or later (`tuix-feedback/LICENSE`). Sites
+install it from the wordpress.org plugin directory, through Plugins → Add New Plugin.
 `python3 scripts/package-wordpress.py <target.zip>` packages it as a reproducible zip.
-Tuix servers serve that zip at `/downloads/tuix-feedback.zip` (the earlier
-`/downloads/tuix-wordpress.zip` redirects there), and Project settings → Install tuix →
-WordPress plugin links to it with setup steps. Customer-facing documentation is
-`tuix-feedback/readme.txt`, in the wordpress.org readme format.
+Tuix servers also serve that zip at `/downloads/tuix-feedback.zip` (the earlier
+`/downloads/tuix-wordpress.zip` redirects there), for sites that cannot reach
+wordpress.org; Project settings → Install tuix → WordPress plugin gives both ways with
+setup steps. Customer-facing documentation is `tuix-feedback/readme.txt`, in the
+wordpress.org readme format.
 
 How it works:
 

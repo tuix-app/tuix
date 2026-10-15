@@ -5,25 +5,19 @@ widget delivery, CSP nonces and Turbo navigation. Requires Ruby 3.2+ and Rails
 7.2–8.x (Rails itself may require a newer Ruby). No database, npm installation,
 asset precompile or separate Tuix login is needed by the host application.
 
-MIT licensed. Until the gem is on RubyGems, install it from a checkout of this
-repository or from a built gem, as below.
+MIT licensed, on [RubyGems](https://rubygems.org/gems/tuix_rails).
 
 ## Install
 
-Add the package to the host application's Gemfile, using a checkout of this
-repository or an unpacked gem artifact:
-
-```ruby
-gem "tuix_rails", path: "/absolute/path/to/tuix/packages/rails"
-```
-
-For the built artifact, run `gem unpack output/releases/tuix_rails-0.1.0.gem`
-and point `path:` at the resulting `tuix_rails-0.1.0` directory.
+In the host application:
 
 ```sh
-bundle install
+bundle add tuix_rails
 bin/rails generate tuix:install
 ```
+
+To try a change before its release, use `gem "tuix_rails", path: "/absolute/path/to/packages/rails"`
+in the Gemfile instead.
 
 The generator creates `config/initializers/tuix.rb`. It prints the layout steps
 instead of guessing your authentication library or rewriting custom layouts.

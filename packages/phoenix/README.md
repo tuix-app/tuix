@@ -8,24 +8,16 @@ Requires Elixir 1.15+, Phoenix 1.7/1.8 and LiveView 1.x. The installer supports 
 
 ## Install
 
-MIT licensed. Until the package is on Hex, install it from a checkout of this repository: run `npm ci && npm run build:phoenix` at the repository root, then, in the host application (install Igniter first if it is not already available):
+MIT licensed, on [Hex](https://hex.pm/packages/tuix_phoenix). In the host application (the first command installs Igniter if it is not already available):
 
 ```sh
 mix archive.install hex igniter_new
-mix igniter.install tuix_phoenix@path:/absolute/path/to/tuix/packages/phoenix
+mix igniter.install tuix_phoenix
 ```
 
-Igniter presents the proposed changes for review. `--dry-run` previews them; `--yes` accepts them for automation. For a nonstandard web module, append `--web MyAppWeb`. Run the command from the Phoenix web application's directory, including when it lives in an umbrella.
+Igniter adds `tuix_phoenix` from Hex and presents the proposed changes for review. `--dry-run` previews them; `--yes` accepts them for automation. For a nonstandard web module, append `--web MyAppWeb`. Run the command from the Phoenix web application's directory, including when it lives in an umbrella.
 
-A built package (`mix hex.build`, or the CI `phoenix-package` artifact) works the same way once unpacked:
-
-```sh
-mkdir -p tuix_phoenix/archive
-tar -xf /path/to/tuix_phoenix-0.2.0.tar -C tuix_phoenix/archive
-tar -xzf tuix_phoenix/archive/contents.tar.gz -C tuix_phoenix
-```
-
-Then point the Igniter path command above at the unpacked `tuix_phoenix` directory.
+To try a change before its release, run `npm ci && npm run build:phoenix` at the root of this repository, then `mix igniter.install tuix_phoenix@path:/absolute/path/to/packages/phoenix` instead.
 
 The installer adds:
 
@@ -100,7 +92,7 @@ For a nonce-based policy, expose the matching response nonce as `assigns.csp_non
 
 The local bootstrap (and bundled fallback assets in CI packages) lives in `priv/static` and is served by Plug.Static with content-addressed URLs, SHA-384 integrity and immutable caching. OTP releases include it automatically. Source maps are not served. Hosted runtime updates arrive through the Tuix stable manifest on subsequent full page loads, without rebuilding the Phoenix host. Retain old immutable assets at Tuix for cached pages and active clients; likewise retain local assets at the host during rolling deployments.
 
-**Deploying Tuix does not deploy your Phoenix host application.** Once this hosted integration is installed, ordinary widget updates require only a Tuix deployment. Existing older integrations need a one-time package upgrade and host deployment to adopt hosted delivery. Bootstrap changes and hosts opting into `:bundled` still require a host rebuild and deployment. Upgrade the package like any other dependency when a release needs it; no installer rerun is needed for an ordinary package upgrade.
+**Deploying Tuix does not deploy your Phoenix host application.** Once this hosted integration is installed, ordinary widget updates require only a Tuix deployment. Existing older integrations need a one-time package upgrade and host deployment to adopt hosted delivery. Bootstrap changes and hosts opting into `:bundled` still require a host rebuild and deployment. Upgrade the package with `mix deps.update tuix_phoenix` when a release needs it; no installer rerun is needed for an ordinary package upgrade.
 
 Installing from a built archive needs no local widget build. These commands build and test the package itself, from the repository root:
 

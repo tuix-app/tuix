@@ -30,8 +30,8 @@ identity immediately on logout/access removal, then refresh the Next.js router a
 updating the server session. Reused layouts alone do not provide live auth state.
 
 Production build: `npm run build -w @tuix/nextjs-example`; run with
-`npm run start -w @tuix/nextjs-example`. Copying this example into another repository requires
-installing all three local tarballs together until npm publication is configured.
+`npm run start -w @tuix/nextjs-example`. To copy this example into another repository,
+install its packages from npm there: `npm install @tuix/widget @tuix/react @tuix/server server-only`.
 
 `npm run test:next` builds a temporary copy with packaged dependencies and fictional
 test authentication, then uses Chromium to check signing, client navigation, logout,

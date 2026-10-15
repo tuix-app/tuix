@@ -59,16 +59,18 @@ Pass the current document nonce via `config.nonce` when styles require one. Tuix
 Project settings → Install tuix → Content Security Policy lists the exact sources,
 including the screenshot style hash and the storage origin for uploads.
 
-## Local installation
+## Install
 
-Until the packages are on npm, run `npm ci && npm run prepare:js` in this repository.
-Install the widget and React tarballs together in a React 19 application, so npm does
-not try to fetch an unpublished peer package:
+In a React 19 application, install the adapter with the widget, its peer dependency:
 
 ```sh
-npm install /absolute/path/to/tuix-widget-0.2.5.tgz /absolute/path/to/tuix-react-0.1.0.tgz
+npm install @tuix/widget @tuix/react
 ```
 
-The files are under `output/releases/js/`. Install the server tarball in the backend
-too when using Node/Next.js. `npm test -w @tuix/react` covers lifecycle races, Strict
-Mode and SSR; `npm run test:next` exercises the packaged integration in Next.js.
+With Node.js or Next.js, add `@tuix/server` too, to sign identities on the server.
+
+## Checks
+
+From the repository root, `npm test -w @tuix/react` covers lifecycle races, Strict
+Mode and SSR. `npm run prepare:js` packs the three packages and checks them installed
+as a consumer would; `npm run test:next` then exercises them in Next.js.

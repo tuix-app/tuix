@@ -2,9 +2,12 @@
 
 Element-anchored feedback. Core and screenshot code load on demand. The launcher remains hidden until identity is supplied.
 
-For Node signing and React/Next.js lifecycle handling, use the repository's
-`@tuix/server` and `@tuix/react` packages; `examples/nextjs` demonstrates the server
-boundary. `npm run prepare:js` produces local tarballs for all three packages.
+```sh
+npm install @tuix/widget
+```
+
+For Node signing and React/Next.js lifecycle handling, add `@tuix/server` and
+`@tuix/react`; `examples/nextjs` demonstrates the server boundary. MIT licensed.
 
 Email links with `?tuix=<issue UUID>` activate the widget after host identification and open that report. They preserve normal API access checks. Reading a thread acknowledges its notifications; other unread reports retain the launcher badge. Without an activation link, `showPinsOnLoad`, a stored marker preference or a recent visit (below), the SDK remains lazy until opened.
 

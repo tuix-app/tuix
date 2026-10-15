@@ -3,6 +3,10 @@
 Server-only identity signing for the existing Tuix widget. Requires Node.js 22.12+.
 Browser builds cannot resolve its main entry point. MIT licensed.
 
+```sh
+npm install @tuix/server
+```
+
 ```ts
 import { signIdentity } from '@tuix/server';
 
@@ -45,13 +49,8 @@ Server Action. Sign a trusted session identity on the server and pass the result
 `@tuix/react`. The plain entry is for Node servers, workers and scripts; this package
 does not target the Edge runtime. See the repository's `examples/nextjs`.
 
-## Local distribution and checks
+## Checks
 
-Until the package is on npm, run `npm ci && npm run prepare:js` from the repository
-root. Install the resulting
-`output/releases/js/tuix-server-0.1.0.tgz` in the consuming application with
-`npm install /absolute/path/to/tuix-server-0.1.0.tgz`.
-
-`npm test -w @tuix/server` checks signing and validation. `npm run typecheck -w
+From the repository root, `npm test -w @tuix/server` checks signing and validation. `npm run typecheck -w
 @tuix/server` checks TypeScript. The preparation command also verifies the packed
 entry point and refuses browser bundling; it publishes nothing.

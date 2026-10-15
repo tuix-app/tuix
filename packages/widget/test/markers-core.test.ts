@@ -9,6 +9,7 @@ import type { Core } from '../src/types';
 let core: Core | undefined;
 let settings: ReturnType<typeof mountSettings> | undefined;
 afterEach(() => {
+  Object.assign(issue, { status: 'open', state: 'open' });
   settings?.destroy(); settings = undefined;
   core?.destroy(); core = undefined; localStorage.clear();
   history.replaceState({}, '', '/');
@@ -56,6 +57,14 @@ it('centres both marker styles on the element and keeps the chosen one after the
   expect(outline.getAttribute('aria-hidden')).toBe('true');
   expect(root.querySelector('.pin')).toBeNull();
 
+  await choose(root, 'markers', 'fill');
+  const fill = root.querySelector<HTMLElement>('.marker.fill')!;
+  expect([fill.style.left, fill.style.top, fill.style.width, fill.style.height]).toEqual(['100px', '200px', '40px', '20px']);
+  expect(fill.dataset.state).toBe('open');
+  expect(fill.getAttribute('aria-hidden')).toBe('true');
+  expect(root.querySelector('.pin')).toBeNull();
+  expect(localStorage.getItem('tuix:markers:fixture')).toBe('off:fill');
+
   await choose(root, 'markers', 'dot');
   await choose(root, 'pinned', 'on');
   expect(localStorage.getItem('tuix:markers:fixture')).toBe('on:dot');
@@ -65,7 +74,21 @@ it('centres both marker styles on the element and keeps the chosen one after the
   expect(root.querySelector('.pin')).not.toBeNull();
   expect(mock.panel).toHaveBeenLastCalledWith(false);
 
+  // With room for it, a marker opens its report in a window beside the element, not in the sidebar (chat-core.test.ts has the rest).
   root.querySelector<HTMLButtonElement>('.pin')!.click(); await vi.advanceTimersByTimeAsync(200);
+  expect(root.querySelector('.chat-window')).not.toBeNull();
+  expect(root.querySelector('.panel')).toBeNull();
+  expect(mock.panel).toHaveBeenLastCalledWith(false);
+});
+
+it('opens a marker in the sidebar on a narrow screen, and reports the open sidebar to the host SDK', async () => {
+  vi.stubGlobal('innerWidth', 500);
+  localStorage.setItem('tuix:markers:fixture', 'on:dot');
+  const root = fixture();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(root.querySelector('.panel')).toBeNull();
+  root.querySelector<HTMLButtonElement>('.pin')!.click(); await vi.advanceTimersByTimeAsync(200);
+  expect(root.querySelector('.chat-window')).toBeNull();
   expect(root.querySelector('.panel')).not.toBeNull();
   expect(root.querySelector('.thread-body')?.textContent).toBe('Save is hidden');
   // The host SDK owns the launcher's open state, so a marker-opened sidebar must report itself.
@@ -94,6 +117,23 @@ it('stays idle without the preference and draws stored markers without opening t
   core!.open(); await vi.advanceTimersByTimeAsync(200);
   expect(window.fetch).not.toBe(hostFetch);
   expect(console.error).not.toBe(hostConsole);
+});
+
+it('draws stored fill markers without opening the sidebar, with the state color of the report', async () => {
+  localStorage.setItem('tuix:markers:fixture', 'on:fill');
+  Object.assign(issue, { status: 'in_progress', state: 'in_progress' });
+  const root = fixture();
+  await vi.advanceTimersByTimeAsync(200);
+  const fill = root.querySelector<HTMLElement>('.marker.fill')!;
+  expect(fill.dataset.state).toBe('warm');
+  expect(root.querySelector('.panel')).toBeNull();
+  Object.assign(issue, { status: 'in_review', state: 'in_review' });
+  core!.destroy(); core = undefined; document.body.replaceChildren();
+  const review = fixture();
+  await vi.advanceTimersByTimeAsync(200);
+  const marker = review.querySelector<HTMLElement>('.marker.fill')!;
+  expect(marker.dataset.state).toBe('verify');
+  expect(marker.classList.contains('verify-marker')).toBe(true);
 });
 
 it('reconciles navigation that happened while markers and the sidebar were inactive', async () => {
@@ -151,6 +191,8 @@ it('does not reload all-page reports when current-page markers refresh', async (
 });
 
 it('opens a thread from a dot while comment mode is selecting', async () => {
+  // The sidebar takes the report where the window has no room.
+  vi.stubGlobal('innerWidth', 500);
   const root = fixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
   root.querySelector<HTMLButtonElement>('.pin')!.click(); await vi.advanceTimersByTimeAsync(200);
@@ -210,121 +252,4 @@ it('opens a report link to a closed report while Hide closed is on', async () =>
   core!.open(); await vi.advanceTimersByTimeAsync(200);
   expect(readPreferences('fixture').hideClosed).toBe(true);
   expect(root.querySelector('.thread-body')?.textContent).toBe('Fixed already');
-});
-
-// jsdom has no onpointer* handlers, so Preact would listen for "PointerEnter"; with them it listens for "pointerenter" as in browsers.
-for (const name of ['onpointerenter', 'onpointerleave']) if (!(name in HTMLElement.prototype)) Object.defineProperty(HTMLElement.prototype, name, { value: null, writable: true, configurable: true });
-
-function pointer(type: string, init: { clientX?: number; clientY?: number; pointerType?: string } = {}) {
-  const event = new MouseEvent(type, { bubbles: type !== 'pointerenter' && type !== 'pointerleave', composed: true, clientX: init.clientX, clientY: init.clientY });
-  Object.defineProperty(event, 'pointerType', { value: init.pointerType ?? 'mouse' });
-  return event;
-}
-/** Moves the pointer over the page every frame (16ms) for `ms`. */
-async function sweep(points: [number, number][], ms: number) {
-  for (let elapsed = 0, index = 0; elapsed < ms; elapsed += 16, index++) {
-    const [clientX, clientY] = points[index % points.length];
-    document.body.dispatchEvent(pointer('pointermove', { clientX, clientY }));
-    await vi.advanceTimersByTimeAsync(16);
-  }
-}
-const cardShown = (root: ShadowRoot) => !!root.querySelector('.marker-card');
-
-it('shows a hover card with the start of the description over a dot, and keeps it while the pointer is on it', async () => {
-  const root = fixture();
-  Object.assign(issue, { excerpt: 'Save is hidden\nbelow the fold <b>on mobile</b>' });
-  try {
-    core!.open(); await vi.advanceTimersByTimeAsync(200);
-    const dot = root.querySelector<HTMLButtonElement>('.pin')!;
-    // The card replaces the native tooltip.
-    expect(dot.hasAttribute('title')).toBe(false);
-
-    dot.dispatchEvent(pointer('pointerenter', { pointerType: 'touch' })); await vi.advanceTimersByTimeAsync(300);
-    expect(cardShown(root)).toBe(false);
-
-    dot.dispatchEvent(pointer('pointerenter')); await vi.advanceTimersByTimeAsync(100);
-    expect(cardShown(root)).toBe(false);
-    await vi.advanceTimersByTimeAsync(100);
-    const card = root.querySelector<HTMLElement>('.marker-card')!;
-    expect(card.getAttribute('role')).toBe('tooltip');
-    expect(card.querySelector('.marker-card-meta')!.textContent).toBe('#7 · Open');
-    // Text, never HTML.
-    expect(card.querySelector('.marker-card-body')!.textContent).toBe('Save is hidden\nbelow the fold <b>on mobile</b>');
-    expect(card.querySelector('b')).toBeNull();
-    expect(dot.getAttribute('aria-describedby')).toBe(card.id);
-    // Below the 28px dot (top 196), centred on it and inside the viewport.
-    expect(card.dataset.placement).toBe('below');
-    expect(card.style.top).toBe('232px');
-
-    // The card lets clicks through, so the pointer is found on it by position: there it stays; off it, it goes.
-    vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({ left: 8, right: 328, top: 232, bottom: 300, width: 320, height: 68 } as DOMRect);
-    dot.dispatchEvent(pointer('pointerleave'));
-    await sweep([[100, 250], [110, 260]], 500);
-    expect(cardShown(root)).toBe(true);
-    await sweep([[600, 600], [610, 610]], 300);
-    expect(cardShown(root)).toBe(false);
-    expect(dot.hasAttribute('aria-describedby')).toBe(false);
-  } finally { delete (issue as { excerpt?: string }).excerpt; }
-});
-
-it('shows the card at once for keyboard focus, closes only the card with Escape, and falls back to the title', async () => {
-  const root = fixture();
-  core!.open(); await vi.advanceTimersByTimeAsync(200);
-  const dot = root.querySelector<HTMLButtonElement>('.pin')!;
-  dot.dispatchEvent(new FocusEvent('focus')); await vi.advanceTimersByTimeAsync(200);
-  // A server without excerpts: the title.
-  expect(root.querySelector('.marker-card-body')!.textContent).toBe('Save is hidden');
-  // Escape dismisses the card and leaves the sidebar open; a second one closes the sidebar as before.
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await vi.advanceTimersByTimeAsync(50);
-  expect(cardShown(root)).toBe(false);
-  expect(root.querySelector('.panel')).not.toBeNull();
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await vi.advanceTimersByTimeAsync(50);
-  expect(root.querySelector('.panel')).toBeNull();
-
-  core!.open(); await vi.advanceTimersByTimeAsync(200);
-  const again = root.querySelector<HTMLButtonElement>('.pin')!;
-  again.dispatchEvent(new FocusEvent('focus')); await vi.advanceTimersByTimeAsync(50);
-  expect(cardShown(root)).toBe(true);
-  again.dispatchEvent(new FocusEvent('blur')); await vi.advanceTimersByTimeAsync(50);
-  expect(cardShown(root)).toBe(false);
-});
-
-it('shows an outline marker\'s card while the pointer moves over the marked element, with the sidebar closed', async () => {
-  const root = fixture();
-  core!.open(); await vi.advanceTimersByTimeAsync(200);
-  await choose(root, 'markers', 'border');
-  await choose(root, 'pinned', 'on');
-  core!.close(); await vi.advanceTimersByTimeAsync(50);
-  expect(root.querySelector('.marker')).not.toBeNull();
-
-  // Moving inside the element's box (100,200 40×20) the whole time: the card shows after the hover delay anyway.
-  await sweep([[110, 205], [130, 215]], 200);
-  const card = root.querySelector<HTMLElement>('.marker-card')!;
-  expect(card.querySelector('.marker-card-body')!.textContent).toBe('Save is hidden');
-  expect(card.style.top).toBe('228px');
-
-  // Moving off it, still moving: it hides.
-  await sweep([[400, 500], [420, 520]], 200);
-  expect(cardShown(root)).toBe(false);
-});
-
-it('drops the card when its marker goes, and does not bring it back by itself', async () => {
-  const root = fixture();
-  core!.open(); await vi.advanceTimersByTimeAsync(200);
-  const target = document.querySelector<HTMLElement>('[data-testid="save"]')!;
-  const dot = root.querySelector<HTMLButtonElement>('.pin')!;
-  dot.dispatchEvent(pointer('pointerenter')); await vi.advanceTimersByTimeAsync(200);
-  expect(cardShown(root)).toBe(true);
-
-  // Scrolled out of the viewport: the marker and its card go.
-  vi.mocked(target.getBoundingClientRect).mockReturnValue({ x: 100, y: -500, width: 40, height: 20 } as DOMRect);
-  document.dispatchEvent(new Event('scroll')); await vi.advanceTimersByTimeAsync(50);
-  expect(root.querySelector('.pin')).toBeNull();
-  expect(cardShown(root)).toBe(false);
-
-  // Back in view, with no pointer on it: no card.
-  vi.mocked(target.getBoundingClientRect).mockReturnValue({ x: 100, y: 200, width: 40, height: 20 } as DOMRect);
-  document.dispatchEvent(new Event('scroll')); await vi.advanceTimersByTimeAsync(500);
-  expect(root.querySelector('.pin')).not.toBeNull();
-  expect(cardShown(root)).toBe(false);
 });

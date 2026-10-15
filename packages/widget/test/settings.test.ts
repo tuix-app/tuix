@@ -46,6 +46,10 @@ it('reveals the reports and settings dots on hover, opens settings only on click
   // Pages, Markers, Keep visible and Environment stay; Show and Reported by moved to the reports panel.
   expect([...panel.querySelectorAll('legend')].map(legend => legend.textContent)).toEqual(['Pages', 'Markers']);
   expect(panel.querySelector('[data-setting=show],[data-setting=author]')).toBeNull();
+  // Markers offer Dots, Outlines and Fills, and the choice reaches the shared preference.
+  expect([...panel.querySelectorAll('[data-setting=markers]')].map(item => [item.getAttribute('data-value'), item.textContent])).toEqual([['dot', 'Dots'], ['border', 'Outlines'], ['fill', 'Fills']]);
+  root.querySelector<HTMLButtonElement>('[data-setting=markers][data-value=fill]')!.click();
+  expect(localStorage.getItem('tuix:markers:hover')).toBe('off:fill'); expect(changed).toHaveBeenCalled();
   expect(panel.querySelector('select')).not.toBeNull();
   // The core's updates slot follows the environment control; the quiet version line closes the flyout.
   expect(panel.lastElementChild!.previousElementSibling).toBe(settings.slot);

@@ -194,11 +194,53 @@
 .tuix-app .marker.verify-marker{border-color:var(--tx-aqua);border-width:6px;border-style:double}
 .tuix-app .marker.orphan{border-style:dashed}
 .tuix-app .marker.active{border-width:6px}
-.tuix-app .marker-card{position:fixed;z-index:4;pointer-events:none;overflow:hidden;display:grid;align-content:start;gap:4px;padding:10px 14px;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:14px;box-shadow:var(--tx-shadow);font-size:13.5px;line-height:1.45;animation:tuix-card .15s ease-out}
-.tuix-app .marker-card p{margin:0}
-.tuix-app .marker-card-meta{font-size:12px;font-weight:600;color:var(--tx-muted)}
-.tuix-app .marker-card-body{white-space:pre-line;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;line-clamp:6;overflow:hidden}
+/* Fill: the element's box in the state color at 50%, drawn by a layer so the frame stays solid; the layer takes the frame's inner radius (6px outer minus the frame). */
+.tuix-app .marker.fill{border-width:2px}
+.tuix-app .marker.fill:before{content:"";position:absolute;inset:0;border-radius:4px;background:var(--tx-peach);opacity:.5}
+.tuix-app .marker.fill[data-state=warm]:before{background:var(--tx-gold)}
+.tuix-app .marker.fill[data-state=verify]:before{background:var(--tx-aqua)}
+.tuix-app .marker.fill.active{border-width:4px}
+.tuix-app .marker.fill.active:before{border-radius:2px}
+.tuix-app .marker.fill.verify-marker{border-width:6px}
+.tuix-app .marker.fill.verify-marker:before{border-radius:0}
+/* Hover card: a report's number, state and latest reply (or the start of its description) beside its marker. A button, since clicking it opens the report; the size matches CARD_W in core.tsx. */
+.tuix-app button.hover-card{position:fixed;overflow:hidden;width:272px;max-width:calc(100vw - 16px);min-height:0;padding:10px 12px;display:grid;gap:6px;text-align:left;font-size:13px;font-weight:400;line-height:1.4;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:14px;box-shadow:var(--tx-shadow);animation:tuix-card .15s ease-out}
+.tuix-app button.hover-card:hover{border-color:var(--tx-peach)}
+.tuix-app .card-title{display:flex;align-items:center;gap:8px;min-width:0}
+.tuix-app .card-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:700}
+.tuix-app .unread-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-gold);box-shadow:0 0 6px 1px var(--tx-glow-warm)}
+.tuix-app .card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.tuix-app .turn{color:var(--tx-muted);font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.tuix-app .chat-status{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.tuix-app .card-reply{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.tuix-app .card-reply.muted{color:var(--tx-muted)}
+.tuix-app .card-excerpt{-webkit-line-clamp:4;white-space:pre-line}
+.tuix-app .card-reply strong{font-weight:700}
 @keyframes tuix-card{from{opacity:0}to{opacity:1}}
+/* Chat window: a report's thread beside its element (people-and-statuses §7 item 16). Position and max-height come from placeChat in chat-placement.ts; the width matches CHAT_W. */
+.tuix-app .chat-window{position:fixed;width:320px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;pointer-events:auto;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;box-shadow:var(--tx-shadow);overflow:hidden;font-size:13.5px;animation:tuix-card .15s ease-out}
+.tuix-app .chat-window:focus{outline:none}
+/* The top edge carries the marker's colour: peach open, gold in progress, aqua in review. */
+.tuix-app .chat-window{border-top:3px solid var(--tx-peach)}
+.tuix-app .chat-window[data-state=warm]{border-top-color:var(--tx-gold)}
+.tuix-app .chat-window[data-state=verify]{border-top-color:var(--tx-aqua)}
+.tuix-app .chat-window header{flex:none;align-items:flex-start;padding:12px 12px 10px 14px;gap:8px}
+.tuix-app .chat-title{display:grid;justify-items:start;gap:6px;min-width:0}
+.tuix-app .chat-window h2{font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+.tuix-app .chat-window .icon-button{min-height:32px;width:32px;border-radius:10px}
+.tuix-app .chat-body{flex:1;min-height:0;overflow:auto;padding:2px 14px 10px;scrollbar-color:var(--tx-line) transparent}
+.tuix-app .chat-body>p{margin:8px 0}
+.tuix-app .chat-report{white-space:pre-wrap;padding:8px 10px;border-radius:12px;background:var(--tx-bg)}
+.tuix-app .chat-window .comment{margin:8px 0;padding:8px 10px;border-radius:12px}
+.tuix-app .chat-window .verify-tools{margin:10px 0;padding:10px}
+.tuix-app .chat-window .verification-actions button{min-height:36px;padding:0 12px;font-size:13px}
+.tuix-app .chat-window textarea{min-height:64px;font-size:14px}
+.tuix-app .chat-window footer{flex:none;display:grid;gap:8px;padding:10px 14px 10px;border-top:1px solid var(--tx-line-soft);max-height:50vh;overflow:auto;scrollbar-color:var(--tx-line) transparent}
+/* A short list keeps the replies in sight while a mention is picked. */
+.tuix-app .chat-window .mention-list{max-height:140px}
+.tuix-app .chat-window footer form{gap:8px}
+.tuix-app .chat-window footer .primary{justify-self:end;min-height:36px}
+.tuix-app .chat-window footer .text-button{justify-self:start}
 /* A finger needs a larger target than the drawn dot. */
 @media(pointer:coarse){.tuix-app button.pin:before{content:"";position:absolute;inset:-10px;border-radius:50%}.tuix-app button.pin{animation:none}}
 
@@ -215,15 +257,16 @@
 @keyframes tuix-lantern{0%,100%{box-shadow:0 0 4px 1px var(--tx-glow)}50%{box-shadow:0 0 12px 4px var(--tx-glow)}}
 
 /* Local stacking inside the isolated widget host: page < markers < selection
-   surface/highlight < panels < menu (10) and launcher controls (12). */
+   surface/highlight < panels < hover card < menu (10) and launcher controls (12). */
 .tuix-app .pin,.tuix-app .marker{z-index:1}
 .tuix-app .pick-surface{z-index:2}
 .tuix-app .highlight{z-index:3}
-.tuix-app .panel,.tuix-app .composer,.tuix-app .picker-hint{z-index:4}
+.tuix-app .panel,.tuix-app .composer,.tuix-app .picker-hint,.tuix-app .chat-window{z-index:4}
+.tuix-app .hover-card{z-index:5}
 .tuix-app .attention-dot,.tuix-app .reply-dot{z-index:13}
 /* Dots stay clickable while selecting, so an existing thread opens instead of a new comment. */
 .tuix-app .pin{z-index:3}
 #tuix-launcher{z-index:12}
 
-@media(prefers-reduced-motion:reduce){.tuix-app .marker-card,.tuix-app .panel,.tuix-app .picker-hint,.tuix-app .pick-confirm,.tuix-app button.pin,.tuix-app .pin.active,.tuix-app .badge.attention-dot{animation:none}}
+@media(prefers-reduced-motion:reduce){.tuix-app .hover-card,.tuix-app .chat-window,.tuix-app .panel,.tuix-app .picker-hint,.tuix-app .pick-confirm,.tuix-app button.pin,.tuix-app .pin.active,.tuix-app .badge.attention-dot{animation:none}}
 @media(max-width:480px){.tuix-app .panel,.tuix-app .panel.composer{width:100vw;border-radius:0}.tuix-app .picker-hint{align-items:flex-start;gap:12px}.tuix-app .picker-hint small{display:block;max-width:220px}}

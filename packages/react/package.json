@@ -8,7 +8,7 @@
   "bugs": { "url": "https://github.com/tuix-app/tuix/issues" },
   "files": ["dist", "README.md", "LICENSE"],
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "peerDependencies": { "@tuix/widget": "^0.2.3", "react": "^19.0.0" },
+  "peerDependencies": { "@tuix/widget": "^0.2.3 || ^0.3.0", "react": "^19.0.0" },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",

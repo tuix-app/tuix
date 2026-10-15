@@ -1,6 +1,6 @@
 import type { LocatorBundle } from './locators';
 import type { OpenFilter } from './preferences';
-import type { State } from './states';
+import type { State, Turn } from './states';
 export interface Identity { id: string; name: string; email?: string; avatar?: string; traits?: Record<string, unknown>; hash?: string; reviewerSession?: string }
 export interface Config {
   project: string; api?: string; environment?: string; release?: string; commit?: string; lang?: 'en' | 'pl';
@@ -37,6 +37,14 @@ export interface Issue {
   reporter?: boolean; fixer?: boolean; can_be_fixer?: boolean; allowed_states?: State[];
   /** The reply composer offers people to mention; missing from servers before mentions. */
   can_mention?: boolean;
+  /**
+   * For the hover card, on list entries (people-and-statuses §6): the newest reply as plain text (null when there is none)
+   * and whether the caller has unread updates on the report. Missing from servers before cards: the card then shows less.
+   */
+  latest_comment?: { author: { name: string }; team: boolean; body: string; inserted_at: string } | null;
+  unread?: boolean;
+  /** Whose move it is (§5): on list entries and threads; null once finished. Missing from servers before turns: nothing is shown. */
+  turn?: Turn | null;
 }
 /** A comment with mentions, in order: plain text and mentioned labels (without "@"). Rendered as text, never HTML. */
 export type Segment = { text: string } | { mention: string };

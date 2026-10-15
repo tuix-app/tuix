@@ -5,7 +5,7 @@ import type { Person, Segment } from './types';
 
 /** A person picked in the composer: the id the server takes and the label inserted after "@". */
 export interface Mention { id: string; label: string }
-/** The panel's Escape handler asks this first: true when it closed an open suggestion list. */
+/** The panel's and the chat window's Escape handlers ask this first: true when it closed an open suggestion list. */
 export type EscapeRef = { current: (() => boolean) | null };
 /** Characters that cannot come right before a mention's "@" and that cannot follow its label. */
 const BEFORE = /[\p{L}\p{M}\p{N}_@.]$/u, AFTER = /[\p{L}\p{M}\p{N}_]/u;
@@ -119,7 +119,7 @@ export function MentionField({ api, issue, enabled, label, t, value, onValue, pi
     else if ((event.key === 'Enter' || event.key === 'Tab') && plain) { event.preventDefault(); pick(people[active]); }
     else if (event.key === 'Escape') { event.preventDefault(); close(true); }
   }
-  // The panel's Escape handler runs first, on the document: an open list takes Escape and the panel stays.
+  // The panel's and the chat window's Escape handlers run first: an open list takes Escape and the panel or window stays.
   useLayoutEffect(() => { escape.current = open ? () => { close(true); return true; } : null; return () => { escape.current = null; }; }, [open]);
   // A new list scrolls into view whole; then the active option stays in view as it moves.
   useEffect(() => { list.current?.scrollIntoView?.({ block: 'nearest' }); }, [people]);

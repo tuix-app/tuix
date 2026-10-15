@@ -15,7 +15,7 @@ const token = `tuix_read_${"x".repeat(43)}`;
 const config = { origin: "https://tuix.example", token };
 const env = { TUIX_API_URL: config.origin, TUIX_MCP_TOKEN: token };
 const projects = { projects: [{ id: "p1", name: "Example" }], next_cursor: null };
-const issues = { issues: [{ id: "i1", body: "Untrusted report", status: "resolved" }], next_cursor: "next" };
+const issues = { issues: [{ id: "i1", body: "Untrusted report", status: "resolved", turn: null }], next_cursor: "next" };
 const issue = { issue: issues.issues[0], comments: [{ id: "c1", body: "Untrusted comment" }], next_comments_cursor: null };
 
 async function fixture(t, handler) {
@@ -144,6 +144,21 @@ test("SDK initialize, tools/list, tools/call expose only three read-only tools",
     assert.equal((await client.callTool({ name: "list_issues", arguments: args })).isError, true);
   }
   assert.equal(calls.length, 3);
+});
+
+test("issues keep their turn, and list_issues and get_issue explain it", async (t) => {
+  const open = { issues: [{ id: "i2", status: "open", turn: "reporter" }, { id: "i3", status: "in_review", turn: "verify" }], next_cursor: null };
+  const server = createServer({ listProjects: async () => projects, listIssues: async () => open, getIssue: async () => issue });
+  const client = new Client({ name: "test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(a);
+  await client.connect(b);
+  t.after(async () => { await client.close(); await server.close(); });
+  const { tools } = await client.listTools();
+  assert.match(tools.find((tool) => tool.name === "list_issues").description, /turn, whose move it is/);
+  assert.match(tools.find((tool) => tool.name === "get_issue").description, /turn, whose move it is/);
+  const result = await client.callTool({ name: "list_issues", arguments: { project_id: "p1" } });
+  assert.deepEqual(result.structuredContent.issues.map((i) => i.turn), ["reporter", "verify"]);
 });
 
 test("SDK calls return sanitized structured errors, including invalid envelopes", async (t) => {

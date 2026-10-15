@@ -1,5 +1,12 @@
 # Widget changelog
 
+## 0.3.0
+
+- **Fill** marker style: a third marker style besides dot and border, the element's box filled with the state colour at 50% opacity. Like border markers, it lets clicks pass through to the host app.
+- The hover card (0.2.5) is now clickable and opens the chat. It also shows the latest message with an unread dot and, below it, whose turn it is. Without a reply it shows the start of the description (four lines at most) in place of the title, and it works for fill markers like the other styles. Hovering still makes no requests.
+- Anchored chat window: clicking a dot or the card opens a small chat window beside the element with the last messages, a reply box with mentions, the verify actions and **Open full thread**, which moves to the side panel. Touch and narrow screens keep the side panel.
+- Whose turn: a line on the card, in the chat window, on the dashboard and in MCP output shows whether the team, the reporter or verification is next. Derived by the server from the state and the latest message. Against an older server the line is absent.
+
 ## 0.2.5
 
 - Markers have hover cards. Pointing at a dot, or at an element an outline marks (outlines let the pointer through, so the element under it counts; the smallest marked one wins), shows a small card after 150ms with the report's number and state and the start of its description, six lines at most, plus "Element moved" when the element is gone. It shows whenever markers do: with the sidebar open, or closed with **Keep visible when closed**. The card sits below the marker, or above it near the bottom of the screen, and never runs past the viewport. It stays while the pointer moves onto it, yet lets clicks through to the page; leaving both, picking an element, or the marker scrolling away hides it, and it does not come back until the pointer points at the marker again. Escape dismisses it and only it: the sidebar stays open (a second Escape closes it as before). Keyboard focus on a dot shows it at once and describes the dot (`aria-describedby`). Touch screens have no hover, so a tap still opens the thread. Elements inside frames get no card for their outlines. The dots' native tooltip, which showed only the title, is gone. Deploy dependency: the server sends the description's start as `excerpt` on list rows (280 characters at most); against an older server the card shows the title.

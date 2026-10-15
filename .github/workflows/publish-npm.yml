@@ -76,6 +76,11 @@ jobs:
             '.name == $name and .version == $version and (has("private") | not)' > /dev/null
           printf 'sha256=%s\n' "$(sha256sum release/package.tgz | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
           tar -tzf release/package.tgz
+      # The publish job's command, without provenance or upload, so a run with publish off tries it too.
+      - name: Try the publish command
+        env:
+          NPM_DIST_TAG: ${{ contains(inputs.version, '-') && 'next' || 'latest' }}
+        run: npm publish ./release/package.tgz --dry-run --access public --ignore-scripts --tag="$NPM_DIST_TAG" --registry=https://registry.npmjs.org
       - uses: actions/upload-artifact@v4
         with:
           name: npm-release
@@ -135,4 +140,5 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_DIST_TAG: ${{ contains(inputs.version, '-') && 'next' || 'latest' }}
-        run: npm publish prepared/package.tgz --provenance --access public --ignore-scripts --tag="$NPM_DIST_TAG" --registry=https://registry.npmjs.org
+        # The ./ matters: without it npm reads prepared/package.tgz as a GitHub repository.
+        run: npm publish ./prepared/package.tgz --provenance --access public --ignore-scripts --tag="$NPM_DIST_TAG" --registry=https://registry.npmjs.org

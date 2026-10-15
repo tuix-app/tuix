@@ -1,5 +1,5 @@
 import { readPreferences, savePreferences, preferenceEvent, type OpenFilter } from './preferences';
-import { readMarkers, saveMarkers } from './markers';
+import { readMarkers, saveMarkers, type MarkerStyle } from './markers';
 import { translations } from './i18n';
 import { tokenCss } from './tokens';
 import { VERSION } from './version';
@@ -100,7 +100,7 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
     segments(t.pages, [['page', t.thisPage], ['all', t.statusAll]], p.scope, value => savePreferences(config.project, { scope: value as 'page' | 'all' }), 'scope');
     // As on the dashboard: Done, Won't fix and Closed reports stay out of the report lists (markers never show them).
     toggle(t.hideClosed, 'hide-closed', p.hideClosed, value => savePreferences(config.project, { hideClosed: value }));
-    segments(t.markers, [['dot', t.markerDots], ['border', t.markerOutlines]], m.style, value => { saveMarkers(config.project, { ...readMarkers(config.project), style: value as 'dot' | 'border' }); changed(); }, 'markers');
+    segments(t.markers, [['dot', t.markerDots], ['border', t.markerOutlines], ['fill', t.markerFills]], m.style, value => { saveMarkers(config.project, { ...readMarkers(config.project), style: value as MarkerStyle }); changed(); }, 'markers');
     toggle(t.keepMarkers, 'pinned', m.pinned, value => { saveMarkers(config.project, { ...readMarkers(config.project), pinned: value }); changed(); });
     if ((config.environment ?? (['localhost', '127.0.0.1'].includes(location.hostname) ? 'local' : 'production')) === 'local') {
       const label = document.createElement('label'), select = document.createElement('select'); label.className = 'tuix-setting-group'; label.textContent = t.env;

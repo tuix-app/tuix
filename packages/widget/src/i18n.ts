@@ -1,4 +1,4 @@
-import { normalizeState } from './states';
+import { normalizeState, turnOf, type Turn } from './states';
 const en = {
   pickingTouch: 'Tap an element to select it, then tap Comment here. Tap tuix. to exit.', commentHere: 'Comment here', parentElement: 'Select parent',
   involving: 'Involving', everyone: 'Everyone', mine: 'Me', noOwnReports: 'Nothing that involves you matches these filters.',
@@ -12,7 +12,7 @@ const en = {
   selectedElement: 'Selected', changeElement: 'Change element', captureDisabled: 'Screenshot capture is disabled.',
   noScreenshot: 'No screenshot was attached.', restrictedScreenshot: 'Screenshot is not available in this environment.', unavailableScreenshot: 'Screenshot unavailable.',
   allReports: 'See all reports', thisPage: 'This page', moreReports: 'Load more reports', noPageReports: 'No reports match these filters.',
-  markers: 'Markers', markerDots: 'Dots', markerOutlines: 'Outlines', markersClosed: 'When closed', markersHidden: 'Hidden', markersVisible: 'Visible',
+  markers: 'Markers', markerDots: 'Dots', markerOutlines: 'Outlines', markerFills: 'Fills', markersClosed: 'When closed', markersHidden: 'Hidden', markersVisible: 'Visible',
   show: 'Show', statusAll: 'All', statusOpen: 'Open', statusVerify: 'To verify',
   fixer: 'Fixer', noFixer: 'No fixer yet', you: 'you', assignToMe: 'Assign to me', assignError: 'Could not assign this report to you. Please retry.',
   actionReopen: 'Reopen', actionDone: 'Done', actionClose: 'Close', actionStart: 'Start', actionReview: 'Ready for review', actionWontFix: 'Won’t fix',
@@ -31,6 +31,8 @@ const en = {
   type: 'Type', bug: 'Bug', ux: 'UX issue', question: 'Question', idea: 'Idea', severity: 'Severity', optional: 'Not specified', blocking: 'Blocking', major: 'Major', minor: 'Minor',
   attach: 'What we attach', screenshot: 'Screenshot', remove: 'Remove screenshot', capturing: 'Preparing screenshot…', skipped: 'Screenshot unavailable. You can still send this report.',
   send: 'Send comment', sending: 'Sending…', error: 'Could not send. Your text is kept; please retry.', retry: 'Retry', loading: 'Loading feedback…', loadError: 'Could not load feedback. Please retry.',
+  noReplies: 'No replies yet', unreadUpdates: 'New updates',
+  closeChat: 'Close conversation', showEarlier: 'Show earlier', openFullThread: 'Open full thread', elementGone: 'The element is no longer on the page. Open the full thread to see the report.',
   back: 'All reports', reply: 'Reply', replyLabel: 'Add a reply', team: 'Team', moved: 'Element moved', sent: 'Comment sent.',
   console: 'Console entries', network: 'Failed requests', env: 'Environment', all: 'All environments', defaults: 'UAT + production', local: 'Local only', disabled: 'Feedback is disabled for this project.',
   iframe: 'This report points to an embedded frame. Its contents are not captured.', status: 'Status', details: 'Report details',
@@ -47,7 +49,7 @@ const pl: typeof en = {
   selectedElement: 'Wybrany element', changeElement: 'Zmień element', captureDisabled: 'Zrzuty ekranu są wyłączone.',
   noScreenshot: 'Nie dołączono zrzutu ekranu.', restrictedScreenshot: 'Zrzut ekranu nie jest dostępny w tym środowisku.', unavailableScreenshot: 'Zrzut ekranu jest niedostępny.',
   allReports: 'Wszystkie zgłoszenia', thisPage: 'Ta strona', moreReports: 'Wczytaj więcej zgłoszeń', noPageReports: 'Brak zgłoszeń pasujących do filtrów.',
-  markers: 'Znaczniki', markerDots: 'Kropki', markerOutlines: 'Obramowania', markersClosed: 'Po zamknięciu', markersHidden: 'Ukryte', markersVisible: 'Widoczne',
+  markers: 'Znaczniki', markerDots: 'Kropki', markerOutlines: 'Obramowania', markerFills: 'Wypełnienia', markersClosed: 'Po zamknięciu', markersHidden: 'Ukryte', markersVisible: 'Widoczne',
   show: 'Pokaż', statusAll: 'Wszystkie', statusOpen: 'Otwarte', statusVerify: 'Do sprawdzenia',
   fixer: 'Naprawia', noFixer: 'Nikt jeszcze nie naprawia', you: 'Ty', assignToMe: 'Przypisz do mnie', assignError: 'Nie udało się przypisać zgłoszenia do Ciebie. Spróbuj ponownie.',
   actionReopen: 'Otwórz ponownie', actionDone: 'Gotowe', actionClose: 'Zamknij', actionStart: 'Rozpocznij', actionReview: 'Gotowe do sprawdzenia', actionWontFix: 'Bez poprawki',
@@ -66,6 +68,8 @@ const pl: typeof en = {
   type: 'Typ', bug: 'Błąd', ux: 'Problem UX', question: 'Pytanie', idea: 'Pomysł', severity: 'Ważność', optional: 'Nie określono', blocking: 'Blokujący', major: 'Poważny', minor: 'Drobny',
   attach: 'Co dołączamy', screenshot: 'Zrzut ekranu', remove: 'Usuń zrzut', capturing: 'Przygotowywanie zrzutu…', skipped: 'Zrzut jest niedostępny. Nadal możesz wysłać zgłoszenie.',
   send: 'Wyślij komentarz', sending: 'Wysyłanie…', error: 'Nie udało się wysłać. Treść została zachowana; spróbuj ponownie.', retry: 'Ponów', loading: 'Wczytywanie uwag…', loadError: 'Nie udało się wczytać uwag. Spróbuj ponownie.',
+  noReplies: 'Brak odpowiedzi', unreadUpdates: 'Nowe zmiany',
+  closeChat: 'Zamknij rozmowę', showEarlier: 'Pokaż wcześniejsze', openFullThread: 'Otwórz pełną rozmowę', elementGone: 'Elementu nie ma już na stronie. Otwórz pełną rozmowę, aby zobaczyć zgłoszenie.',
   back: 'Wszystkie zgłoszenia', reply: 'Odpowiedz', replyLabel: 'Dodaj odpowiedź', team: 'Zespół', moved: 'Element został przeniesiony', sent: 'Komentarz wysłany.',
   console: 'Wpisy konsoli', network: 'Nieudane żądania', env: 'Środowisko', all: 'Wszystkie środowiska', defaults: 'UAT + produkcja', local: 'Tylko lokalne', disabled: 'Uwagi są wyłączone dla tego projektu.',
   iframe: 'Zgłoszenie wskazuje osadzoną ramkę. Jej zawartość nie jest przechwytywana.', status: 'Status', details: 'Szczegóły zgłoszenia',
@@ -80,4 +84,25 @@ const statuses: Record<string, [string, string]> = {
 export function statusLabel(status: string, lang?: string) {
   const polish = (lang ?? navigator.language).startsWith('pl');
   return statuses[normalizeState(status)]?.[polish ? 1 : 0] ?? (polish ? 'Status niedostępny' : 'Status unavailable');
+}
+
+/** One line per turn for the reporter reading it, and for everyone else; [en, pl]. */
+const reporterLines: Record<Turn, [string, string]> = {
+  reporter: ['Waiting for your reply', 'Czeka na Twoją odpowiedź'], team: ['The team is on it', 'Zespół się tym zajmuje'],
+  verify: ['Fix ready for you to check', 'Poprawka gotowa do sprawdzenia'],
+};
+const otherLines: Record<Turn, [string, string]> = {
+  reporter: ['Waiting for the reporter', 'Czeka na zgłaszającego'], team: ['Waiting for the team', 'Czeka na zespół'],
+  verify: ['Waiting for the reporter to check', 'Czeka na sprawdzenie przez zgłaszającego'],
+};
+const yourTurn: [string, string] = ['Your turn', 'Twoja kolej'];
+/**
+ * Whose move it is, phrased for the viewer (people-and-statuses §7 item 15): the reporter hears what they wait for or what is theirs; the
+ * fixer that it is their turn; anyone else who is waiting. Null (nothing shown) when the server sent no turn or the report is finished.
+ */
+export function turnLine(issue: { turn?: string | null; reporter?: boolean; fixer?: boolean }, lang?: string) {
+  const turn = turnOf(issue);
+  if (!turn) return null;
+  const line = issue.reporter ? reporterLines[turn] : turn === 'team' && issue.fixer ? yourTurn : otherLines[turn];
+  return line[(lang ?? navigator.language).startsWith('pl') ? 1 : 0];
 }

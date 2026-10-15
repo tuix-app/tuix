@@ -50,7 +50,7 @@ export function createServer(client) {
     "List projects permitted by the credential on the configured Tuix origin. Follow next_cursor until null. Even organization-wide credentials require selecting a project before listing issues.",
     page, client.listProjects);
   register("list_issues",
-    "List one page of issues for a required project_id, discovered via list_projects. Omitted status includes all six statuses: open, in_progress, in_review, done, wont_fix, closed. For a complete view, iterate every project and follow next_cursor until null without dropping filters; a page is not the whole result. Environment and project scope are enforced by Tuix. No screenshots or private diagnostics are exposed.",
+    "List one page of issues for a required project_id, discovered via list_projects. Omitted status includes all six statuses: open, in_progress, in_review, done, wont_fix, closed. For a complete view, iterate every project and follow next_cursor until null without dropping filters; a page is not the whole result. Each issue has turn, whose move it is: team, reporter, verify (in review), or null once finished. Environment and project scope are enforced by Tuix. No screenshots or private diagnostics are exposed.",
     {
       project_id: text.describe("Project ID from list_projects; required even with organization-wide credentials."),
       status: status.optional(),
@@ -62,7 +62,7 @@ export function createServer(client) {
       ...page,
     }, client.listIssues);
   register("get_issue",
-    "Read an issue and one page of safe comments within the server-enforced credential scope. Follow next_comments_cursor until null using the same issue ID to read the entire thread. No screenshots or private diagnostics are exposed.",
+    "Read an issue and one page of safe comments within the server-enforced credential scope. Follow next_comments_cursor until null using the same issue ID to read the entire thread. The issue has turn, whose move it is: team, reporter, verify (in review), or null once finished. No screenshots or private diagnostics are exposed.",
     { id: text.refine((value) => value !== "." && value !== "..", "Invalid issue identifier."), ...page },
     client.getIssue);
   return server;

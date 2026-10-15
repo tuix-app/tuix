@@ -81,6 +81,15 @@ it('keeps a launcher:false host lazy for a returning browser, but still loads pi
   localStorage.setItem('tuix:markers:pinned', 'on:dot');
   boot('pinned');
   expect(modules()).toBe(1);
+  // The loader only reads the pinned flag, so any style (fill included) loads eagerly and an off token stays idle.
+  document.head.querySelectorAll('script[type=module]').forEach(node => node.remove());
+  localStorage.setItem('tuix:markers:filled', 'on:fill');
+  boot('filled');
+  expect(modules()).toBe(1);
+  document.head.querySelectorAll('script[type=module]').forEach(node => node.remove());
+  localStorage.setItem('tuix:markers:quiet', 'off:fill');
+  boot('quiet');
+  expect(modules()).toBe(0);
 });
 it('keeps the launcher usable during an eager load, queues a click for cdn.js, and relabels only a failed load someone asked for', () => {
   const attach = Element.prototype.attachShadow; let root!: ShadowRoot;

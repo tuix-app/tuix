@@ -1,5 +1,5 @@
 /** Per-browser marker preference. The sidebar always draws markers; this decides what stays when it closes. */
-export type MarkerStyle = 'dot' | 'border';
+export type MarkerStyle = 'dot' | 'border' | 'fill';
 export interface MarkerPreference { pinned: boolean; style: MarkerStyle }
 export const defaultMarkers: MarkerPreference = { pinned: false, style: 'dot' };
 const storageKey = (project: string) => 'tuix:markers:' + project;
@@ -13,7 +13,7 @@ export function readMarkers(project: string): MarkerPreference {
   if (sessions.has(project)) return sessions.get(project)!;
   try {
     const [pinned, style] = (localStorage.getItem(storageKey(project)) ?? '').split(':');
-    return { pinned: pinned === 'on', style: style === 'border' ? 'border' : 'dot' };
+    return { pinned: pinned === 'on', style: style === 'border' || style === 'fill' ? style : 'dot' };
   } catch { return sessions.get(project) ?? defaultMarkers; }
 }
 export function saveMarkers(project: string, preference: MarkerPreference): void {

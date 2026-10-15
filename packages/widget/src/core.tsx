@@ -1,9 +1,12 @@
 import { PageReports, pageLink } from './page-reports';
 import { VERSION } from './version';
 import { EvidencePreview } from './evidence-preview';
-import { MentionField, CommentText, mentionIds, type Mention, type EscapeRef } from './mentions';
+import { mentionIds, type Mention, type EscapeRef } from './mentions';
+import { ThreadComments, ReplyForm, VerifyTools, CloseIcon } from './thread';
+import { ChatWindow } from './chat-window';
+import { placeChat, CHAT_W, CHAT_MAX_H, CHAT_MIN_WIDTH } from './chat-placement';
 import { tokenCss, outlineColor } from './tokens';
-import { render } from 'preact';
+import { render, Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Api } from './api';
 import { linkedIssue } from './deeplink';
@@ -16,22 +19,27 @@ import { locatorTelemetry, runtimeTelemetry } from './telemetry';
 import { sourceLocation, editorLink, readEditor, saveEditor, defaultEditor, type SourceLocation } from './source';
 import { pickElement } from './picker';
 import { readMarkers } from './markers';
-import { MarkerCard, cardId, CARD_SHOW_MS, CARD_HIDE_MS } from './marker-card';
 import { readPreferences, savePreferences, preferenceEvent, type OpenFilter, type PreferenceChange } from './preferences';
-import { translations, statusLabel } from './i18n';
-import { stateOf, fixPending, normalizeState, terminal, unresolved, markActive, type State } from './states';
+import { translations, statusLabel, turnLine } from './i18n';
+import { stateOf, fixPending, normalizeState, terminal, unresolved, markActive, turnAfterReply, type State } from './states';
 import type { RemoteConfig, Config, Core, Identity, Issue, Update, EmailPreference } from './types';
 import css from './widget.css?inline';
 import fontUrl from '@fontsource-variable/karla/files/karla-latin-wght-normal.woff2?url';
 import fontExtendedUrl from '@fontsource-variable/karla/files/karla-latin-ext-wght-normal.woff2?url';
 /** Dot marker diameter; `.pin` in widget.css must match so centring stays exact. */
 const DOT = 28;
+/** Hover card: how long a pointer rests on a marker before it opens, how long it lingers so the pointer can travel into it, and its width (`.hover-card` in widget.css). CARD_HEIGHT is only the guess for the first frame: the card is measured once drawn (it grows with its turn line and reply). */
+const CARD_DELAY = 200, CARD_LINGER = 200, CARD_W = 272, CARD_HEIGHT = 132, CARD_GAP = 10, CARD_EDGE = 8;
 /** Capture budget: a faithful pass, then a network-free fallback, both inside this bound. */
 const SHOT_BUDGET = 8000;
 /** How long the comment-mode hint stays before fading. */
 const HINT_MS = 10000;
 /** Touch-first devices select without an overlay, so the page keeps scrolling, and confirm before composing. */
 const touchFirst = () => { try { return matchMedia('(hover: none) and (pointer: coarse)').matches; } catch { return false; } };
+/** A report opens in a chat window beside its element on a pointer device with room for it; elsewhere in the side panel. */
+const roomy = () => !touchFirst() && innerWidth >= CHAT_MIN_WIDTH;
+/** The sidebar's width (`.panel` in widget.css): the chat window keeps out of its way. */
+const PANEL_W = 360;
 /** Pin and marker color follows the conversation: peach open, gold in progress, an aqua ring in review. */
 const pinState = (state: string) => state === 'in_review' ? 'verify' : state === 'in_progress' ? 'warm' : 'open';
 /** Fixer transitions; on an unassigned report the server assigns the caller first. */
@@ -90,6 +98,36 @@ function visiblePoint(element: Element, x: number, y: number): boolean {
   } catch { return false; }
   return true;
 }
+/** Where the hover card sits: beside the marker, else below or above it, and always inside the viewport; next to the pointer when the marker is too big to clear. `measured` is the card's drawn height. */
+function cardAt(box: Box, pointer?: { x: number; y: number }, measured = 0) {
+  const height = measured || CARD_HEIGHT;
+  // A tall or wide element is anchored by the part of it on screen.
+  const x = Math.max(box.x, 0), y = Math.max(box.y, 0);
+  const anchor = { x, y, width: Math.min(box.x + box.width, innerWidth) - x, height: Math.min(box.y + box.height, innerHeight) - y };
+  const clamp = (value: number, max: number) => Math.max(CARD_EDGE, Math.min(value, max));
+  const maxX = innerWidth - CARD_W - CARD_EDGE, maxY = innerHeight - height - CARD_EDGE;
+  const after = anchor.x + anchor.width + CARD_GAP, before = anchor.x - CARD_W - CARD_GAP;
+  if (after <= maxX || before >= CARD_EDGE) return { left: clamp(after <= maxX ? after : before, maxX), top: clamp(anchor.y + anchor.height / 2 - height / 2, maxY) };
+  // No room at either side (a wide element, a narrow screen).
+  const below = anchor.y + anchor.height + CARD_GAP;
+  // An element that fills the screen leaves no free side: the card goes beside the pointer, never under it, so clicks on the element still reach it.
+  if (pointer && below > maxY && anchor.y - height - CARD_GAP < CARD_EDGE) {
+    const right = pointer.x + CARD_GAP, lower = pointer.y + CARD_GAP;
+    return { left: clamp(right <= maxX ? right : pointer.x - CARD_W - CARD_GAP, maxX), top: clamp(lower <= maxY ? lower : pointer.y - height - CARD_GAP, maxY) };
+  }
+  return { left: clamp(anchor.x + anchor.width / 2 - CARD_W / 2, maxX), top: clamp(below <= maxY ? below : anchor.y - height - CARD_GAP, maxY) };
+}
+/** The marker under a point: of overlapping boxes the smallest, so a button inside a card inside a section picks the button. */
+function markerAt(pins: Pin[], x: number, y: number): Pin | null {
+  let best: Pin | null = null;
+  for (const pin of pins) {
+    const { box } = pin;
+    // A report still sending has no server id to open yet.
+    if (pin.issue.status === 'sending') continue;
+    if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height && (!best || box.width * box.height < best.box.width * best.box.height)) best = pin;
+  }
+  return best;
+}
 function environment(config: Config) {
   let context: Record<string, unknown> = {};
   try { const value = typeof config.context === 'function' ? config.context() : config.context ?? {}; if (new TextEncoder().encode(JSON.stringify(value)).length <= 4096) context = value; } catch { /* Invalid host context is omitted. */ }
@@ -98,7 +136,6 @@ function environment(config: Config) {
   return { clientHints, viewport: { width: innerWidth, height: innerHeight }, dpr: devicePixelRatio, title: document.title.slice(0, 200), ua: navigator.userAgent.slice(0, 500), lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, online: navigator.onLine, release: config.release, context };
 }
 function currentRoute(config: Config) { try { return (config.route?.() ?? routeKey(location.href, config.keepQuery)).slice(0, 512); } catch { return routeKey(location.href); } }
-const CloseIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>;
 
 function CheckIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>; }
 
@@ -139,7 +176,9 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
   const reportLocators = locatorTelemetry(api);
   const runtime = runtimeTelemetry(api);
   const reportDeployment = deploymentReporter(api, initial.release);
-  let activationStarted = 0, activation = 0, firstStarted = started, panelActive = false;
+  let activationStarted = 0, activation = 0, firstStarted = started, panelActive = false, chatActive = false;
+  /** The sidebar or a chat window is open: a thread is on screen and keeps live. */
+  const engaged = () => panelActive || chatActive;
   let live: ReturnType<typeof liveUpdates> | undefined;
   const cleanups = new Set<() => void>();
   function cleanup(action: () => void) { try { action(); } catch { /* Cleanup steps are independent. */ } }
@@ -157,6 +196,10 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const t = translations(initial.lang);
     const [open, setOpen] = useState(false), [config, setConfig] = useState(initial), [ready, setReady] = useState(false);
     const [issues, setIssues] = useState<Issue[]>([]), [thread, setThread] = useState<Issue | null>(null);
+    // Reading a report or a newer turn edits its entry in place. Marker resolution and the panel list follow `located`, which keeps its identity through such edits and changes only when a report comes, goes or is relocated.
+    const located = useRef(issues), issuesRef = useRef(issues), repin = useRef(() => {});
+    issuesRef.current = issues;
+    if (located.current !== issues && !(located.current.length === issues.length && issues.every((issue, index) => issue.id === located.current[index].id && issue.locators === located.current[index].locators))) located.current = issues;
     const [source, setSource] = useState<SourceLocation | null>(null);
     const [editor, setEditor] = useState(() => api.environment === 'local' ? readEditor() : defaultEditor);
     const [editorNotice, setEditorNotice] = useState('');
@@ -184,6 +227,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const [pageUrl, setPageUrl] = useState(location.origin + location.pathname);
     const pageRef = useRef(pageUrl), routeRef = useRef(route);
     const [pins, setPins] = useState<Pin[]>([]), [draft, setDraft] = useState<Draft | null>(null);
+    // The report whose hover card shows; the timer counts down to the next card (an id) or to none (null).
+    const [card, setCard] = useState<string | null>(null), [cardHeight, setCardHeight] = useState(0);
+    const cardEl = useRef<HTMLButtonElement>(null);
+    const cardRef = useRef<string | null>(null), cardPlan = useRef<string | null | undefined>(undefined), cardTimer = useRef<ReturnType<typeof setTimeout>>();
+    // Where the pointer was last on the page, and where it was when the card opened; whether it is on the card; the Escape the card took and the report it dismissed (its card stays away until the pointer has left that marker); a focus handed back to a dot.
+    const pointer = useRef({ x: 0, y: 0 }), cardPoint = useRef({ x: 0, y: 0 }), overCard = useRef(false), cardEscape = useRef<Event | null>(null), dismissed = useRef<string | null>(null), refocusing = useRef(false);
     const draftRef = useRef<Draft | null>(null); draftRef.current = draft;
     const [shot, setShot] = useState<Blob | null>(null), [preview, setPreview] = useState(''), [capturing, setCapturing] = useState(false);
     const [busy, setBusy] = useState(false), [reply, setReply] = useState(''), [updates, setUpdates] = useState<Update[]>([]);
@@ -193,36 +242,22 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const [emailPreference, setEmailPreference] = useState<EmailPreference | null>(null);
     const dot = updates.length > 0;
     function acceptUpdates(list: Update[]) { setUpdates(Array.isArray(list) ? list : []); }
+    /** Reading a report (or all of them) clears the hover card's unread dot at once; the next list says the same. */
+    function clearUnread(id?: string) { setIssues(values => values.some(issue => issue.unread && (!id || issue.id === id)) ? values.map(issue => issue.unread && (!id || issue.id === id) ? { ...issue, unread: false } : issue) : values); }
     const [markers, setMarkers] = useState(() => readMarkers(initial.project));
-    // The marker whose hover card shows: the pointer rests on it or on its card, or the keyboard is on its dot.
-    const [card, setCard] = useState<string | null>(null);
-    const cardRef = useRef(card); cardRef.current = card;
-    const cardTimer = useRef<ReturnType<typeof setTimeout>>(), cardElement = useRef<HTMLElement | null>(null);
-    // The dot under the pointer (dots take pointer events; outlines are found by position) and what the pointer
-    // last pointed at. An Escape that dismissed a card does nothing else in the widget: the panel stays open.
-    const dotUnder = useRef<string | null>(null), pointed = useRef<string | null>(null), cardEscape = useRef<Event | null>(null);
-    function showCard(id: string, delay = 0) {
-      clearTimeout(cardTimer.current);
-      if (delay && cardRef.current !== id) cardTimer.current = setTimeout(() => setCard(id), cardRef.current ? 0 : delay);
-      else setCard(id);
-    }
-    function hideCard(delay = 0) {
-      clearTimeout(cardTimer.current);
-      if (delay) cardTimer.current = setTimeout(() => setCard(null), delay);
-      else setCard(null);
-    }
-    /** Acts only when what the pointer points at changes, so a moving pointer neither delays a card nor holds one. */
-    function point(id: string | null) {
-      if (id === pointed.current) return;
-      pointed.current = id;
-      if (id) showCard(id, CARD_SHOW_MS); else hideCard(CARD_HIDE_MS);
-    }
+    // The report whose chat window is open (people-and-statuses §7 item 16). Its thread is the one `thread` holds, shown in the window instead of the side panel.
+    const [chat, setChat] = useState<Issue | null>(null), [expanded, setExpanded] = useState(false), [chatHeight, setChatHeight] = useState(0);
+    const chatRef = useRef<Issue | null>(null), chatEl = useRef<HTMLElement>(null), chatBox = useRef<Box | null>(null);
+    // The Escape the window took, so the sidebar's handler skips it; whether closing the window already put the focus back on its dot.
+    const chatEscape = useRef<Event | null>(null), chatLeft = useRef(false);
+    // What had the focus when the window opened (for a marker without a dot to return to), and the boxes of elements that are on the page but scrolled out of view.
+    const chatOpener = useRef<HTMLElement | null>(null), away = useRef(new Map<string, Box>());
     const posting = useRef(false); posting.current = busy;
     const captureOptions = useRef('');
     const deepLink = useRef(linkedIssue());
     const capture = useRef<ReturnType<typeof startCapture> | null>(null), chosen = useRef<Element | null>(null);
     const commentCursor = useRef<string | null>(null), threadRequests = useRef(0);
-    const shotSequence = useRef(0), listSequence = useRef(0), threadSequence = useRef(0);
+    const shotSequence = useRef(0), listSequence = useRef(0), threadSequence = useRef(0), openingSequence = useRef(0);
     const notificationSequence = useRef(0), fixing = useRef(false);
     const configurationSequence = useRef(0);
     const liveRefresh = useRef<(current: () => boolean) => Promise<void>>(async () => {});
@@ -237,6 +272,75 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     // Route tracking lasts while the sidebar is open at all, so a page change still discards a hidden composer.
     const tracking = open || markers.pinned;
     const listening = marking || flyout;
+    // Hover cards need a pointer that hovers, and no selection or composer in the way (people-and-statuses §7).
+    const hoverable = marking && !picking && !draft && !touchFirst();
+    /** An open window's own marker has no card; the others keep theirs, so another report replaces the window. */
+    const cardable = (id: string) => id !== chatRef.current?.id;
+    const marked = marking ? pins.filter(pin => pin.issue.url === location.origin + location.pathname) : [];
+    const markedRef = useRef(marked); markedRef.current = marked;
+    /** Moves the card toward `target` (a report to show, or null for none) after `delay`; a timer already counting down to it keeps running, so a moving pointer does not restart it. */
+    function planCard(target: string | null, delay: number) {
+      if (cardRef.current === target) { clearTimeout(cardTimer.current); cardPlan.current = undefined; return; }
+      if (cardPlan.current === target) return;
+      clearTimeout(cardTimer.current);
+      const apply = () => {
+        cardPlan.current = undefined;
+        // A card closing under the keyboard focus hands it back to its dot (the card follows the dot in the DOM), so the person keeps their place.
+        const active = root.activeElement;
+        if (active?.classList.contains('hover-card')) { refocusing.current = true; (active.previousElementSibling as HTMLElement | null)?.focus?.({ preventScroll: true }); refocusing.current = false; }
+        overCard.current = false; if (target) cardPoint.current = pointer.current;
+        cardRef.current = target; setCard(target);
+      };
+      if (!delay) { cardPlan.current = undefined; apply(); } else { cardPlan.current = target; cardTimer.current = setTimeout(apply, delay); }
+    }
+    // The card's height decides where it sits (its turn line and reply vary); measure it before it is painted, and again when its content changes.
+    useManagedEffect(() => {
+      const element = cardEl.current;
+      if (!card || !element) return;
+      const measure = () => { const height = element.offsetHeight; if (height) setCardHeight(height); };
+      measure();
+      const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+      observer?.observe(element);
+      return () => observer?.disconnect();
+    }, [card], useLayoutEffect);
+    useManagedEffect(() => { if (!hoverable) planCard(null, 0); }, [hoverable]);
+    // The sidebar or a thread opening takes over from the card.
+    useManagedEffect(() => { planCard(null, 0); }, [open, thread?.id]);
+    useManagedEffect(() => () => clearTimeout(cardTimer.current), []);
+    useManagedEffect(() => {
+      if (!card) return;
+      const close = () => planCard(null, 0);
+      // The first Escape only dismisses the card; the panel's own Escape handler skips the event the card took.
+      const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { cardEscape.current = event; dismissed.current = cardRef.current; close(); } };
+      window.addEventListener('keydown', escape, true); window.addEventListener('scroll', close, true);
+      return () => { window.removeEventListener('keydown', escape, true); window.removeEventListener('scroll', close, true); };
+    }, [card]);
+    // A card whose report is no longer drawn (page change, list refresh, covered element) has no pointer left to close it.
+    const cardDrawn = !card || marked.some(pin => pin.issue.id === card);
+    useManagedEffect(() => { if (!cardDrawn) planCard(null, 0); }, [cardDrawn]);
+    // Outlines and fills let clicks through, so they cannot be hovered: the pointer is hit-tested against their boxes instead,
+    // one passive listener, one test per frame, only while they are drawn. Dots hover on their own.
+    useManagedEffect(() => {
+      if (!hoverable || markers.style === 'dot' || !marked.length) return;
+      let frame = 0, x = 0, y = 0;
+      const probe = () => {
+        frame = 0;
+        const hit = markerAt(markedRef.current, x, y), id = hit && cardable(hit.issue.id) ? hit.issue.id : null;
+        if (id && id === dismissed.current) return;
+        dismissed.current = null; planCard(id, id ? CARD_DELAY : CARD_LINGER);
+      };
+      // The page sees tuix as its host element. On the card the card's own handlers decide; on the panel or the launcher the pointer has left the marker.
+      const move = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') return;
+        if (event.composedPath().includes(root.host)) { cancelAnimationFrame(frame); frame = 0; if (!overCard.current) planCard(null, CARD_LINGER); return; }
+        x = event.clientX; y = event.clientY; pointer.current = { x, y };
+        if (!frame) frame = requestAnimationFrame(probe);
+      };
+      const leave = () => planCard(null, CARD_LINGER);
+      window.addEventListener('pointermove', move, { passive: true, capture: true });
+      document.documentElement.addEventListener('pointerleave', leave);
+      return () => { window.removeEventListener('pointermove', move, true); document.documentElement.removeEventListener('pointerleave', leave); cancelAnimationFrame(frame); };
+    }, [hoverable, markers.style, marked.length > 0]);
     useManagedEffect(() => {
       const update = (event: Event) => {
         setPreferences(readPreferences(initial.project)); setMarkers(readMarkers(initial.project));
@@ -260,7 +364,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         chosen.current = null;
         reselecting.current = null;
         setIssues([]); setPins([]); setHighlight(null); setPicking(false);
-        setDraft(null); setThread(null); setReviewing(false); setShot(null); setCapturing(false);
+        setDraft(null); setThread(null); dropChat(); setReviewing(false); setShot(null); setCapturing(false);
         setPageUrl(next); setRoute(nextRoute);
         // A composer hidden behind settings belonged to the old page: close its invisible sidebar quietly
         // (the SDK already counts it as closed, so focus and the flyout stay where they are).
@@ -282,13 +386,18 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     }
     toggle = value => {
       if (value && suspendedRef.current) { resume(); return; }
+      // The sidebar opening takes over from a chat window; closing it leaves a window whose markers stay drawn.
+      const keepChat = !value && !!chatRef.current && markers.pinned;
+      if (value && chatRef.current) { dropChat(); setThread(null); threadSequence.current++; setReviewing(false); setReviewNote(''); setShot(null); setCapturing(false); shotSequence.current++; }
       if (value) reconcilePage();
       // Only a launcher draws the summary, so only then does a returning browser load the SDK early.
       if (value) { loadFonts(); if (initial.launcher !== false) markActive(initial.project); }
       if (value && !panelActive) { activation++; activationStarted = firstStarted ?? performance.now(); firstStarted = undefined; }
       panelActive = value; runtime.active(value); setOpen(value);
-      if (!value) { live?.stop(); live = undefined; }
-      if (!value) { suspendedRef.current = false; setSuspended(false); chosen.current = null; reselecting.current = null; setPicking(false); setDraft(null); setThread(null); setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); shotSequence.current++; threadSequence.current++; }
+      // A window that stays keeps the connection: its effect owns it and stops it when the window goes too.
+      if (!value && !keepChat) { live?.stop(); live = undefined; }
+      if (!value) { suspendedRef.current = false; setSuspended(false); chosen.current = null; reselecting.current = null; setPicking(false); setDraft(null); }
+      if (!value && !keepChat) { dropChat(); setThread(null); setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); shotSequence.current++; threadSequence.current++; }
       // Markers can open the sidebar without the host SDK, which owns the launcher's open state.
       onPanel(value);
     };
@@ -333,10 +442,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         return true;
       } catch { if (current() && !disposed && sequence === listSequence.current) { setError(t.loadError); runtime.error('list'); } return false; }
     }
-    async function openThread(issue: Pick<Issue, 'id'>, scroll = true, cursor: string | null = scroll ? null : commentCursor.current) {
+    async function openThread(issue: Pick<Issue, 'id'>, scroll = true, cursor: string | null = scroll ? null : commentCursor.current, inChat = false) {
       const sequence = ++threadSequence.current;
       threadRequests.current++;
-      if (scroll) { setLoading(true); setError(''); setDraft(null); setPicking(false); }
+      // A person's own open outlives the poll effect's cleanup, which the thread being cleared for it would otherwise trigger.
+      if (scroll) openingSequence.current = sequence;
+      if (scroll) { setLoading(true); setError(''); setDraft(null); setPicking(false); if (!inChat) dropChat(); }
       if (scroll) { setReviewing(false); setReviewNote(''); setShot(null); setCapturing(false); setPendingState(null); setStateNote(''); shotSequence.current++; }
       try {
         const detail = await api.request<Issue>('/issues/' + encodeURIComponent(issue.id) + (cursor ? '?before=' + encodeURIComponent(cursor) : ''));
@@ -348,12 +459,13 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
             setSource(sourceLocation(element, api.environment));
             if (scroll) {
               setReply(''); setMentions([]); setFixNote('');
-              element?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'instant' : 'smooth' });
+              // The chat window opens beside an element that is on screen already; the page stays where it is.
+              if (!inChat) element?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'instant' : 'smooth' });
             }
           }
           try {
             const unread = await api.request<{ notifications: Update[] }>('/issues/' + encodeURIComponent(issue.id) + '/read', 'POST', {});
-            if (!disposed && sequence === threadSequence.current) { notificationSequence.current++; acceptUpdates(unread.notifications); }
+            if (!disposed && sequence === threadSequence.current) { notificationSequence.current++; acceptUpdates(unread.notifications); clearUnread(issue.id); }
           } catch { /* Read acknowledgement retries when the visible thread refreshes. */ }
         }
       }
@@ -366,7 +478,51 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           } else { setError(t.loadError); runtime.error('thread'); }
         }
       }
-      finally { threadRequests.current--; if (!disposed && sequence === threadSequence.current) setLoading(false); }
+      finally { threadRequests.current--; if (openingSequence.current === sequence) openingSequence.current = 0; if (!disposed && sequence === threadSequence.current) setLoading(false); }
+    }
+    /** Forgets the chat window; the thread it showed stays loaded, for the side panel to take over. */
+    function dropChat() {
+      if (!chatRef.current && !chatActive) return;
+      chatActive = false; chatRef.current = null; chatBox.current = null; setChat(null); setExpanded(false); setChatHeight(0);
+    }
+    /** Puts the keyboard focus back on a report's dot, without its hover card opening. Outlines and fills have no dot: the element that had the focus when the window opened gets it, else the launcher. */
+    function focusDot(id: string) {
+      const dot = [...root.querySelectorAll<HTMLElement>('.pin')].find(item => item.dataset.issue === id);
+      const target = dot ?? (chatOpener.current?.isConnected ? chatOpener.current : initial.launcher !== false ? launcher : null);
+      if (target) { refocusing.current = true; target.focus({ preventScroll: true }); refocusing.current = false; }
+    }
+    /** Closes the chat window and its thread; the focus returns to the report's dot unless something else took it. */
+    function closeChat(restore = true, leave = restore) {
+      const id = chatRef.current?.id;
+      if (!id) return;
+      dropChat();
+      // The window's own load is abandoned with it; nothing else is loading, and its `finally` no longer clears this.
+      threadSequence.current++; shotSequence.current++; setLoading(false);
+      setReviewing(false); setReviewNote(''); setShot(null); setCapturing(false); setThread(null); setNotice(''); setError('');
+      // The sidebar's focus effect runs on this close; focus that stays in the host page (or on the dot) is not its to take.
+      if (leave) chatLeft.current = visible;
+      if (restore) focusDot(id);
+    }
+    /** One window at a time, beside the report's element; its thread loads as in the side panel (read, live updates). Choosing the same report again closes it. */
+    function openChat(issue: Issue) {
+      if (chatRef.current?.id === issue.id) { closeChat(); return; }
+      chatBox.current = markedRef.current.find(pin => pin.issue.id === issue.id)?.box ?? null;
+      const active = root.activeElement as HTMLElement | null;
+      chatOpener.current = active && !active.classList.contains('hover-card') && !chatEl.current?.contains(active) ? active : null;
+      chatActive = true; chatRef.current = issue; chatLeft.current = false;
+      // The thread on hand belongs to another report: it must not stand in for this one if this one fails to load.
+      if (thread?.id !== issue.id) { setThread(null); commentCursor.current = null; }
+      setChat(issue); setExpanded(false); setChatHeight(0); setNotice(''); loadFonts();
+      void openThread(issue, true, null, true);
+    }
+    /** "Open full thread" (and a window with no room left): the side panel shows the thread the window has loaded. */
+    function fullThread() {
+      const issue = chatRef.current;
+      if (!issue) return;
+      dropChat();
+      if (!open) toggle(true);
+      // A thread still on its way arrives in the panel; one that failed to load is asked for again.
+      if (thread?.id !== issue.id && !threadRequests.current) void openThread(issue);
     }
     function acceptSettings(remote: Partial<Config>) {
       // Shopify's boot appearance is a snapshot, not a merchant override of later settings.
@@ -379,7 +535,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       setConfig(next);
       void reportDeployment(panelActive && !disposed, next.enabled !== false);
       runtime.allowed(next.enabled !== false && next.telemetry !== false);
-      if (next.enabled === false) { live?.stop(); threadSequence.current++; shotSequence.current++; setPicking(false); setHighlight(null); setReviewing(false); setShot(null); setCapturing(false); setNotice(t.disabled); setReady(false); setIssues([]); setDraft(null); setThread(null); capture.current?.stop(); capture.current = null; return; }
+      if (next.enabled === false) { live?.stop(); threadSequence.current++; shotSequence.current++; setPicking(false); setHighlight(null); setReviewing(false); setShot(null); setCapturing(false); setNotice(t.disabled); setReady(false); setIssues([]); setDraft(null); setThread(null); dropChat(); capture.current?.stop(); capture.current = null; return; }
       const options = { ...next.capture, network_allow: next.network_allow, network_deny: next.network_deny };
       const signature = JSON.stringify(options);
       // Diagnostics instrument the host only from the first panel activation; page markers alone never do.
@@ -398,30 +554,36 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       return settings;
     }
     liveRefresh.current = async current => {
-      if (!current() || !panelActive || disposed || document.hidden) return;
+      if (!current() || !engaged() || disposed || document.hidden) return;
       const threadRequest = threadSequence.current;
       const notificationRequest = ++notificationSequence.current;
       await fetchList(current);
-      if (!current() || !panelActive || disposed) return;
+      if (!current() || !engaged() || disposed) return;
       const [settings, unread] = await Promise.all([
-        refreshSettings(() => current() && panelActive),
+        refreshSettings(() => current() && engaged()),
         api.request<{ notifications: Update[] }>('/notifications'),
       ]);
-      if (!current() || !panelActive || disposed) return;
+      if (!current() || !engaged() || disposed) return;
       if (notificationRequest === notificationSequence.current) acceptUpdates(unread.notifications);
       hooks.changed?.();
       if (settings && settings.enabled !== false && thread && !busy && !fixing.current && !threadRequests.current && threadRequest === threadSequence.current) await openThread(thread, false);
     };
+    // A thread read (or answered) after the list is newer on whose turn it is: the hover card follows it. The next list replaces the entry again.
     useManagedEffect(() => {
-      if (!open || !ready) return;
+      if (!thread || thread.turn === undefined) return;
+      setIssues(values => values.some(issue => issue.id === thread.id && issue.turn !== thread.turn) ? values.map(issue => issue.id === thread.id ? { ...issue, turn: thread.turn } : issue) : values);
+    }, [thread]);
+    useManagedEffect(() => {
+      if (!(open || chat) || !ready) return;
       const connection = liveUpdates(api, () => liveRefresh.current(() => live === connection));
       live = connection;
       return () => { connection.stop(); if (live === connection) live = undefined; };
-    }, [open, ready]);
+    }, [open || !!chat, ready]);
     useManagedEffect(() => {
       if (!listening) return;
       let stopped = false;
-      setLoading(true); setError('');
+      // The sidebar opening or closing beside a chat window must not wipe the window's error or show it a loading state.
+      if (!chatRef.current) { setLoading(true); setError(''); }
       refreshSettings(() => !stopped).catch(() => { if (!stopped) { setError(t.loadError); runtime.error('config'); } }).finally(() => { if (!stopped) setLoading(false); });
       return () => { stopped = true; };
     }, [listening, open]);
@@ -463,10 +625,10 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       return () => { stopped = true; clearInterval(interval); };
     }, [listening, open, ready]);
     useManagedEffect(() => {
-      if (!open || !thread) return;
+      if (!(open || chat) || !thread) return;
       const interval = setInterval(() => { if (!document.hidden && !posting.current && !fixing.current && !threadRequests.current) void openThread(thread, false); }, 60000);
-      return () => { clearInterval(interval); threadSequence.current++; };
-    }, [open, thread?.id]);
+      return () => { clearInterval(interval); if (threadSequence.current !== openingSequence.current) threadSequence.current++; };
+    }, [open || !!chat, thread?.id]);
     useManagedEffect(() => {
       if (!tracking) return;
       const checkRoute = reconcilePage;
@@ -482,23 +644,28 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       return () => { if (history.pushState === push) history.pushState = originalPush; if (history.replaceState === replace) history.replaceState = originalReplace; window.removeEventListener('popstate', checkRoute); window.removeEventListener('hashchange', checkRoute); };
     }, [tracking, config]);
     useManagedEffect(() => {
-      if (!marking || !ready) { setPins([]); return; }
+      if (!marking || !ready) { setPins([]); away.current = new Map(); return; }
       let frame = 0, debounce: ReturnType<typeof setTimeout>;
       let resolved: { issue: Issue; resolution: Resolution }[] = [];
       let cancelResolution = () => {};
       let resolving = false, refreshPending = false;
       const update = () => {
         frame = 0; setRoute(currentRoute(config));
-        const values: Pin[] = [];
-        for (const { issue, resolution } of resolved) {
+        const values: Pin[] = [], offscreen = new Map<string, Box>();
+        const latest = new Map(issuesRef.current.map(value => [value.id, value]));
+        for (const { issue: resolvedIssue, resolution } of resolved) {
+          const issue = latest.get(resolvedIssue.id) ?? resolvedIssue;
           if (resolution.element && !resolution.element.isConnected) continue;
           const rect = issue.locators?.rect;
           if (!resolution.element && (!rect || ![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite))) continue;
           const box = resolution.element ? boxOf(resolution.element) : { x: issue.locators.rect.x - scrollX, y: issue.locators.rect.y - scrollY, width: issue.locators.rect.w, height: issue.locators.rect.h };
           // Both marker styles hang on the element centre, so one visibility test covers them.
           const x = box.x + box.width / 2, y = box.y + box.height / 2;
-          if (box.width > 0 && box.height > 0 && (resolution.element ? visiblePoint(resolution.element, x, y) : x >= 0 && y >= 0 && x < innerWidth && y < innerHeight)) values.push({ issue, box, orphan: resolution.orphaned });
+          if (!(box.width > 0 && box.height > 0)) continue;
+          // An element scrolled out of view is still on the page: the chat window keeps following its box.
+          if (resolution.element ? visiblePoint(resolution.element, x, y) : x >= 0 && y >= 0 && x < innerWidth && y < innerHeight) values.push({ issue, box, orphan: resolution.orphaned }); else offscreen.set(issue.id, box);
         }
+        away.current = offscreen;
         setPins(values);
       };
       const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
@@ -506,7 +673,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         if (resolving) { refreshPending = true; return; }
         resolving = true;
         cancelResolution = frameBatch(issues, issue => ({ issue, resolution: resolve(issue.locators, document, api.environment === 'local') }), values => {
-          resolved = values; resolving = false; schedule();
+          // From here the resolution can be reused: an edited entry may redraw the markers from it.
+          resolved = values; resolving = false; repin.current = schedule; schedule();
           reportLocators(config.telemetry !== false, values, config.release);
           if (refreshPending) { refreshPending = false; refresh(); }
         });
@@ -515,56 +683,10 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       const docs = documents();
       docs.forEach(doc => { const target = doc.body ?? doc.documentElement; if (target) observer.observe(target, { childList: true, subtree: true, attributes: true }); doc.addEventListener('scroll', schedule, true); });
       window.addEventListener('resize', schedule); refresh();
-      return () => { observer.disconnect(); cancelResolution(); cancelAnimationFrame(frame); clearTimeout(debounce); docs.forEach(doc => doc.removeEventListener('scroll', schedule, true)); window.removeEventListener('resize', schedule); };
-    }, [marking, ready, issues, config]);
-    const pinsRef = useRef(pins); pinsRef.current = pins;
-    // What the pointer points at, each frame it moves. The card lets clicks through to the page, so it is found by
-    // position too: on it, its marker stays pointed at. Dots report themselves (`dotUnder`). Outlines let the pointer
-    // through, so the smallest marked box under it wins, unless it is over the widget itself (the panel).
-    // Elements in frames get no outline cards: their documents' moves never reach this one.
-    useManagedEffect(() => {
-      if (!marking || picking || !pins.length) return;
-      let frame = 0, x = 0, y = 0, inWidget = false;
-      const check = () => {
-        frame = 0;
-        const rect = cardElement.current?.getBoundingClientRect();
-        if (cardRef.current && rect?.width && x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom) return point(cardRef.current);
-        if (markers.style !== 'border') return point(dotUnder.current);
-        if (inWidget) return point(null);
-        const page = location.origin + location.pathname;
-        const under = pinsRef.current
-          .filter(pin => pin.issue.url === page && x >= pin.box.x && x < pin.box.x + pin.box.width && y >= pin.box.y && y < pin.box.y + pin.box.height)
-          .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0];
-        point(under?.issue.id ?? null);
-      };
-      const move = (event: PointerEvent) => {
-        if (event.pointerType === 'touch') return;
-        x = event.clientX; y = event.clientY;
-        inWidget = event.target instanceof Node && root.host.contains(event.target);
-        if (!frame) frame = requestAnimationFrame(check);
-      };
-      // Leaving the window.
-      const out = (event: PointerEvent) => { if (!event.relatedTarget) { dotUnder.current = null; point(null); } };
-      document.addEventListener('pointermove', move, { capture: true, passive: true });
-      document.addEventListener('pointerout', out, true);
-      return () => {
-        cancelAnimationFrame(frame); document.removeEventListener('pointermove', move, true); document.removeEventListener('pointerout', out, true);
-        dotUnder.current = null; pointed.current = null; hideCard();
-      };
-    }, [marking, picking, pins.length > 0, markers.style]);
-    // A card goes with Escape (WCAG 1.4.13: dismissible without moving the pointer or focus), with its marker
-    // (scrolled away, another page) and while picking an element.
-    useManagedEffect(() => {
-      if (!card) return;
-      const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { cardEscape.current = event; hideCard(); } };
-      window.addEventListener('keydown', escape, true);
-      return () => window.removeEventListener('keydown', escape, true);
-    }, [card]);
-    // Which reports have a marker here; it changes only when one comes or goes, not on every scroll frame.
-    const marked = pins.filter(pin => pin.issue.url === location.origin + location.pathname).map(pin => pin.issue.id).join();
-    useManagedEffect(() => { if (card && !marked.split(',').includes(card)) hideCard(); }, [card, marked]);
-    useManagedEffect(() => { if (!marking || picking) hideCard(); }, [marking, picking]);
-    useManagedEffect(() => () => clearTimeout(cardTimer.current), []);
+      return () => { repin.current = () => {}; observer.disconnect(); cancelResolution(); cancelAnimationFrame(frame); clearTimeout(debounce); docs.forEach(doc => doc.removeEventListener('scroll', schedule, true)); window.removeEventListener('resize', schedule); };
+    }, [marking, ready, located.current, config]);
+    // An edited entry (read, a newer turn) redraws the markers and card from the resolution already made.
+    useManagedEffect(() => { repin.current(); }, [issues]);
     useManagedEffect(() => { if (!picking) setHighlight(null); else if (config.capture?.screenshot !== false) void screenshotModule().catch(() => {}); }, [picking]);
     // Comment mode explains itself once, then gets out of the way; the page frame and launcher ring persist.
     useManagedEffect(() => {
@@ -612,25 +734,59 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     useManagedEffect(() => {
       if (!visible) return;
       const keydown = (event: KeyboardEvent) => {
-        // A hover card, then an open mention list, takes Escape first; the panel stays open.
-        if (event.key === 'Escape' && cardEscape.current === event) return;
-        if (event.key === 'Escape') { event.preventDefault(); if (!mentionEscape.current?.()) close(); }
+        // An open mention list takes Escape first; the panel stays open.
+        if (event.key === 'Escape' && event !== cardEscape.current && event !== chatEscape.current) { event.preventDefault(); if (!mentionEscape.current?.()) close(); }
         if (draft && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); formRef.current?.requestSubmit(); }
       };
       const docs = documents(); docs.forEach(doc => doc.addEventListener('keydown', keydown, true));
       return () => docs.forEach(doc => doc.removeEventListener('keydown', keydown, true));
     // Escape must work as soon as the sidebar is painted, including during config loading.
     }, [visible, picking, draft, thread], useLayoutEffect);
-    useManagedEffect(() => { if (!visible) return; if (draft) formRef.current?.querySelector('textarea')?.focus({ preventScroll: true }); else if (!picking) panelRef.current?.querySelector('button')?.focus({ preventScroll: true }); }, [visible, !!draft, picking, !!thread]);
+    useManagedEffect(() => {
+      // A chat window keeps the focus it took; closing it to its dot leaves the panel alone too.
+      if (!visible || chat) return;
+      if (chatLeft.current) { chatLeft.current = false; return; }
+      if (draft) formRef.current?.querySelector('textarea')?.focus({ preventScroll: true }); else if (!picking) panelRef.current?.querySelector('button')?.focus({ preventScroll: true });
+    }, [visible, !!draft, picking, !!thread, !!chat]);
+    // The chat window takes the focus when it opens; Escape closes it (an open mention list takes the first one), and the sidebar's handler skips that event.
+    useManagedEffect(() => { if (chat) chatEl.current?.focus({ preventScroll: true }); }, [chat?.id], useLayoutEffect);
+    useManagedEffect(() => {
+      if (!chat) return;
+      // Focus in the host page (its own input, an autocomplete) keeps its Escape: the window closes, but the host's focus stays.
+      const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !cardRef.current) { chatEscape.current = event; const inside = !!root.activeElement; if (inside) event.preventDefault(); if (!(inside && mentionEscape.current?.())) closeChat(inside, true); } };
+      window.addEventListener('keydown', escape, true);
+      return () => window.removeEventListener('keydown', escape, true);
+    }, [chat?.id, visible]);
+    // Markers going away (settings, an unpinned closed sidebar) leave the window nothing to hang on.
+    useManagedEffect(() => { if (chat && !marking) closeChat(false); }, [!!chat, marking]);
+    // No room for the window any more (a narrower screen, a touch device): the side panel takes the thread over.
+    const fits = !chat || roomy();
+    useManagedEffect(() => { if (chat && !fits) fullThread(); }, [!!chat, fits]);
+    // The window's height decides where it sits; measure it once it is drawn.
+    useManagedEffect(() => {
+      const element = chatEl.current;
+      if (!chat || !element) return;
+      const measure = () => { const height = element.offsetHeight; if (height) setChatHeight(height); };
+      measure();
+      // Content changes (replies, the mention list, notes) resize it; scrolling the page does not.
+      const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+      observer?.observe(element);
+      return () => observer?.disconnect();
+    }, [chat?.id], useLayoutEffect);
+    // A render that grows it (the thread arriving) is measured before paint: the observer reports a frame later,
+    // and for that frame the window would hang past the viewport. An unchanged height does not render again.
+    useLayoutEffect(() => { const height = !disposed && chat ? chatEl.current?.offsetHeight : 0; if (height) setChatHeight(height); });
     useManagedEffect(() => {
       if (reviewing && (thread ? stateOf(thread) : '') !== 'in_review') {
         shotSequence.current++; setReviewing(false); setReviewNote(''); setShot(null); setCapturing(false); setNotice(t.reviewChanged);
       }
     }, [reviewing, thread?.state, thread?.status]);
-    useManagedEffect(() => { if (reviewing) { const form = panelRef.current?.querySelector<HTMLElement>('.verify-tools'); form?.scrollIntoView?.({ block: 'start' }); form?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true }); } }, [reviewing]);
+    useManagedEffect(() => { if (reviewing) { const form = (chatEl.current ?? panelRef.current)?.querySelector<HTMLElement>('.verify-tools'); form?.scrollIntoView?.({ block: 'start' }); form?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true }); } }, [reviewing]);
     // A note form replaces the action that opened it, so it takes the focus.
     useManagedEffect(() => { if (pendingState) { const form = panelRef.current?.querySelector<HTMLElement>('.state-note'); form?.scrollIntoView?.({ block: 'start' }); form?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true }); } }, [pendingState]);
     /** A finished thread action removes the control that ran it: keep keyboard focus in the thread, on its state. */
+    /** The same in the chat window: an action that removes the control holding the focus (Show earlier, Done, a note form) hands it to the window before it goes, so Escape still returns it to the dot. */
+    const holdChatFocus = () => { const element = chatEl.current; if (element && element.contains(root.activeElement)) element.focus({ preventScroll: true }); };
     const focusState = () => panelRef.current?.querySelector<HTMLElement>('.thread-state')?.focus({ preventScroll: true });
     useManagedEffect(() => { if (!shot) { setPreview(''); return; } const url = URL.createObjectURL(shot); setPreview(url); return () => URL.revokeObjectURL(url); }, [shot]);
     async function compose(element: Element) {
@@ -684,14 +840,15 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       if (!thread || busy || !reply.trim()) return;
       const sequence = threadSequence.current, body = reply, pending = uuid(), picked = mentions, ids = mentionIds(body, picked);
       setBusy(true); setError(''); setReply(''); setMentions([]);
-      setThread(value => value && { ...value, comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
+      const turn = thread.turn;
+      setThread(value => value && { ...value, turn: turnAfterReply(value), comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
       try {
         // Servers before mentions read only `body`; a reply without mentions sends nothing else.
         await api.request('/issues/' + thread.id + '/comments', 'POST', ids.length ? { body, mentions: ids } : { body });
-        if (!disposed && panelActive && sequence === threadSequence.current) void openThread(thread, false, null);
+        if (!disposed && engaged() && sequence === threadSequence.current) void openThread(thread, false, null);
       } catch {
-        if (!disposed && panelActive && sequence === threadSequence.current) {
-          setThread(value => value && { ...value, comments: value.comments?.filter(comment => comment.id !== pending) });
+        if (!disposed && engaged() && sequence === threadSequence.current) {
+          setThread(value => value && { ...value, turn, comments: value.comments?.filter(comment => comment.id !== pending) });
           // The picks come back with the text; pruning before the next send drops any the text no longer names.
           setReply(value => value || body); setMentions(value => [...value, ...picked.filter(pick => !value.some(kept => kept.id === pick.id))]);
           setError(t.replyError); runtime.error('reply');
@@ -718,8 +875,10 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     function startReview() {
       if (!thread || busy) return;
       setReviewing(true); setReviewNote(''); setError('');
-      void captureShot(resolve(thread.locators, document).element ?? document.body);
+      // The small window attaches no new screenshot; Still broken there is the note alone.
+      if (!chatRef.current) void captureShot(resolve(thread.locators, document).element ?? document.body);
     }
+    function cancelReview() { setReviewing(false); shotSequence.current++; setShot(null); setCapturing(false); }
     /** The reporter's decision on a report in review (any environment); Still broken may carry a new screenshot. */
     async function verifyThread(outcome: 'works' | 'broken') {
       if (!thread || busy || fixing.current || capturing || (outcome === 'broken' && !reviewNote.trim())) return;
@@ -732,21 +891,23 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           await api.upload(upload.url, upload.headers, shot); attachments.push(upload.id);
         }
         const updated = await api.request<Issue>('/issues/' + thread.id + '/verify', 'POST', outcome === 'works' ? { outcome } : { outcome, note: reviewNote, attachments });
-        if (!disposed && panelActive && sequence === threadSequence.current) {
+        if (!disposed && engaged() && sequence === threadSequence.current) {
           setReviewing(false); setReviewNote(''); setShot(null); setCapturing(false); shotSequence.current++;
-          commentCursor.current = null; setThread(outcome === 'works' ? null : updated); setNotice(outcome === 'works' ? t.verified : t.reopened);
+          commentCursor.current = null;
+          // The window stays open on a verified report, showing its new state and the thanks; the panel goes back to the list.
+          setThread(outcome === 'works' && !chatRef.current ? null : updated); setNotice(outcome === 'works' ? t.verified : t.reopened);
           await fetchList();
           try {
             const unread = await api.request<{ notifications: Update[] }>('/notifications');
-            if (!disposed && panelActive) { notificationSequence.current++; acceptUpdates(unread.notifications); }
+            if (!disposed && engaged()) { notificationSequence.current++; acceptUpdates(unread.notifications); }
           } catch { /* The decision succeeded; badge refresh can retry on the active poll. */ }
         }
-      } catch { if (!disposed && panelActive && sequence === threadSequence.current) setError(t.verifyError); }
+      } catch { if (!disposed && engaged() && sequence === threadSequence.current) setError(t.verifyError); }
       finally { fixing.current = false; if (!disposed) setBusy(false); }
     }
     async function readAllUpdates() {
       const previous = updates;
-      notificationSequence.current++; acceptUpdates([]); setUpdatesError('');
+      notificationSequence.current++; acceptUpdates([]); clearUnread(); setUpdatesError('');
       try { await api.request('/notifications/read', 'POST', {}); }
       catch { if (!disposed) { acceptUpdates(previous); setUpdatesError(t.loadError); } }
     }
@@ -862,6 +1023,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     // Thread actions come from the caller's allowed states (people-and-statuses §5, §7 item 12); without them (a
     // server before §6) the thread is read-only.
     const threadState = thread ? stateOf(thread) : '';
+    // The side panel shows the thread unless a chat window has it.
+    const panelThread = chat ? null : thread;
     const allowed = new Set<string>(thread?.allowed_states ?? []);
     const closedThread = terminal.includes(threadState);
     const reporter = !!(thread?.reporter ?? thread?.own);
@@ -877,30 +1040,65 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const needsNote = (next: State) => next === 'wont_fix' || (next === 'open' && threadState === 'in_review');
     const canAssign = !!thread?.can_be_fixer && !thread.fixer && !thread.assignee?.me && !closedThread;
     const canFix = !!thread && api.environment === 'local' && takeable && (threadState === 'open' || threadState === 'in_progress') && !fixPending(thread);
+    /** A marker or its hover card was chosen: the report opens in a chat window, or in the sidebar where there is no room (people-and-statuses §7 item 16). */
+    function openMarker(issue: Issue) {
+      if (issue.status === 'sending') return;
+      planCard(null, 0);
+      // With room for it, and no hidden composer to keep, the report opens in a window beside its element.
+      if (roomy() && !suspendedRef.current) { openChat(issue); return; }
+      if (!open) toggle(true); else resume(false);
+      void openThread(issue);
+    }
+    /** The card keeps to what the list already carries: no request per hover. Text only, never HTML. */
+    function hoverCard(pin: Pin, anchor: Box, point?: { x: number; y: number }) {
+      const { issue } = pin, reply = issue.latest_comment, state = stateOf(issue);
+      const unread = !!issue.unread || updates.some(update => update.issue_id === issue.id);
+      const number = `#${issue.number || '…'}`, status = statusLabel(state, initial.lang);
+      const author = reply?.team ? t.team : reply?.author.name;
+      const turn = turnLine(issue, initial.lang);
+      // Without a reply the card shows the start of the description, whole: its first line is the title, kept on a line of its own, so the title row gives way to the number. An older server sends no excerpt, and the title stays.
+      const excerpt = reply ? '' : (issue.excerpt ?? '').replace(/\s*\n\s*/g, '\n').trim();
+      const title = excerpt ? number : `${number} ${issue.title}`;
+      const label = [excerpt ? `${number} ${excerpt.replace(/\n/g, ' ')}` : title, status, turn, pin.orphan && t.moved, unread && t.unreadUpdates, reply && `${author}: ${reply.body}`, !excerpt && reply === null && t.noReplies].filter(Boolean).join(' · ');
+      return <button type="button" id="tuix-card" ref={cardEl} class="hover-card" data-state={pinState(state)} aria-label={label} style={{ ...cardAt(anchor, point, cardHeight), maxHeight: innerHeight - 2 * CARD_EDGE }}
+        onPointerEnter={() => { overCard.current = true; planCard(cardRef.current, 0); }} onPointerLeave={() => { overCard.current = false; planCard(null, CARD_LINGER); }} onFocus={() => planCard(cardRef.current, 0)} onBlur={() => planCard(null, CARD_LINGER)} onClick={() => openMarker(issue)}>
+        <span class="card-title">{unread && <span class="unread-dot" aria-hidden="true"/>}<strong>{title}</strong></span>
+        <span class="card-meta"><span class="status" data-status={state}>{status}</span>{turn && <span class="turn">{turn}</span>}{pin.orphan && <span class="muted">{t.moved}</span>}</span>
+        {reply ? <span class="card-reply"><strong>{author}</strong> {reply.body}</span> : excerpt ? <span class="card-reply card-excerpt">{excerpt}</span> : reply === null && <span class="card-reply muted">{t.noReplies}</span>}
+      </button>;
+    }
+    // The chat window follows its element through the same live pins as the markers; when the element leaves, the window stays where it was.
+    const chatPin = chat ? marked.find(pin => pin.issue.id === chat.id) : undefined;
+    const chatAway = chat && !chatPin ? away.current.get(chat.id) : undefined;
+    // Scrolled out of view, the element still anchors the window, kept inside the viewport.
+    if (chatPin || chatAway) chatBox.current = (chatPin?.box ?? chatAway)!;
+    const chatThread = chat && thread?.id === chat.id ? thread : null;
+    const chatState = chat ? stateOf(chatThread ?? chatPin?.issue ?? chat) : '';
+    // The thread, once loaded, is newer than the list on whose turn it is; against an older server neither has one.
+    const chatTurn = chat ? turnLine(chatThread && chatThread.turn !== undefined ? chatThread : chatPin?.issue ?? chat, initial.lang) : null;
+    const chatAnchor = chatBox.current ?? { x: pointer.current.x, y: pointer.current.y, width: 1, height: 1 };
+    const chatPlace = chat ? placeChat(chatAnchor, { width: CHAT_W, height: chatHeight || CHAT_MAX_H },
+      // The open sidebar's side is left to it.
+      { left: visible && left ? PANEL_W : 0, top: 0, right: innerWidth - (visible && !left ? PANEL_W : 0), bottom: innerHeight },
+      { x: chatAnchor.x + chatAnchor.width / 2 - DOT / 2, y: chatAnchor.y + chatAnchor.height / 2 - DOT / 2, width: DOT, height: DOT }) : null;
     return <div class="tuix-app" lang={initial.lang ?? (navigator.language.startsWith('pl') ? 'pl' : 'en')}>
       {!!issues.length && !visible && initial.launcher !== false && <span class={'badge attention-dot' + (left ? ' left' : '')} aria-label={t.title}/>}
       {/* The gold reply dot opens the settings flyout, where Updates on your reports live. */}
       {dot && initial.launcher !== false && (hooks.openSettings
         ? <button type="button" class={'reply-dot' + (left ? ' left' : '')} data-action="open-updates" aria-label={t.updates} onClick={() => hooks.openSettings!()}/>
         : <span class={'reply-dot' + (left ? ' left' : '')}/>)}
-      {marking && pins.filter(pin => pin.issue.url === location.origin + location.pathname).map(pin => {
-        const pinned = stateOf(pin.issue), verify = pinned === 'in_review';
-        const state = (pin.orphan ? ' orphan' : '') + (thread?.id === pin.issue.id ? ' active' : '');
-        // Outlines stay decorative: they never cover the element they mark, so the sidebar list carries their names.
-        return markers.style === 'border'
-          ? <span key={pin.issue.id} data-state={pinState(pinned)} class={'marker' + (verify ? ' verify-marker' : '') + state} aria-hidden="true" style={{ left: pin.box.x, top: pin.box.y, width: pin.box.width, height: pin.box.height }}/>
-          : <button key={pin.issue.id} data-state={pinState(pinned)} class={'pin' + (verify ? ' verify-pin' : '') + state} disabled={pin.issue.status === 'sending'} style={{ left: pin.box.x + pin.box.width / 2 - DOT / 2, top: pin.box.y + pin.box.height / 2 - DOT / 2 }} aria-label={`${verify ? t.verify + ' · ' : ''}#${pin.issue.number || '…'} ${pin.issue.title}${pin.orphan ? ' · ' + t.moved : ''}`} aria-describedby={card === pin.issue.id ? cardId : undefined}
-              onPointerEnter={event => { if (event.pointerType !== 'touch') { dotUnder.current = pin.issue.id; point(pin.issue.id); } }} onPointerLeave={() => { dotUnder.current = null; point(null); }}
-              onFocus={() => showCard(pin.issue.id)} onBlur={() => hideCard()}
-              onClick={() => { pointed.current = pin.issue.id; hideCard(); if (!open) toggle(true); else resume(false); void openThread(pin.issue); }}>{verify ? <CheckIcon/> : null}</button>;
+      {marking && marked.map(pin => {
+        const pinned = stateOf(pin.issue), verify = pinned === 'in_review', id = pin.issue.id, sending = pin.issue.status === 'sending';
+        const state = (pin.orphan ? ' orphan' : '') + ((chat ? chat.id : thread?.id) === id ? ' active' : '');
+        const spot = { x: pin.box.x + pin.box.width / 2 - DOT / 2, y: pin.box.y + pin.box.height / 2 - DOT / 2, width: DOT, height: DOT };
+        // Outlines and fills stay click-through, so the host element underneath keeps working; hit-testing the pointer against their boxes gives them the hover card, and the card opens the chat.
+        return <Fragment key={id}>{markers.style !== 'dot'
+          ? <span data-state={pinState(pinned)} class={'marker' + (markers.style === 'fill' ? ' fill' : '') + (verify ? ' verify-marker' : '') + state} aria-hidden="true" style={{ left: pin.box.x, top: pin.box.y, width: pin.box.width, height: pin.box.height }}/>
+          : <button data-state={pinState(pinned)} data-issue={id} class={'pin' + (verify ? ' verify-pin' : '') + state} disabled={sending} style={{ left: spot.x, top: spot.y }} aria-label={`${verify ? t.verify + ' · ' : ''}#${pin.issue.number || '…'} ${pin.issue.title}${pin.orphan ? ' · ' + t.moved : ''}`} aria-describedby={hoverable && card === id ? 'tuix-card' : undefined}
+            onPointerEnter={event => { if (hoverable && cardable(id) && !sending && event.pointerType !== 'touch') planCard(id, CARD_DELAY); }} onPointerLeave={() => planCard(null, CARD_LINGER)}
+            onFocus={() => { if (hoverable && cardable(id) && !sending && !refocusing.current) planCard(id, 0); }} onBlur={() => planCard(null, CARD_LINGER)} onClick={() => openMarker(pin.issue)} aria-haspopup={roomy() ? 'dialog' : undefined} aria-expanded={chat?.id === id ? true : undefined} aria-controls={chat?.id === id ? 'tuix-chat' : undefined}>{verify ? <CheckIcon/> : null}</button>}
+          {hoverable && card === id && hoverCard(pin, markers.style === 'dot' ? spot : pin.box, markers.style === 'dot' ? undefined : cardPoint.current)}</Fragment>;
       })}
-      {/* The hover card of the marker the pointer or keyboard is on: its number, state and the start of its description. */}
-      {marking && !picking && card && (() => {
-        const pin = pins.find(pin => pin.issue.id === card && pin.issue.url === location.origin + location.pathname);
-        if (!pin) return null;
-        const box = markers.style === 'border' ? pin.box : { x: pin.box.x + pin.box.width / 2 - DOT / 2, y: pin.box.y + pin.box.height / 2 - DOT / 2, width: DOT, height: DOT };
-        return <MarkerCard issue={pin.issue} box={box} orphan={pin.orphan} lang={initial.lang} moved={t.moved} element={element => { cardElement.current = element; }}/>;
-      })()}
       {visible && picking && <>{ready && (touchPick ? <div class="pick-surface touch" aria-hidden="true"/> : <div class="pick-surface" onMouseMove={movePicker} onClick={event => { event.preventDefault(); event.stopPropagation(); const element = movePicker(event); if (element) void compose(element); }}/>)}
         {ready && touchPick && highlight && chosen.current && <div class={'pick-confirm' + (left ? ' left' : '')} role="group" aria-label={t.selectedElement}>
           <p><span class="muted">{t.selectedElement}</span><strong>{highlight.label}</strong></p>
@@ -912,44 +1110,39 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         {(hint || !ready) && <div class="picker-hint" role={!ready && error ? 'alert' : 'status'} data-state={ready ? 'ready' : error ? 'error' : 'loading'}>{ready ? <p><strong>{t.report}</strong><small>{touchPick ? t.pickingTouch : `${t.picking}. ${t.pickingHelp}`}</small></p> : <p>{error || t.loading}</p>}</div>}
         {ready && highlight && <div class="highlight" style={{ left: highlight.x, top: highlight.y, width: highlight.width, height: highlight.height }}><span>{highlight.label}</span></div>}</>}
       {visible && !picking && !draft && <section ref={panelRef} class={'panel' + (left ? ' left' : '')} aria-label={t.title}>
-        <header><h2>{thread ? thread.title : allPages ? t.allReports : t.title}</h2><button class="icon-button" aria-label={t.close} onClick={close}><CloseIcon/></button></header>
-        {ready && !thread && <div class="toolbar"><button data-action="add-comment" class="primary" disabled={busy} onClick={comment}>{t.add}</button></div>}
+        <header><h2>{panelThread ? panelThread.title : allPages ? t.allReports : t.title}</h2><button class="icon-button" aria-label={t.close} onClick={close}><CloseIcon/></button></header>
+        {ready && !panelThread && <div class="toolbar"><button data-action="add-comment" class="primary" disabled={busy} onClick={comment}>{t.add}</button></div>}
         <div class="content">
-          {notice && <p class="notice" role="status">{notice}</p>}
-          {error && <p class="error" role="alert">{error} <button onClick={() => { setError(''); if (ready) void fetchList(); else { setOpen(false); setTimeout(() => setOpen(true), 0); } }}>{t.retry}</button></p>}
-          {loading && <p role="status">{t.loading}</p>}
+          {!chat && notice && <p class="notice" role="status">{notice}</p>}
+          {!chat && error && <p class="error" role="alert">{error} <button onClick={() => { setError(''); if (ready) void fetchList(); else { setOpen(false); setTimeout(() => setOpen(true), 0); } }}>{t.retry}</button></p>}
+          {!chat && loading && <p role="status">{t.loading}</p>}
           {/* Hosts without a launcher have no flyout, so their updates stay at the top of Reports. */}
-          {!thread && ready && !slot && (updates.length > 0 || emailPreference?.email_available) && updatesSection}
-          {!thread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} hideClosed={preferences.hideClosed} involving={shown.involving} onInvolvingChange={involving => savePreferences(initial.project, { involving })} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : issues}/>}
-          {thread && <><button onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
-            <p class="muted">#{thread.number} · {thread.author.name} · {thread.env_name}</p>
-            <p class="report-kind">{t[thread.type as 'bug'] ?? thread.type}{thread.severity ? ` · ${t[thread.severity as 'major'] ?? thread.severity}` : ''}</p>
-            <p class="thread-body">{thread.body}</p>
-            {(thread.original_screenshot ?? thread.attachments)?.map(item => <figure class="evidence" key={item.id}>
+          {!panelThread && ready && !slot && (updates.length > 0 || emailPreference?.email_available) && updatesSection}
+          {!panelThread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} hideClosed={preferences.hideClosed} involving={shown.involving} onInvolvingChange={involving => savePreferences(initial.project, { involving })} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : located.current}/>}
+          {panelThread && <><button onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
+            <p class="muted">#{panelThread.number} · {panelThread.author.name} · {panelThread.env_name}</p>
+            <p class="report-kind">{t[panelThread.type as 'bug'] ?? panelThread.type}{panelThread.severity ? ` · ${t[panelThread.severity as 'major'] ?? panelThread.severity}` : ''}</p>
+            <p class="thread-body">{panelThread.body}</p>
+            {(panelThread.original_screenshot ?? panelThread.attachments)?.map(item => <figure class="evidence" key={item.id}>
               <figcaption>{t.originalEvidence}</figcaption>
-              <EvidencePreview item={item} label={t.originalEvidence} unavailable={t.previewUnavailable} retry={t.retry} onRetry={() => void openThread(thread, false)}/>
+              <EvidencePreview item={item} label={t.originalEvidence} unavailable={t.previewUnavailable} retry={t.retry} onRetry={() => void openThread(panelThread, false)}/>
             </figure>)}
-            {!(thread.original_screenshot ?? thread.attachments)?.length && <div class="evidence-empty">
-              <p>{thread.screenshot_status === 'none' ? t.noScreenshot : thread.screenshot_status === 'restricted' ? t.restrictedScreenshot : t.unavailableScreenshot}</p>
-              {thread.screenshot_status === 'unavailable' && <button disabled={loading} onClick={() => void openThread(thread, false)}>{t.retry}</button>}
+            {!(panelThread.original_screenshot ?? panelThread.attachments)?.length && <div class="evidence-empty">
+              <p>{panelThread.screenshot_status === 'none' ? t.noScreenshot : panelThread.screenshot_status === 'restricted' ? t.restrictedScreenshot : t.unavailableScreenshot}</p>
+              {panelThread.screenshot_status === 'unavailable' && <button disabled={loading} onClick={() => void openThread(panelThread, false)}>{t.retry}</button>}
             </div>}
             <div class="thread-state" tabIndex={-1}>
               <span class="status" data-status={threadState}>{statusLabel(threadState, initial.lang)}</span>
-              <span class="fixer-line">{thread.assignee ? <>{t.fixer}: <strong>{thread.assignee.me ? t.you : thread.assignee.name}</strong></> : t.noFixer}</span>
+              <span class="fixer-line">{panelThread.assignee ? <>{t.fixer}: <strong>{panelThread.assignee.me ? t.you : panelThread.assignee.name}</strong></> : t.noFixer}</span>
               {canAssign && <button type="button" data-action="assign" disabled={busy} onClick={() => void assignToMe()}>{t.assignToMe}</button>}
             </div>
-            {fixPending(thread) && <p class="fix-pending">{t.fixPending}</p>}
-            {!!thread.review_screenshot?.length && <details><summary>{t.reviewEvidence}</summary>{thread.review_screenshot.map(item => <EvidencePreview item={item} label={t.reviewEvidence} unavailable={t.previewUnavailable}/>)}</details>}
-            {verifying && <div class="verify-tools">
-              <h3>{t.verifyTitle}</h3><p class="muted">{threadOrphan ? t.orphanVerify : t.compareLive}</p>
-              {!(thread.original_screenshot ?? thread.attachments)?.length && <p class="muted">{t.noOriginal}</p>}
-              {thread.fixed_note && <div class="fix-note"><strong>{t.developerNote} · {thread.fixed_note.author.name}</strong><p><CommentText comment={thread.fixed_note}/></p></div>}
-              {!reviewing ? <div class="verification-actions">{may('done') && <button class="primary" data-state-action="done" disabled={busy} onClick={() => void verifyThread('works')}>{t.actionDone}</button>}{may('open') && <button data-state-action="open" disabled={busy} onClick={startReview}>{t.stillBroken}</button>}</div> : <form onSubmit={event => { event.preventDefault(); void verifyThread('broken'); }}>
-                <label>{t.reviewNote}<textarea value={reviewNote} onInput={event => setReviewNote(event.currentTarget.value)} required maxLength={2000} disabled={busy}/></label>
-                <details><summary>{t.reviewCapture}</summary>{capturing ? <p role="status">{t.capturing}</p> : preview ? <><img src={preview} alt={t.reviewCapture}/><button type="button" disabled={busy} onClick={() => { shotSequence.current++; setShot(null); }}>{t.remove}</button></> : <p class="muted">{t.skipped}</p>}{config.capture?.screenshot !== false && <button type="button" disabled={busy || capturing} onClick={() => void captureShot(resolve(thread.locators, document).element ?? document.body)}>{t.retake}</button>}</details>
-                <div class="verification-actions"><button type="button" disabled={busy} onClick={() => { setReviewing(false); shotSequence.current++; setShot(null); setCapturing(false); }}>{t.cancel}</button><button type="submit" class="primary" disabled={busy || capturing || !reviewNote.trim()}>{busy ? t.sending : t.sendReview}</button></div>
-              </form>}
-            </div>}
+            {fixPending(panelThread) && <p class="fix-pending">{t.fixPending}</p>}
+            {!!panelThread.review_screenshot?.length && <details><summary>{t.reviewEvidence}</summary>{panelThread.review_screenshot.map(item => <EvidencePreview item={item} label={t.reviewEvidence} unavailable={t.previewUnavailable}/>)}</details>}
+            {verifying && <VerifyTools t={t} thread={panelThread} busy={busy} reviewing={reviewing} capturing={capturing} note={reviewNote} works={may('done')} broken={may('open')}
+              head={<><h3>{t.verifyTitle}</h3><p class="muted">{threadOrphan ? t.orphanVerify : t.compareLive}</p>
+                {!(panelThread.original_screenshot ?? panelThread.attachments)?.length && <p class="muted">{t.noOriginal}</p>}</>}
+              evidence={<details><summary>{t.reviewCapture}</summary>{capturing ? <p role="status">{t.capturing}</p> : preview ? <><img src={preview} alt={t.reviewCapture}/><button type="button" disabled={busy} onClick={() => { shotSequence.current++; setShot(null); }}>{t.remove}</button></> : <p class="muted">{t.skipped}</p>}{config.capture?.screenshot !== false && <button type="button" disabled={busy || capturing} onClick={() => void captureShot(resolve(panelThread.locators, document).element ?? document.body)}>{t.retake}</button>}</details>}
+              onNote={setReviewNote} onWorks={() => void verifyThread('works')} onBroken={startReview} onCancel={cancelReview} onSend={() => void verifyThread('broken')}/>}
             {!reviewing && !pendingState && actions.length > 0 && <div class="thread-actions">{actions.map(([next, label]) =>
               <button type="button" key={next} data-state-action={next} disabled={busy} onClick={() => { if (needsNote(next)) { setPendingState(next); setStateNote(''); setError(''); } else void changeState(next); }}>{label}</button>)}</div>}
             {pendingState && <form class="state-note" onSubmit={event => { event.preventDefault(); if (stateNote.trim()) void changeState(pendingState, stateNote); }}>
@@ -965,11 +1158,11 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
                 <button type="submit" class="primary" disabled={busy || !fixNote.trim()}>{busy ? t.recordingFix : t.markFixed}</button>
               </form>
             </details>}
-            {(commentCursor.current || thread.comments_older) && <nav class="actions" aria-label={t.replyPages}>
-              {commentCursor.current && <button disabled={loading || busy} onClick={() => void openThread(thread, false, null)}>{t.latestReplies}</button>}
-              {thread.comments_older && <button disabled={loading || busy} onClick={() => void openThread(thread, false, thread.comments_older!)}>{t.olderReplies}</button>}
+            {(commentCursor.current || panelThread.comments_older) && <nav class="actions" aria-label={t.replyPages}>
+              {commentCursor.current && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, null)}>{t.latestReplies}</button>}
+              {panelThread.comments_older && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, panelThread.comments_older!)}>{t.olderReplies}</button>}
             </nav>}
-            {thread.comments?.map(comment => <article class="comment" key={comment.id}><div class="issue-meta"><strong>{comment.author.name}</strong>{comment.pending && <span role="status">{t.sending}</span>}{comment.team && <span class="status" data-status="team">{t.team}</span>}<time>{new Date(comment.inserted_at).toLocaleString(initial.lang)}</time></div><p><CommentText comment={comment}/></p></article>)}
+            {panelThread.comments && <ThreadComments comments={panelThread.comments} lang={initial.lang} t={t}/>}
             {source && api.environment === 'local' && <div class="source-tools">
               <p><strong>{t.source}</strong><br/><code>{source.path}:{source.line}</code></p>
               {sourceLink && <a href={sourceLink}>{t.openEditor}</a>}
@@ -982,9 +1175,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
                 </form>
               </details>
             </div>}
-            {!reviewing && !closedThread && <form onSubmit={event => { event.preventDefault(); void replyToThread(); }}>
-              <MentionField key={thread.id} api={api} issue={thread.id} enabled={!!thread.can_mention} label={t.replyLabel} t={t} value={reply} onValue={setReply}
-                picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])} escape={mentionEscape}/><button type="submit" class="primary" disabled={busy}>{t.reply}</button></form>}
+            {!reviewing && !closedThread && <ReplyForm api={api} thread={panelThread} t={t} value={reply} onValue={setReply} busy={busy}
+              picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])} escape={mentionEscape} onSubmit={() => void replyToThread()}/>}
           </>}
         </div>
       </section>}
@@ -1012,6 +1204,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           <div class="actions"><button type="button" disabled={busy} onClick={() => { chosen.current = null; reselecting.current = null; setDraft(null); setShot(null); setCapturing(false); shotSequence.current++; }}>{t.cancel}</button><button type="submit" class="primary" disabled={!ready || busy || capturing}>{busy ? t.sending : t.send}</button></div>
         </form>
       </section>}
+      {chat && chatPlace && <ChatWindow t={t} lang={initial.lang} api={api} issue={chatPin?.issue ?? chat} thread={chatThread} state={chatState} turn={chatTurn} tone={pinState(chatState)} place={chatPlace} windowRef={chatEl}
+        gone={!chatPin && !chatAway && !terminal.includes(chatState)} moved={!!chatPin?.orphan} loading={loading} error={error} notice={notice} busy={busy} closed={closedThread}
+        expanded={expanded} onExpand={() => { holdChatFocus(); setExpanded(true); }} reply={reply} onReply={setReply} picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])}
+        escape={mentionEscape} onSend={() => { holdChatFocus(); void replyToThread(); }}
+        verify={chatThread && verifying ? { works: may('done'), broken: may('open'), reviewing, note: reviewNote, onNote: setReviewNote, onWorks: () => { holdChatFocus(); void verifyThread('works'); }, onBroken: () => { holdChatFocus(); startReview(); }, onCancel: () => { holdChatFocus(); cancelReview(); }, onSend: () => { holdChatFocus(); void verifyThread('broken'); } } : null}
+        onRetry={() => void openThread(chat, true, null, true)} onFull={fullThread} onClose={() => closeChat()}/>}
     </div>;
   }
   render(<App/>, container);
@@ -1020,7 +1218,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     suspend: () => suspend(), settings: (value: boolean) => showSettings(value),
     destroy: () => {
       if (disposed) return;
-      disposed = true; panelActive = false; runtime.active(false);
+      disposed = true; panelActive = false; chatActive = false; runtime.active(false);
       cleanup(() => api.destroy());
       // Release effects even if a transport or Preact teardown step fails.
       for (const stop of cleanups) stop();

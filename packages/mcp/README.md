@@ -100,6 +100,10 @@ accepted as filters: `resolved` (done and closed), `acknowledged` and
 `updated_since` is an ISO 8601 timestamp with timezone. Environment is an
 environment name, not an arbitrary URL.
 
+Every issue has `turn`, whose move it is: `team`, `reporter`, `verify` (in review,
+the reporter checks the fix), or `null` once the issue is done, won't fix or
+closed. Older servers omit it.
+
 Results contain both JSON text and MCP `structuredContent`, preserving the REST
 envelopes: `{projects, next_cursor}`, `{issues, next_cursor}`, and
 `{issue, comments, next_comments_cursor}`. The server is the source of truth for

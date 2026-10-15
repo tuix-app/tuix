@@ -151,6 +151,7 @@ jobs:
       # Plugin Check is the tool the wordpress.org review runs.
       - name: Plugin Check
         run: bash scripts/wordpress-plugin-check.sh
+        timeout-minutes: 10
       - run: npm run build -w @tuix/widget
       - run: npm run build:wordpress
       - run: node_modules/.bin/playwright install --with-deps chromium

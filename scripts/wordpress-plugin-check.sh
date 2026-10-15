@@ -23,14 +23,16 @@ docker run -d --name "$db" --network "$net" -e MARIADB_ROOT_PASSWORD=root -e MAR
 env=(-e "WORDPRESS_DB_HOST=$db" -e WORDPRESS_DB_USER=wp -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp)
 docker run -d --name "$wp" --network "$net" -v "$vol:/var/www/html" \
   -v "$plugin:/var/www/html/wp-content/plugins/tuix-feedback:ro" "${env[@]}" "$image" > /dev/null
+# Each WP-CLI call gets a deadline (seconds, default 300), so a hung download or check fails
+# the run with its step named instead of using up the CI job's time.
 cli() {
-  docker run --rm --network "$net" --user 33:33 -e WP_CLI_CACHE_DIR=/tmp/wp-cli-cache \
+  timeout "${CLI_TIMEOUT:-300}" docker run --rm --network "$net" --user 33:33 -e WP_CLI_CACHE_DIR=/tmp/wp-cli-cache \
     -v "$vol:/var/www/html" -v "$plugin:/var/www/html/wp-content/plugins/tuix-feedback:ro" \
     "${env[@]}" "$cli_image" wp "$@"
 }
 ready=false
 for _ in $(seq 1 90); do
-  if docker exec "$wp" test -f /var/www/html/wp-includes/version.php 2> /dev/null && cli db check > /dev/null 2>&1; then
+  if docker exec "$wp" test -f /var/www/html/wp-includes/version.php 2> /dev/null && CLI_TIMEOUT=20 cli db check > /dev/null 2>&1; then
     ready=true
     break
   fi
@@ -42,10 +44,13 @@ if [ "$ready" != true ]; then
   exit 1
 fi
 echo "WordPress $(cli core version)"
+echo 'Installing WordPress…'
 cli core install --url=http://localhost --title=Check --admin_user=admin --admin_password=admin \
   --admin_email=admin@example.test --skip-email > /dev/null
+echo "Installing Plugin Check $plugin_check_version…"
 cli plugin install plugin-check --version="$plugin_check_version" --activate > /dev/null
 cli plugin activate tuix-feedback > /dev/null
+echo 'Checking tuix-feedback…'
 results=$(cli plugin check tuix-feedback --format=csv --fields=file,line,type,code,message --include-experimental 2>&1 || true)
 printf '%s\n' "$results"
 # Records look like: file,line,TYPE,code,"message".

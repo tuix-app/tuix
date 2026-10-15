@@ -58,6 +58,7 @@ jobs:
           done
       - name: Plugin Check
         run: bash scripts/wordpress-plugin-check.sh
+        timeout-minutes: 10
       - run: npm run build -w @tuix/widget
       - run: npx playwright install --with-deps chromium
       - name: Plugin in real WordPress

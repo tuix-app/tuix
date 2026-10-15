@@ -131,9 +131,20 @@ try {
   };
   await activate('alice');
   await page.evaluate(() => { window.previousWidget = document.querySelector('tuix-widget'); });
-  const switched = page.waitForResponse(response => response.url() === origin + '/' && response.request().method() === 'POST');
+  // The Server Action's body is read while it passes through: once the page has moved on,
+  // Chromium may already have dropped it ("No data found for resource").
+  let actionBody;
+  await page.route(origin + '/', async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const response = await route.fetch();
+    actionBody = await response.text();
+    await route.fulfill({ response });
+  });
   await page.click('#bob');
-  assert(!(await (await switched).text()).includes(secret), 'Secret leaked into a Server Action response');
+  await eventually(() => actionBody !== undefined);
+  await page.unroute(origin + '/');
+  assert(actionBody, 'The Server Action answered with an empty body');
+  assert(!actionBody.includes(secret), 'Secret leaked into a Server Action response');
   await page.waitForFunction(() => document.querySelector('tuix-widget') && document.querySelector('tuix-widget') !== window.previousWidget);
   await activate('bob');
   assert.equal(await page.evaluate(() => window.documentSentinel), true, 'Server Action navigation should retain the client document');

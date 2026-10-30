@@ -46,7 +46,7 @@ test("HTTP auth, filters, opaque cursors, and encoded IDs stay on the configured
     return Response.json(projects);
   } });
   await client.listProjects({ limit: 100, cursor: "a+/=?&" });
-  const filters = { project_id: "p1", status: "wont_fix", environment: "preview", type: "bug", severity: "major", route: "/a?b=1", updated_since: "2026-01-01T00:00:00Z", limit: 10, cursor: "next+/=" };
+  const filters = { project_id: "p1", status: "closed", environment: "preview", type: "bug", severity: "major", route: "/a?b=1", updated_since: "2026-01-01T00:00:00Z", limit: 10, cursor: "next+/=" };
   await client.listIssues(filters);
   await client.listIssues({ project_id: "p1" });
   await client.getIssue({ id: "../a?#/b", limit: 2, cursor: "comments+" });
@@ -122,7 +122,7 @@ test("SDK initialize, tools/list, tools/call expose only three read-only tools",
   const list = tools.find((tool) => tool.name === "list_issues");
   assert.deepEqual(list.inputSchema.required, ["project_id"]);
   // Only the new names are advertised; the legacy ones stay accepted below.
-  assert.deepEqual(list.inputSchema.properties.status.enum, ["open", "in_progress", "in_review", "done", "wont_fix", "closed"]);
+  assert.deepEqual(list.inputSchema.properties.status.enum, ["open", "in_progress", "in_review", "done", "closed"]);
   assert.equal(list.inputSchema.properties.status.type, "string");
   assert.equal(JSON.stringify(list.inputSchema).includes("acknowledged"), false);
   for (const [name, args, expected] of [

@@ -46,49 +46,40 @@ it('offers the reporter Done and Close, and records Done through the state route
   expect(root.querySelector('.thread-state .status')!.textContent).toBe('Done');
   expect(root.querySelector('.notice')!.textContent).toBe('Status changed to Done.');
   // A finished report offers exactly what the server allows (Close and Reopen) and no replies.
-  expect(actions(root)).toEqual(['Close', 'Reopen']);
+  expect(actions(root)).toEqual(['Reopen', 'Close']);
   expect(root.textContent).not.toContain('Add a reply');
   action(root, 'closed').click(); await vi.advanceTimersByTimeAsync(100);
   expect(stateCalls()).toEqual([{ state: 'done' }, { state: 'closed' }]);
   expect(root.querySelector('.thread-state .status')!.textContent).toBe('Closed');
 });
 
-it('offers the fixer Start, Ready for review and Won’t fix, which needs a note that survives a failure', async () => {
+it('offers the fixer Start, Ready for review and Close, which needs no note and retries after a failure', async () => {
   let fail = true;
-  const root = await open({ fixer: true, can_be_fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review', 'wont_fix'] }, (_path, body) => {
+  const root = await open({ fixer: true, can_be_fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review', 'closed'] }, (_path, body) => {
     if (fail) throw new Error('offline');
-    return { state: body.state, status: body.state, allowed_states: ['in_progress', 'in_review'] };
+    return { state: body.state, status: 'resolved', allowed_states: ['in_progress', 'in_review'] };
   });
   expect(root.querySelector('.fixer-line')!.textContent).toBe('Fixer: you');
   expect(root.querySelector('[data-action=assign]')).toBeNull();
-  expect(actions(root)).toEqual(['Start', 'Ready for review', 'Won’t fix']);
-  press(action(root, 'wont_fix')); await vi.advanceTimersByTimeAsync(50);
-  const form = root.querySelector<HTMLFormElement>('.state-note')!;
-  // The note form takes focus from the action button it replaces.
-  expect(root.activeElement).toBe(form.querySelector('textarea'));
-  expect(form.querySelector('label')!.textContent).toContain('Why won’t this be fixed?');
-  const submit = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
-  expect(submit.disabled).toBe(true);
-  const note = form.querySelector('textarea')!;
-  note.value = 'Works as designed.'; note.dispatchEvent(new Event('input', { bubbles: true })); await vi.advanceTimersByTimeAsync(50);
-  form.requestSubmit(); await vi.advanceTimersByTimeAsync(100);
-  expect(root.querySelector('[role=alert]')!.textContent).toContain('Could not change the status');
-  expect(root.querySelector<HTMLTextAreaElement>('.state-note textarea')!.value).toBe('Works as designed.');
-  fail = false;
-  root.querySelector<HTMLFormElement>('.state-note')!.requestSubmit(); await vi.advanceTimersByTimeAsync(100);
-  expect(stateCalls()).toEqual([{ state: 'wont_fix', note: 'Works as designed.' }, { state: 'wont_fix', note: 'Works as designed.' }]);
+  expect(actions(root)).toEqual(['Start', 'Ready for review', 'Close']);
+  press(action(root, 'closed')); await vi.advanceTimersByTimeAsync(100);
+  // Why it was closed goes in a reply: Close asks for no note.
   expect(root.querySelector('.state-note')).toBeNull();
-  expect(root.querySelector('.thread-state .status')!.textContent).toBe('Won’t fix');
+  expect(root.querySelector('[role=alert]')!.textContent).toContain('Could not change the status');
+  fail = false;
+  press(action(root, 'closed')); await vi.advanceTimersByTimeAsync(100);
+  expect(stateCalls()).toEqual([{ state: 'closed' }, { state: 'closed' }]);
+  expect(root.querySelector('.thread-state .status')!.textContent).toBe('Closed');
   // Focus lands on the new state rather than falling to the page.
   expect(root.activeElement).toBe(root.querySelector('.thread-state'));
 });
 
 it('lets a possible fixer take an unassigned report: Assign to me, or Start which assigns them first', async () => {
   const root = await open({ can_be_fixer: true }, (path, body) => path.endsWith('/assign')
-    ? { fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review', 'wont_fix'] }
+    ? { fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review', 'closed'] }
     : { state: body.state, status: 'acknowledged', fixer: true, assignee: { name: 'Me', me: true } });
   // Fixer actions show before the server lists them: Start assigns the caller first.
-  expect(actions(root)).toEqual(['Start', 'Ready for review', 'Won’t fix']);
+  expect(actions(root)).toEqual(['Start', 'Ready for review']);
   press(root.querySelector<HTMLButtonElement>('[data-action=assign]')!); await vi.advanceTimersByTimeAsync(100);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue/assign', 'POST', {});
   expect(root.querySelector('.fixer-line')!.textContent).toBe('Fixer: you');
@@ -103,7 +94,7 @@ it('lets a possible fixer take an unassigned report: Assign to me, or Start whic
 
 it('hides fixer statuses and Mark fixed from an assignee whose session cannot take fixer actions', async () => {
   mock.environment = 'local';
-  const root = await open({ fixer: true, can_be_fixer: false, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review', 'wont_fix'] });
+  const root = await open({ fixer: true, can_be_fixer: false, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review'] });
   expect(root.querySelector('.fixer-line')!.textContent).toBe('Fixer: you');
   expect(actions(root)).toEqual([]);
   expect(root.querySelector('.thread-actions, [data-action=assign], .fix-tools')).toBeNull();
@@ -117,10 +108,14 @@ it('shows Assign to me on someone else’s report without borrowing their fixer 
 });
 
 it('asks for a note before Still broken when someone other than the reporter reopens a report in review', async () => {
+  let fail = true;
   // A project admin: a linked member, so allowed to take fixer actions.
-  const root = await open({ state: 'in_review', status: 'awaiting_verification', can_be_fixer: true, assignee: { name: 'Bo', me: false }, allowed_states: ['open', 'done', 'closed', 'in_progress', 'wont_fix'] }, (_path, body) => ({ state: body.state }));
+  const root = await open({ state: 'in_review', status: 'awaiting_verification', can_be_fixer: true, assignee: { name: 'Bo', me: false }, allowed_states: ['open', 'done', 'closed', 'in_progress'] }, (_path, body) => {
+    if (fail) throw new Error('offline');
+    return { state: body.state };
+  });
   expect(root.querySelector('.verify-tools')).toBeNull();
-  expect(actions(root)).toEqual(['Done', 'Close', 'Still broken', 'Start', 'Won’t fix']);
+  expect(actions(root)).toEqual(['Done', 'Still broken', 'Start', 'Close']);
   press(action(root, 'open')); await vi.advanceTimersByTimeAsync(50);
   expect(root.activeElement).toBe(root.querySelector('.state-note textarea'));
   // Cancel removes the form; focus returns to the thread state above the actions.
@@ -131,21 +126,29 @@ it('asks for a note before Still broken when someone other than the reporter reo
   action(root, 'open').click(); await vi.advanceTimersByTimeAsync(50);
   const note = root.querySelector<HTMLTextAreaElement>('.state-note textarea')!;
   note.value = 'Still overflows.'; note.dispatchEvent(new Event('input', { bubbles: true })); await vi.advanceTimersByTimeAsync(50);
+  const submit = root.querySelector<HTMLButtonElement>('.state-note button[type=submit]')!;
+  expect(submit.textContent).toBe('Still broken');
+  // A failed change keeps the note for another try.
   root.querySelector<HTMLFormElement>('.state-note')!.requestSubmit(); await vi.advanceTimersByTimeAsync(100);
-  expect(stateCalls()).toEqual([{ state: 'open', note: 'Still overflows.' }]);
+  expect(root.querySelector('[role=alert]')!.textContent).toContain('Could not change the status');
+  expect(root.querySelector<HTMLTextAreaElement>('.state-note textarea')!.value).toBe('Still overflows.');
+  fail = false;
+  root.querySelector<HTMLFormElement>('.state-note')!.requestSubmit(); await vi.advanceTimersByTimeAsync(100);
+  expect(stateCalls()).toEqual([{ state: 'open', note: 'Still overflows.' }, { state: 'open', note: 'Still overflows.' }]);
+  expect(root.querySelector('.state-note')).toBeNull();
 });
 
 it('offers only the allowed states on a finished report and reads legacy statuses in the new vocabulary', async () => {
   const root = await open({ state: null, status: 'resolved', reporter: true, can_be_fixer: true, allowed_states: ['open', 'closed'] });
   expect(root.querySelector('.thread-state .status')!.textContent).toBe('Done');
   // The reporter may still close it; no assignment, fixer actions or Mark fixed on a finished report.
-  expect(actions(root)).toEqual(['Close', 'Reopen']);
+  expect(actions(root)).toEqual(['Reopen', 'Close']);
   expect(root.querySelector('[data-action=assign], .fix-tools')).toBeNull();
   expect(root.textContent).not.toContain('Add a reply');
 });
 
 it('offers a fixer the matrix states on a finished report when the server allows them', async () => {
-  const root = await open({ state: 'wont_fix', status: 'wont_fix', fixer: true, can_be_fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review'] });
+  const root = await open({ state: 'closed', status: 'resolved', fixer: true, can_be_fixer: true, assignee: { name: 'Me', me: true }, allowed_states: ['in_progress', 'in_review'] });
   expect(actions(root)).toEqual(['Start', 'Ready for review']);
   expect(root.querySelector('[data-action=assign]')).toBeNull();
 });
@@ -171,7 +174,7 @@ it('colours pins by state: peach open, gold in progress, an aqua ring in review'
 
 it('offers the reporter Reopen on a finished report, without a note', async () => {
   const root = await open({ reporter: true, state: 'done', status: 'resolved', allowed_states: ['open', 'closed'] }, (_path, body) => ({ state: body.state, status: body.state, allowed_states: ['done', 'closed'] }));
-  expect(actions(root)).toEqual(['Close', 'Reopen']);
+  expect(actions(root)).toEqual(['Reopen', 'Close']);
   action(root, 'open').click(); await vi.advanceTimersByTimeAsync(100);
   expect(root.querySelector('.thread-actions textarea')).toBeNull();
   expect(stateCalls()).toEqual([{ state: 'open' }]);

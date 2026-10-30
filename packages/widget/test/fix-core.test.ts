@@ -49,7 +49,7 @@ it('records a local peer fix with its note and host commit, preserving the note 
   form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   await vi.advanceTimersByTimeAsync(100);
   await vi.advanceTimersByTimeAsync(60000);
-  finishFix({ ...issue, status: 'fixed_awaiting_deploy', state: 'in_progress', fix_pending: true, fixer: true, assignee: { name: 'Developer', me: true }, allowed_states: ['in_review', 'wont_fix'] });
+  finishFix({ ...issue, status: 'fixed_awaiting_deploy', state: 'in_progress', fix_pending: true, fixer: true, assignee: { name: 'Developer', me: true }, allowed_states: ['in_review', 'closed'] });
   await vi.advanceTimersByTimeAsync(100);
   finishPoll(issue);
   await vi.advanceTimersByTimeAsync(100);

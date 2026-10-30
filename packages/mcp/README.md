@@ -21,7 +21,7 @@ where a project admin allows it, its `get_issue` also returns the issue's
 connected app can see who an issue can be assigned to and change its status
 and assignee (`list_people`, `set_issue_status`, `assign_issue`). Every issue
 carries `app_url` and `reference` for linking it from a pull request. The same
-server-side redaction applies. Admins see connected apps under Project settings → AI access and can
+server-side redaction applies. Admins see connected apps under Project settings → AI and can
 disconnect them, which ends access immediately. The endpoint must be reachable over public HTTPS at
 the server's configured URL for hosted apps such as claude.ai.
 
@@ -62,8 +62,8 @@ slash, without credentials, path, query, or fragment. HTTP is allowed only for
 
 An operator must mint a dedicated server-side read integration credential
 (`tuix_read_` followed by 43 base64url characters). It is not a widget key,
-browser session, or general API key. In Tuix, open **Project settings → Read-only
-AI access → Create read-only token**, then choose a 7-, 30-, or 90-day lifetime.
+browser session, or general API key. In Tuix, open **Project settings → AI →
+Command-line and local clients → Create read-only token**, then choose a 7-, 30-, or 90-day lifetime.
 This UI issues a project-scoped credential. Do not put it in source control,
 prompts, issue reports, or logs. Store it using the AI client's local secret
 mechanism where available. Project and environment authorization is always
@@ -92,17 +92,17 @@ preserving filters. For complete comments, follow `next_comments_cursor` using
 `get_issue` with the same issue ID. The adapter never silently truncates or
 pretends that one page is the full collection.
 
-Omitted status includes **all six** statuses: `open`, `in_progress`, `in_review`,
-`done`, `wont_fix`, `closed`. Results use these names. The previous names are still
+Omitted status includes **all five** statuses: `open`, `in_progress`, `in_review`,
+`done`, `closed`. Results use these names. The previous names are still
 accepted as filters: `resolved` (done and closed), `acknowledged` and
-`fixed_awaiting_deploy` (in progress), `awaiting_verification` (in review). Type is `bug`, `ux`,
+`fixed_awaiting_deploy` (in progress), `awaiting_verification` (in review),
+`wont_fix` (closed; Won't fix was merged into Closed). Type is `bug`, `ux`,
 `question`, or `idea`; severity is `blocking`, `major`, or `minor`.
 `updated_since` is an ISO 8601 timestamp with timezone. Environment is an
 environment name, not an arbitrary URL.
 
 Every issue has `turn`, whose move it is: `team`, `reporter`, `verify` (in review,
-the reporter checks the fix), or `null` once the issue is done, won't fix or
-closed. Older servers omit it.
+the reporter checks the fix), or `null` once the issue is done or closed. Older servers omit it.
 
 Results contain both JSON text and MCP `structuredContent`, preserving the REST
 envelopes: `{projects, next_cursor}`, `{issues, next_cursor}`, and

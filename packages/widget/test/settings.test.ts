@@ -1,29 +1,31 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { mountSettings } from '../src/settings';
-import { readPreferences, savePreferences } from '../src/preferences';
+import { readPreferences, savePreferences, showQuery, cleanFilter } from '../src/preferences';
 import pkg from '../package.json';
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); localStorage.clear(); document.body.replaceChildren(); vi.useRealTimers(); vi.restoreAllMocks(); });
 it('validates per-project settings and retains blocked-storage choices for the session', () => {
   localStorage.setItem('tuix:preferences:bad', '{"scope":"bogus","show":"closed","environment":"secret","hideClosed":"no"}');
-  expect(readPreferences('bad')).toEqual({ scope: 'page', show: 'open', involving: 'everyone', environment: '', hideClosed: true });
+  expect(readPreferences('bad')).toEqual({ scope: 'page', show: 'unresolved', involving: 'everyone', environment: '' });
   localStorage.setItem('tuix:preferences:broken', '{');
-  expect(readPreferences('broken').show).toBe('open');
+  expect(readPreferences('broken').show).toBe('unresolved');
+  localStorage.setItem('tuix:preferences:wrong-shape', JSON.stringify({ show: ['open'] }));
+  expect(readPreferences('wrong-shape').show).toBe('unresolved');
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw Error('blocked'); });
-  savePreferences('blocked', { show: 'all', scope: 'all', hideClosed: false });
-  expect(readPreferences('blocked')).toEqual({ scope: 'all', show: 'all', involving: 'everyone', environment: '', hideClosed: false });
-  expect(readPreferences('other').show).toBe('open');
+  savePreferences('blocked', { show: 'all', scope: 'all' });
+  expect(readPreferences('blocked')).toEqual({ scope: 'all', show: 'all', involving: 'everyone', environment: '' });
+  expect(readPreferences('other').show).toBe('unresolved');
 });
 it('migrates Reported by: Me to Involving: Me and keeps the stored Open name for active work', () => {
   localStorage.setItem('tuix:preferences:old', '{"scope":"all","show":"open","author":"mine"}');
-  expect(readPreferences('old')).toEqual({ scope: 'all', show: 'open', involving: 'me', environment: '', hideClosed: true });
+  expect(readPreferences('old')).toEqual({ scope: 'all', show: 'open', involving: 'me', environment: '' });
   savePreferences('old', { show: 'verify' });
-  expect(JSON.parse(localStorage.getItem('tuix:preferences:old')!)).toEqual({ scope: 'all', show: 'verify', involving: 'me', environment: '', hideClosed: true });
+  expect(JSON.parse(localStorage.getItem('tuix:preferences:old')!)).toEqual({ scope: 'all', show: 'verify', involving: 'me', environment: '', version: 2 });
   // An explicit Involving choice wins over the legacy field.
   localStorage.setItem('tuix:preferences:both', '{"author":"mine","involving":"everyone"}');
   expect(readPreferences('both').involving).toBe('everyone');
   localStorage.setItem('tuix:preferences:everyone', '{"author":"all"}');
-  expect(readPreferences('everyone')).toMatchObject({ show: 'open', involving: 'everyone' });
+  expect(readPreferences('everyone')).toMatchObject({ show: 'unresolved', involving: 'everyone' });
 });
 it('reveals the reports and settings dots on hover, opens settings only on click and browses only explicitly', async () => {
   vi.useFakeTimers();
@@ -43,8 +45,8 @@ it('reveals the reports and settings dots on hover, opens settings only on click
   launcher.dispatchEvent(new MouseEvent('mouseleave')); toggle.dispatchEvent(new MouseEvent('mouseenter'));
   await vi.advanceTimersByTimeAsync(500); expect(toggle.classList.contains('revealed')).toBe(true);
   toggle.click(); expect(panel.hidden).toBe(false); expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  // Pages, Markers, Keep visible and Environment stay; Show and Reported by moved to the reports panel.
-  expect([...panel.querySelectorAll('legend')].map(legend => legend.textContent)).toEqual(['Pages', 'Markers']);
+  // Report filters stay with the list; marker preferences form a named group.
+  expect([...panel.querySelectorAll('legend')].map(legend => legend.textContent)).toEqual(['Appearance']);
   expect(panel.querySelector('[data-setting=show],[data-setting=author]')).toBeNull();
   // Markers offer Dots, Outlines and Fills, and the choice reaches the shared preference.
   expect([...panel.querySelectorAll('[data-setting=markers]')].map(item => [item.getAttribute('data-value'), item.textContent])).toEqual([['dot', 'Dots'], ['border', 'Outlines'], ['fill', 'Fills']]);
@@ -55,8 +57,7 @@ it('reveals the reports and settings dots on hover, opens settings only on click
   expect(panel.lastElementChild!.previousElementSibling).toBe(settings.slot);
   // The version line must follow the published package version, not a stale constant.
   expect(panel.lastElementChild!.textContent).toBe(`tuix ${pkg.version}`);
-  root.querySelector<HTMLButtonElement>('[data-setting=scope][data-value=all]')!.click();
-  expect(readPreferences('hover').scope).toBe('all'); expect(reports).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  expect(panel.querySelector('[data-setting=scope]')).toBeNull(); expect(reports).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
   browse.click();
   expect(reports).toHaveBeenCalledOnce(); expect(panel.hidden).toBe(true);
   toggle.dispatchEvent(new MouseEvent('mouseleave'));
@@ -70,10 +71,10 @@ it('synchronizes open controls and stays dismissed after Escape returns focus', 
   const root = host.attachShadow({ mode: 'open' }), launcher = document.createElement('button'); root.append(launcher);
   const settings = mountSettings(root, launcher, { project: 'sync' }, vi.fn(), vi.fn()); cleanup = settings.destroy;
   settings.open();
-  const all = root.querySelector<HTMLButtonElement>('[data-setting=scope][data-value=all]')!;
-  savePreferences('sync', { scope: 'all' });
-  expect(all.getAttribute('aria-pressed')).toBe('true');
-  expect(root.querySelector('[data-setting=scope][data-value=all]')).toBe(all);
+  const all = root.querySelector<HTMLSelectElement>('[data-setting=environment]')!;
+  savePreferences('sync', { environment: 'all' });
+  expect(all.value).toBe('all');
+  expect(root.querySelector('[data-setting=environment]')).toBe(all);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await vi.advanceTimersByTimeAsync(500);
   expect(root.querySelector<HTMLElement>('.settings-flyout')!.hidden).toBe(true);
@@ -190,26 +191,40 @@ it('draws no capsule or flyout for hosts without a launcher', () => {
   expect(root.querySelector('.tuix-summary, .settings-flyout')).toBeNull();
 });
 
-it('offers Hide closed after Pages, on by default, and remembers turning it off in this browser', () => {
-  const first = mounted('closed');
+it('groups marker appearance and explicit visibility, defaulting to dots while the panel is open', () => {
+  const first = mounted('visibility');
   first.settings.open();
-  const hide = first.root.querySelector<HTMLInputElement>('.settings-flyout [data-setting=hide-closed]')!;
-  expect([hide.checked, hide.type, hide.getAttribute('role'), hide.closest('label')!.textContent]).toEqual([true, 'checkbox', 'switch', 'Hide closed']);
-  expect(hide.closest('label')!.previousElementSibling!.querySelector('legend')!.textContent).toBe('Pages');
-  hide.click();
-  expect(readPreferences('closed').hideClosed).toBe(false);
-  expect(JSON.parse(localStorage.getItem('tuix:preferences:closed')!)).toMatchObject({ hideClosed: false });
-  first.settings.destroy();
-  const again = mounted('closed');
-  again.settings.open();
-  const off = again.root.querySelector<HTMLInputElement>('[data-setting=hide-closed]')!;
-  expect(off.checked).toBe(false);
-  // A choice saved elsewhere updates the open switch in place.
-  savePreferences('closed', { hideClosed: true });
-  expect(again.root.querySelector('[data-setting=hide-closed]')).toBe(off);
-  expect(off.checked).toBe(true);
+  const group = first.root.querySelector('[aria-labelledby="tuix-page-markers-title"]')!;
+  expect(group.textContent).toContain('unresolved reports');
+  expect(first.root.querySelector('[data-setting=hide-closed], [data-setting=scope]')).toBeNull();
+  expect(group.querySelector('[data-value=dot]')!.getAttribute('aria-pressed')).toBe('true');
+  const pin = group.querySelector<HTMLInputElement>('[data-setting=pinned]')!;
+  expect(pin.checked).toBe(false);
+  expect(pin.closest('label')!.textContent).toBe('Show markers when the feedback panel is closed');
+  expect(first.root.getElementById(pin.getAttribute('aria-describedby')!)!.textContent).toContain('after you close the feedback panel');
+  pin.click(); first.settings.destroy();
+  const again = mounted('visibility'); again.settings.open();
+  expect(again.root.querySelector<HTMLInputElement>('[data-setting=pinned]')!.checked).toBe(true);
+});
+
+it('migrates legacy All without changing visible reports, then saves explicit All', () => {
+  for (const [project, hideClosed, expected] of [['legacy-on', true, 'unresolved'], ['legacy-off', false, 'all'], ['legacy-default', undefined, 'unresolved']] as const) {
+    localStorage.setItem('tuix:preferences:' + project, JSON.stringify({ show: 'all', hideClosed }));
+    expect(readPreferences(project).show).toBe(expected);
+    savePreferences(project, { show: 'all' });
+    expect(readPreferences(project).show).toBe('all');
+    expect(JSON.parse(localStorage.getItem('tuix:preferences:' + project)!)).not.toHaveProperty('hideClosed');
+  }
+  expect(readPreferences('fresh')).toEqual({ scope: 'page', show: 'unresolved', involving: 'everyone', environment: '' });
+  expect(['unresolved', 'open', 'verify', 'finished', 'all'].map(show => showQuery(show as Parameters<typeof showQuery>[0]))).toEqual(['unresolved', 'active', 'verify', 'finished', 'all']);
+  expect(cleanFilter({ show: 'finished', scope: 'all', involving: 'me', secret: true })).toEqual({ show: 'finished', scope: 'all', involving: 'me' });
+});
+
+it('localizes group context and hides developer options outside local development', () => {
   const host = document.createElement('div'); document.body.append(host);
-  const root = host.attachShadow({ mode: 'open' }), polish = mountSettings(root, document.createElement('button'), { project: 'closed', lang: 'pl' }, vi.fn(), vi.fn());
-  expect(root.querySelector('[data-setting=hide-closed]')!.closest('label')!.textContent).toBe('Ukryj zamknięte');
-  polish.destroy();
+  const root = host.attachShadow({ mode: 'open' });
+  const settings = mountSettings(root, document.createElement('button'), { project: 'pl', lang: 'pl', environment: 'production' }, vi.fn(), vi.fn()); cleanup = settings.destroy;
+  expect(root.querySelector('#tuix-page-markers-title')!.textContent).toBe('Znaczniki na stronie');
+  expect(root.querySelector('[data-setting=pinned]')!.closest('label')!.textContent).toContain('panelu uwag');
+  expect(root.querySelector('#tuix-developer-options-title')).toBeNull();
 });

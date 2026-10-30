@@ -4,7 +4,7 @@ const mock = vi.hoisted(() => ({ request: vi.fn(), panel: vi.fn() }));
 vi.mock('../src/api', () => ({ Api: class { environment = 'uat'; request = mock.request; destroy() {} } }));
 import { mount } from '../src/core';
 import { mountSettings } from '../src/settings';
-import { preferenceEvent, readPreferences } from '../src/preferences';
+import { preferenceEvent, readPreferences, savePreferences } from '../src/preferences';
 import type { Core } from '../src/types';
 let core: Core | undefined;
 let settings: ReturnType<typeof mountSettings> | undefined;
@@ -209,7 +209,7 @@ it('opens a thread from a dot while comment mode is selecting', async () => {
 });
 
 const done = { ...issue, id: '00000000-0000-4000-8000-000000000008', number: 8, title: 'Fixed already', body: 'Fixed already', status: 'resolved', state: 'done' };
-/** The server filters by `show` (Tuix.Widget.Issues): All is every state, unresolved leaves out Done, Won't fix and Closed. */
+/** The server filters by `show` (Tuix.Widget.Issues): All is every state, unresolved leaves out Done and Closed. */
 function closedFixture() {
   const root = fixture();
   mock.request.mockImplementation(async (path: string) => {
@@ -221,7 +221,7 @@ function closedFixture() {
   return root;
 }
 
-it('keeps closed reports out of the lists until Hide closed is turned off, and never pins them', async () => {
+it('migrates legacy filtering and only lists finished reports under All, never as markers', async () => {
   localStorage.setItem('tuix:preferences:fixture', JSON.stringify({ show: 'all' }));
   const root = closedFixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
@@ -230,26 +230,25 @@ it('keeps closed reports out of the lists until Hide closed is turned off, and n
   expect(listed()).toEqual(['Save is hidden']);
   expect(new Set(shows())).toEqual(new Set(['unresolved']));
   expect(root.querySelectorAll('.pin')).toHaveLength(1);
-  const hide = root.querySelector<HTMLInputElement>('.settings-flyout [data-setting=hide-closed]')!;
-  expect(hide.checked).toBe(true);
-  // Turning it off shows them at once; markers still show only unresolved reports.
-  mock.request.mockClear(); hide.click(); await vi.advanceTimersByTimeAsync(100);
+  const status = root.querySelector<HTMLSelectElement>('[data-filter=show] select')!;
+  expect(status.value).toBe('unresolved');
+  mock.request.mockClear(); status.value = 'all'; status.dispatchEvent(new Event('change', { bubbles: true })); await vi.advanceTimersByTimeAsync(100);
   expect(listed()).toEqual(['Save is hidden', 'Fixed already']);
   expect(shows()).toEqual(['all']);
   expect(root.querySelectorAll('.pin')).toHaveLength(1);
-  // An open thread of a closed report stays open when Hide closed comes back on; the list then leaves it out again.
+  // Changing a stored list preference never closes an open thread.
   root.querySelectorAll<HTMLButtonElement>('.issue-item')[1].click(); await vi.advanceTimersByTimeAsync(200);
-  hide.click(); await vi.advanceTimersByTimeAsync(100);
-  expect(readPreferences('fixture').hideClosed).toBe(true);
+  savePreferences('fixture', { show: 'unresolved' }); await vi.advanceTimersByTimeAsync(100);
+  expect(readPreferences('fixture').show).toBe('unresolved');
   expect(root.querySelector('.thread-body')?.textContent).toBe('Fixed already');
   root.querySelector<HTMLButtonElement>('.panel .content > button')!.click(); await vi.advanceTimersByTimeAsync(200);
   expect(listed()).toEqual(['Save is hidden']);
 });
 
-it('opens a report link to a closed report while Hide closed is on', async () => {
+it('opens a report link to a closed report while the list defaults to Unresolved', async () => {
   history.replaceState({}, '', '/?tuix=' + done.id);
   const root = closedFixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
-  expect(readPreferences('fixture').hideClosed).toBe(true);
+  expect(readPreferences('fixture').show).toBe('unresolved');
   expect(root.querySelector('.thread-body')?.textContent).toBe('Fixed already');
 });

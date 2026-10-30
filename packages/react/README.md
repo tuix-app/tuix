@@ -56,7 +56,7 @@ The adapter cannot infer changes in a host session it has not been told about.
 The SDK handles its browser runtime and lazy chunks through the host bundler. Allow
 those chunks, Tuix HTTP/WebSocket endpoints and configured storage in the host's CSP.
 Pass the current document nonce via `config.nonce` when styles require one. Tuix →
-Project settings → Install tuix → Content Security Policy lists the exact sources,
+Project settings → Installation → Content Security Policy lists the exact sources,
 including the screenshot style hash and the storage origin for uploads.
 
 ## Install

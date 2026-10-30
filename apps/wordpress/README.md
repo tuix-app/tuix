@@ -6,7 +6,7 @@ install it from the wordpress.org plugin directory, through Plugins → Add New 
 `python3 scripts/package-wordpress.py <target.zip>` packages it as a reproducible zip.
 Tuix servers also serve that zip at `/downloads/tuix-feedback.zip` (the earlier
 `/downloads/tuix-wordpress.zip` redirects there), for sites that cannot reach
-wordpress.org; Project settings → Install tuix → WordPress plugin gives both ways with
+wordpress.org; Project settings → Installation → WordPress plugin gives both ways with
 setup steps. Customer-facing documentation is `tuix-feedback/readme.txt`, in the
 wordpress.org readme format.
 
@@ -63,7 +63,7 @@ Check run on (`WORDPRESS_IMAGE` in both scripts); raise them together.
 
 ## Installing on a site
 
-Customer instructions live in two places kept in step: Project settings → Install tuix →
+Customer instructions live in two places kept in step: Project settings → Installation →
 WordPress plugin (with the project's values and a wp-config.php snippet filled in) and the
 Installation and Troubleshooting sections of `tuix-feedback/readme.txt`.
 

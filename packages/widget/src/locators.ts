@@ -12,31 +12,45 @@ export interface LocatorBundle {
 export interface Resolution { element: Element | null; method: string; orphaned: boolean }
 const generated = /^(?:css-|sc-|_[a-z\d]{5})|(?:[a-z]+\d+[a-z\d]*|\d+[a-z]+[a-z\d]*){1,}/i;
 const safeTag = /^[a-z][a-z\d-]*$/i;
+const roles: Record<string, string> = { button: 'button', select: 'combobox', textarea: 'textbox', img: 'img', h1: 'heading', h2: 'heading', h3: 'heading' };
 const quote = (value: string) => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\n\r\f]/g, ' ') + '"';
 export const masked = (element: Element) => !!element.closest('[data-tuix-mask],input,textarea,select,[contenteditable]');
 export const ignored = (element: Element) => !!element.closest('[data-tuix-ignore],tuix-widget');
+type ResolutionCache = [candidates: Map<Document, Element[]>, names: Map<Element, string>];
+const publicText: NodeFilter = {
+  acceptNode: node => node.nodeType === 3 ? 1
+    : (node as Element).matches('[data-tuix-mask],input,textarea,select,[contenteditable],script,style,tuix-widget') ? 2 : 3,
+};
+
+/** One page snapshot per marker refresh; never retain names across DOM updates. */
+export function createResolver(local?: boolean) {
+  const cache: ResolutionCache = [new Map(), new Map()];
+  return (bundle: LocatorBundle) => resolve(bundle, document, local, cache);
+}
 
 function textOf(element: Element): string {
   if (masked(element)) return '';
-  // A parent may include masked descendants. Clone first so their text never enters locators.
-  const copy = element.cloneNode(true) as Element;
-  copy.querySelectorAll('[data-tuix-mask],input,textarea,select,[contenteditable],script,style').forEach(node => node.remove());
-  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  // Read only the short public prefix. Cloning entire subtrees for every
+  // candidate on every page mutation blocks input on large host applications.
+  const walker = element.ownerDocument.createTreeWalker(element, 5, publicText);
+  let text = '', node: Node | null;
+  while (text.length < 81 && (node = walker.nextNode())) text = (text + node.textContent).replace(/\s+/g, ' ').trimStart();
+  return text.trim().slice(0, 80);
 }
 function roleOf(element: Element): string {
-  const explicit = element.getAttribute('role');
-  if (explicit) return explicit;
   const tag = element.tagName.toLowerCase();
-  if (tag === 'a' && element.hasAttribute('href')) return 'link';
-  return ({ button: 'button', select: 'combobox', textarea: 'textbox', img: 'img', h1: 'heading', h2: 'heading', h3: 'heading' } as Record<string,string>)[tag] ?? '';
+  return element.getAttribute('role') || (tag === 'a' && element.hasAttribute('href') ? 'link' : roles[tag] ?? '');
 }
-function nameOf(element: Element): string {
+function nameOf(element: Element, cache?: ResolutionCache): string {
+  const known = cache?.[1].get(element);
+  if (known !== undefined) return known;
   if (masked(element)) return '';
   const label = element.getAttribute('aria-labelledby');
-  if (label) {
-    return label.split(/\s+/).map(id => element.ownerDocument.getElementById(id)).filter((node): node is HTMLElement => !!node).map(textOf).join(' ').slice(0, 80);
-  }
-  return (element.getAttribute('aria-label') ?? element.getAttribute('alt') ?? textOf(element)).trim().slice(0, 80);
+  const name = label
+    ? label.split(/\s+/).map(id => element.ownerDocument.getElementById(id)).filter((node): node is HTMLElement => !!node).map(textOf).join(' ').slice(0, 80)
+    : (element.getAttribute('aria-label') ?? element.getAttribute('alt') ?? textOf(element)).trim().slice(0, 80);
+  cache?.[1].set(element, name);
+  return name;
 }
 function stable(element: Element): string | undefined {
   if (masked(element)) return;
@@ -100,10 +114,15 @@ function query(root: Document, selector: string): Element[] {
   if (typeof selector !== 'string' || !selector || selector.length > 2048) return [];
   try { return Array.from(root.querySelectorAll(selector)).filter(node => !ignored(node)); } catch { return []; }
 }
-function resolveHere(bundle: LocatorBundle, root: Document, local: boolean): Resolution {
+function resolveHere(bundle: LocatorBundle, root: Document, local: boolean, cache?: ResolutionCache): Resolution {
   const candidates: [string, () => Element[], boolean][] = [
     ['testid', () => bundle.testid ? query(root, bundle.testid) : [], false],
-    ['aria', () => bundle.aria ? query(root, 'button,a,input,select,textarea,img,h1,h2,h3,[role]').filter(el => roleOf(el) === bundle.aria!.role && nameOf(el) === bundle.aria!.name) : [], false],
+    ['aria', () => {
+      if (!bundle.aria) return [];
+      const elements = cache?.[0].get(root) ?? query(root, 'button,a,input,select,textarea,img,h1,h2,h3,[role]');
+      cache?.[0].set(root, elements);
+      return elements.filter(el => roleOf(el) === bundle.aria!.role && nameOf(el, cache) === bundle.aria!.name);
+    }, false],
     ['text', () => bundle.text && safeTag.test(bundle.text.tag) ? query(root, bundle.text.tag).filter(el => textOf(el) === bundle.text!.text) : [], true],
     ['css', () => query(root, bundle.css), true]
   ];
@@ -127,20 +146,20 @@ function resolveHere(bundle: LocatorBundle, root: Document, local: boolean): Res
   }
   return { element: null, method: 'geometry', orphaned: true };
 }
-export function resolve(bundle: LocatorBundle, root: Document = document, local = false): Resolution {
+export function resolve(bundle: LocatorBundle, root: Document = document, local = false, cache?: ResolutionCache): Resolution {
   const orphan = { element: null, method: 'geometry', orphaned: true };
   if (!bundle || typeof bundle !== 'object' || (bundle.frames != null && !Array.isArray(bundle.frames))) return orphan;
   let scope = root;
   for (const frame of (bundle.frames ?? []).slice(0, 10)) {
     if (!frame || typeof frame !== 'object') return orphan;
-    const match = resolveHere(frame, scope, local).element;
+    const match = resolveHere(frame, scope, local, cache).element;
     try {
       const doc = match?.tagName === 'IFRAME' ? (match as HTMLIFrameElement).contentDocument : null;
       if (!doc) return { element: null, method: 'geometry', orphaned: true };
       scope = doc;
     } catch { return { element: null, method: 'geometry', orphaned: true }; }
   }
-  return resolveHere(bundle, scope, local);
+  return resolveHere(bundle, scope, local, cache);
 }
 export function routeKey(input: string, keepQuery: string[] = []): string {
   const url = new URL(input, 'https://tuix.invalid');

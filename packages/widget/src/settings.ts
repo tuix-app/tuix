@@ -36,6 +36,13 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
     .tuix-settings input[role=switch]:after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--tx-muted);transition:left .2s}
     .tuix-settings input[role=switch]:checked{background:var(--tx-aqua);border-color:var(--tx-aqua)}
     .tuix-settings input[role=switch]:checked:after{left:16px;background:var(--tx-on-aqua)}
+    .tuix-settings-section{margin:0 0 20px}
+    .tuix-settings-section + .tuix-settings-section{border-top:1px solid var(--tx-line-soft);padding-top:20px}
+    .tuix-settings-section h3{font-size:14px;line-height:1.4;margin:0 0 6px;color:var(--tx-ink)}
+    .tuix-settings .tuix-setting-help{font-size:12.5px;line-height:1.5;color:var(--tx-muted);margin:0 0 16px}
+    .tuix-settings .tuix-marker-toggle{display:flex;align-items:flex-start;gap:8px;margin:0 0 6px;font-weight:600}
+    .tuix-settings .tuix-marker-toggle input{flex-shrink:0;margin:2px 0 0}
+    .tuix-settings-section>:last-child{margin-bottom:0}
     .tuix-settings .widget-version{margin:12px 0 0;font:11.5px/1.4 var(--tx-font);color:var(--tx-muted)}
   `;
   browse.id = 'tuix-reports-toggle'; browse.className = 'tuix-menu-dot tuix-reports-button'; browse.type = 'button'; browse.dataset.action = 'reports';
@@ -86,26 +93,35 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
   function draw() {
     panel.replaceChildren();
     const p = readPreferences(config.project), m = readMarkers(config.project);
-    function segments(label: string, values: [string, string][], value: string, change: (value: string) => void, setting: string) {
+    function segments(parent: HTMLElement, label: string, values: [string, string][], value: string, change: (value: string) => void, setting: string) {
       const group = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = label; group.append(legend);
       for (const [key, text] of values) { const item = document.createElement('button'); item.dataset.setting = setting; item.dataset.value = key; item.textContent = text; item.setAttribute('aria-pressed', String(key === value)); item.onclick = () => { change(key); for (const peer of group.querySelectorAll('button')) peer.setAttribute('aria-pressed', String(peer === item)); }; group.append(item); }
-      panel.append(group);
+      parent.append(group);
     }
-    function toggle(text: string, setting: string, checked: boolean, change: (value: boolean) => void) {
+    function toggle(parent: HTMLElement, text: string, setting: string, checked: boolean, change: (value: boolean) => void) {
       const label = document.createElement('label'), input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('role', 'switch'); input.checked = checked;
       input.dataset.setting = setting; input.onchange = () => change(input.checked);
-      label.append(input, document.createTextNode(text)); panel.append(label);
+      input.id = 'tuix-marker-visibility'; input.setAttribute('aria-describedby', 'tuix-marker-visibility-help');
+      const textNode = document.createElement('span'); textNode.textContent = text;
+      label.className = 'tuix-marker-toggle'; label.append(input, textNode); parent.append(label);
+      const help = document.createElement('p'); help.id = 'tuix-marker-visibility-help'; help.className = 'tuix-setting-help'; help.textContent = t.markerVisibilityHelp; parent.append(help);
     }
-    // Show and Involving live in the reports panel; the flyout keeps page-level choices.
-    segments(t.pages, [['page', t.thisPage], ['all', t.statusAll]], p.scope, value => savePreferences(config.project, { scope: value as 'page' | 'all' }), 'scope');
-    // As on the dashboard: Done, Won't fix and Closed reports stay out of the report lists (markers never show them).
-    toggle(t.hideClosed, 'hide-closed', p.hideClosed, value => savePreferences(config.project, { hideClosed: value }));
-    segments(t.markers, [['dot', t.markerDots], ['border', t.markerOutlines], ['fill', t.markerFills]], m.style, value => { saveMarkers(config.project, { ...readMarkers(config.project), style: value as MarkerStyle }); changed(); }, 'markers');
-    toggle(t.keepMarkers, 'pinned', m.pinned, value => { saveMarkers(config.project, { ...readMarkers(config.project), pinned: value }); changed(); });
+    function section(title: string, help: string, id: string) {
+      const group = document.createElement('section'), heading = document.createElement('h3'), description = document.createElement('p');
+      group.className = 'tuix-settings-section'; group.setAttribute('aria-labelledby', id);
+      heading.id = id; heading.textContent = title; description.className = 'tuix-setting-help'; description.textContent = help;
+      group.append(heading, description); panel.append(group); return group;
+    }
+    // Report-list filters live together above the list. Markers have their own scope.
+    const markers = section(t.pageMarkers, t.markerHelp, 'tuix-page-markers-title');
+    segments(markers, t.markerAppearance, [['dot', t.markerDots], ['border', t.markerOutlines], ['fill', t.markerFills]], m.style, value => { saveMarkers(config.project, { ...readMarkers(config.project), style: value as MarkerStyle }); changed(); }, 'markers');
+    toggle(markers, t.keepMarkers, 'pinned', m.pinned, value => { saveMarkers(config.project, { ...readMarkers(config.project), pinned: value }); changed(); });
     if ((config.environment ?? (['localhost', '127.0.0.1'].includes(location.hostname) ? 'local' : 'production')) === 'local') {
+      const developer = section(t.developerOptions, t.environmentHelp, 'tuix-developer-options-title');
       const label = document.createElement('label'), select = document.createElement('select'); label.className = 'tuix-setting-group'; label.textContent = t.env;
+      select.dataset.setting = 'environment';
       for (const [value, text] of [['', t.defaults], ['all', t.all], ['local', t.local], ['uat', 'UAT'], ['production', t.production]]) { const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option); }
-      select.value = p.environment; select.onchange = () => { savePreferences(config.project, { environment: select.value as typeof p.environment }); onEnvironment?.(); }; label.append(select); panel.append(label);
+      select.value = p.environment; select.onchange = () => { savePreferences(config.project, { environment: select.value as typeof p.environment }); onEnvironment?.(); }; label.append(select); developer.append(label);
     }
     // Updates on your reports and Open tuix.app, rendered by the core; the node survives redraws.
     panel.append(slot);
@@ -143,13 +159,12 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
   // Synchronize the shared controls without replacing focused DOM nodes.
   const refresh = () => {
     const p = readPreferences(config.project), m = readMarkers(config.project);
-    const values: Record<string, string> = { scope: p.scope, markers: m.style };
+    const values: Record<string, string> = { markers: m.style };
     panel.querySelectorAll<HTMLButtonElement>('button[data-setting]').forEach(item =>
       item.setAttribute('aria-pressed', String(values[item.dataset.setting!] === item.dataset.value)));
-    const pin = panel.querySelector<HTMLInputElement>('[data-setting=pinned]'), closed = panel.querySelector<HTMLInputElement>('[data-setting=hide-closed]');
+    const pin = panel.querySelector<HTMLInputElement>('[data-setting=pinned]');
     if (pin) pin.checked = m.pinned;
-    if (closed) closed.checked = p.hideClosed;
-    const environment = panel.querySelector('select');
+    const environment = panel.querySelector<HTMLSelectElement>('[data-setting=environment]');
     if (environment) environment.value = p.environment;
   };
   window.addEventListener(preferenceEvent, refresh);

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { locate, resolve, routeKey } from '../src/locators';
+import { describe, it, expect, vi } from 'vitest';
+import { locate, resolve, createResolver, routeKey } from '../src/locators';
 
 describe('locators across deployments', () => {
   it('prefers the Shopify section when surrounding layout and duplicate names change', () => {
@@ -45,6 +45,22 @@ describe('locators across deployments', () => {
     document.body.innerHTML = '<main><section><button aria-label="Save"><span>✓</span></button></section></main>';
     expect(resolve(locator).method).toBe('aria');
   });
+  it('shares candidate scans within a refresh and reads changed names on the next refresh', () => {
+    document.body.innerHTML = '<main><button>Save</button><button>Cancel</button></main>';
+    const [save, cancel] = document.querySelectorAll('button');
+    const first = locate(save), second = locate(cancel);
+    const scan = vi.spyOn(document, 'querySelectorAll');
+    try {
+      const resolveMarker = createResolver();
+      expect(resolveMarker(first).element).toBe(save);
+      expect(resolveMarker(second).element).toBe(cancel);
+      expect(scan).toHaveBeenCalledTimes(1);
+      save.textContent = 'Changed';
+      const next = createResolver();
+      expect(next({ ...first, text: undefined, css: '' }).orphaned).toBe(true);
+      expect(scan).toHaveBeenCalledTimes(2);
+    } finally { scan.mockRestore(); }
+  });
   it('refuses ambiguous and fingerprint-mismatched fallback matches', () => {
     document.body.innerHTML = '<main><button>Save</button></main>';
     const locator = locate(document.querySelector('button')!);
@@ -56,6 +72,26 @@ describe('locators across deployments', () => {
     expect(locate(document.querySelector('section')!).text?.text).toBe('Hello');
     expect(JSON.stringify(locate(document.querySelector('input')!))).not.toContain('password');
     expect(locate(document.querySelector('span')!).text).toBeUndefined();
+  });
+  it('reads public text without cloning host subtrees or including private descendants', () => {
+    document.body.innerHTML = '<section>  Public <b>text</b><span data-tuix-mask>secret</span><textarea>private</textarea><script>secret()</script><style>secret</style><tuix-widget>private reply</tuix-widget>\n  continues </section>';
+    const section = document.querySelector('section')!;
+    const clone = vi.spyOn(Element.prototype, 'cloneNode');
+    try {
+      expect(locate(section).text?.text).toBe('Public text continues');
+      expect(clone).not.toHaveBeenCalled();
+      expect(section.querySelector('textarea')!.value).toBe('private');
+    } finally { clone.mockRestore(); }
+  });
+  it('stops reading after the locator text prefix, preserving whitespace across nodes', () => {
+    document.body.innerHTML = '<section>  First <b> words </b><span>' + 'a'.repeat(100) + '</span><i>unused</i></section>';
+    const section = document.querySelector('section')!;
+    const tail = section.querySelector('i')!;
+    const read = vi.spyOn(tail, 'textContent', 'get');
+    try {
+      expect(locate(section).text?.text).toBe(('First words ' + 'a'.repeat(100)).slice(0, 80));
+      expect(read).not.toHaveBeenCalled();
+    } finally { read.mockRestore(); }
   });
   it('does not throw on invalid selectors from old data', () => {
     document.body.innerHTML = '<div>Example</div>';

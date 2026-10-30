@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "repository": { "type": "git", "url": "git+https://github.com/tuix-app/tuix.git", "directory": "packages/mcp" },
   "publishConfig": { "access": "public" }

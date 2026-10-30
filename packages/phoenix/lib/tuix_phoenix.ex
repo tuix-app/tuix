@@ -22,14 +22,19 @@ defmodule TuixPhoenix do
 
   attr(:nonce, :string, default: nil)
 
-  @doc "Loads the package's local integration script once in the root layout."
+  @doc """
+  Loads the package's local integration script once in the root layout.
+
+  It carries no `phx-track-static`: the script is not in the host's digest
+  manifest, so `static_changed?/1` would always report a change and a host that
+  reloads on it would reload forever. The content hash in its path busts caches.
+  """
   def assets(assigns) do
     assigns = assign(assigns, :asset, TuixPhoenix.Assets.bootstrap())
 
     ~H"""
     <script
       defer
-      phx-track-static
       src={@asset.url}
       integrity={@asset.integrity}
       crossorigin="anonymous"

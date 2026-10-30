@@ -85,6 +85,19 @@ it('writes nothing to sessionStorage while composing', async () => {
   expect(root.textContent).not.toContain('draft');
 });
 
+it('submits the last character even before the textarea has rendered its input update', async () => {
+  const root = await setup(); core!.comment!(); await pick(root);
+  mocks.request.mockResolvedValueOnce({ id: 'created', number: 1, title: 'The complete report', status: 'open', state: 'open', author: { name: 'User' }, locators: {}, comments: [] });
+  const field = root.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  field.value = 'The complete report';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  field.form!.requestSubmit();
+  // Sending reads synchronously; no timer or animation frame is needed to save the final input.
+  const sent = mocks.request.mock.calls.find(([path, method]) => path === '/issues' && method === 'POST');
+  expect(sent?.[2].body).toBe('The complete report');
+  await vi.advanceTimersByTimeAsync(100);
+});
+
 it('keeps the text and reuses the idempotency key after a failed submit', async () => {
   const root = await setup(); core!.comment!(); await pick(root); await type(root, 'Retry me');
   const keys: string[] = []; let fail = true;
@@ -170,7 +183,7 @@ it('drops a composer hidden behind settings when a filter asks for the report li
   panel.mockClear();
   core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(100);
   expect(root.querySelector('.composer')).toBeNull();
-  expect(root.querySelector('.page-reports [data-filter=show] [data-value=verify]')!.getAttribute('aria-pressed')).toBe('true');
+  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
   // The SDK hears about the shown panel once.
   expect(panel.mock.calls).toEqual([[true]]);
   // Nothing was kept: the launcher starts picking again.
@@ -186,21 +199,22 @@ it('applies an open filter to this view only and leaves the stored preferences a
   // Markers ask only when the panel opens, so the latest list request is the panel's.
   const listed = () => new URLSearchParams(mocks.request.mock.calls.map(([path]) => path as string).filter(path => path.startsWith('/issues?')).pop()!.split('?')[1]);
   core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(100);
-  expect(choice('show', 'verify').getAttribute('aria-pressed')).toBe('true');
+  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
   expect(choice('involving', 'me').getAttribute('aria-pressed')).toBe('true');
   expect(stored()).toBeNull();
   // Choosing Show saves Show only: Pages and Involving stay the person's own, and this view keeps its filter.
-  choice('show', 'all').click(); await vi.advanceTimersByTimeAsync(100);
-  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', hideClosed: true });
-  expect(choice('show', 'all').getAttribute('aria-pressed')).toBe('true');
+  const status = root.querySelector<HTMLSelectElement>('[data-filter=show] select')!;
+  status.value = 'all'; status.dispatchEvent(new Event('change', { bubbles: true })); await vi.advanceTimersByTimeAsync(100);
+  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
+  expect(status.value).toBe('all');
   expect(choice('involving', 'me').getAttribute('aria-pressed')).toBe('true');
-  // Hide closed is on by default: All asks for every unresolved report.
-  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'unresolved', involving: 'me' });
+  // All now includes finished reports without a second visibility switch.
+  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'all', involving: 'me' });
   // Choosing the stored value still replaces the view's own.
   choice('involving', 'everyone').click(); await vi.advanceTimersByTimeAsync(100);
-  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', hideClosed: true });
+  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
   expect(choice('involving', 'everyone').getAttribute('aria-pressed')).toBe('true');
-  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'unresolved', involving: 'everyone' });
+  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'all', involving: 'everyone' });
   // Pages chosen in settings replaces the view's Pages too.
   savePreferences('comment-test', { scope: 'page' }); await vi.advanceTimersByTimeAsync(100);
   expect(listed().get('route_key')).toBe('/');
@@ -208,9 +222,9 @@ it('applies an open filter to this view only and leaves the stored preferences a
   // A marker change is not a filter choice; and a new filter replaces the whole view filter.
   core!.open({ show: 'verify' }); await vi.advanceTimersByTimeAsync(100);
   window.dispatchEvent(new CustomEvent(preferenceEvent)); await vi.advanceTimersByTimeAsync(100);
-  expect(choice('show', 'verify').getAttribute('aria-pressed')).toBe('true');
+  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
   expect(Object.fromEntries(listed())).toMatchObject({ show: 'verify', involving: 'everyone', route_key: '/' });
-  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', hideClosed: true });
+  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
 });
 
 /** A report marked on the setup's Save button. */

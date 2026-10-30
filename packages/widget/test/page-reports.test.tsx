@@ -38,18 +38,14 @@ it('uses the shared filter state for current-page and project-wide reports', asy
   await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
   // Show: Open asks for active work (open and in progress) from everyone by default.
   expect(request.mock.calls[0][0]).toBe('/issues?route_key=%2Finvoices%2F%3Aparam&show=active&involving=everyone&environments=production');
-  const filters = host.querySelectorAll('fieldset');
-  expect([...filters[1].querySelectorAll('button')].map(button => button.textContent)).toEqual(['Open', 'To verify', 'All']);
-  // All is every unresolved report while Hide closed is on, which it is unless turned off.
-  filters[0].querySelector<HTMLButtonElement>('[data-value=all]')!.click();
-  await vi.waitFor(() => expect(request.mock.calls[request.mock.calls.length - 1][0]).toContain('show=unresolved'));
-  expect([...host.querySelectorAll('fieldset button[aria-pressed="true"]')].map(button => button.textContent)).toHaveLength(2);
-  expect(filters[1].querySelector('[data-value=all]')!.getAttribute('aria-pressed')).toBe('true');
-  filters[1].querySelector<HTMLButtonElement>('[data-value=verify]')!.click();
-  await vi.waitFor(() => expect(request.mock.calls[request.mock.calls.length - 1][0]).toContain('show=verify'));
-  filters[1].querySelector<HTMLButtonElement>('[data-value=open]')!.click();
-  await vi.waitFor(() => expect(request.mock.calls[request.mock.calls.length - 1][0]).toContain('show=active'));
-  expect(filters[0].querySelector('[data-value=open]')!.getAttribute('aria-pressed')).toBe('true');
+  const filters = host.querySelectorAll<HTMLSelectElement>('[data-filter=show] select');
+  expect([...filters[1].options].map(option => option.textContent)).toEqual(['Unresolved', 'Open & in progress', 'Ready to verify', 'Finished', 'All reports']);
+  for (const value of ['all', 'unresolved', 'verify', 'finished', 'open'] as const) {
+    filters[0].value = value; filters[0].dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(request.mock.calls[request.mock.calls.length - 1][0]).toContain('show=' + (value === 'open' ? 'active' : value)));
+    expect(filters[1].value).toBe(value);
+    if(value === 'finished') expect(host.textContent).toContain('Done and Closed.');
+  }
 });
 
 it('opens current-page reports in place and sends the visibility choice on every page', async () => {
@@ -58,7 +54,7 @@ it('opens current-page reports in place and sends the visibility choice on every
   const request = vi.fn().mockResolvedValueOnce({ issues: [issue], next_before: 10 })
     .mockResolvedValueOnce({ issues: [], next_before: null });
   const open = vi.fn();
-  render(<PageReports api={{ request }} environments="" route="/" show="all" onShowChange={() => {}} hideClosed={false} onOpen={open} lang="en"/>, host);
+  render(<PageReports api={{ request }} environments="" route="/" show="all" onShowChange={() => {}} onOpen={open} lang="en"/>, host);
   await vi.waitFor(() => expect(host.querySelector('.issue-item')).not.toBeNull());
   host.querySelector<HTMLButtonElement>('.issue-item')!.click();
   expect(open).toHaveBeenCalledWith(issue);
@@ -99,7 +95,7 @@ it('refetches when the concrete URL changes even if its normalized route stays t
   expect(new URLSearchParams(request.mock.calls[1][0].split('?')[1]).get('page_url')).toBe('https://example.com/invoices/456');
   render(<PageReports api={api} environments="" pageUrl="https://example.com/invoices/456" show="all" onShowChange={() => {}} lang="en"/>, host);
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
-  expect(request.mock.calls[2][0]).toBe('/issues?scope=all&show=unresolved&involving=everyone');
+  expect(request.mock.calls[2][0]).toBe('/issues?scope=all&show=all&involving=everyone');
 });
 
 it('keeps a focused report mounted and layout unchanged during a background refresh', async () => {
@@ -151,4 +147,18 @@ it('filters by involvement, labels the new states and explains an empty personal
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
   expect(request.mock.calls[1][0]).toBe('/issues?route_key=%2F&show=verify&involving=me');
   await vi.waitFor(() => expect(host.textContent).toContain('Nothing that involves you matches these filters.'));
+});
+
+it('keeps page scope beside status and involvement and refetches when it changes', async () => {
+  const request = vi.fn().mockResolvedValue({ issues: [], next_before: null }), api = { request };
+  function Fixture() {
+    const [scope, setScope] = useState<'page' | 'all'>('page');
+    return <PageReports api={api} environments="" route={scope === 'page' ? '/' : undefined} show="unresolved" onShowChange={() => {}} onScopeChange={setScope} involving="everyone" onInvolvingChange={() => {}} lang="en"/>;
+  }
+  render(<Fixture/>, host);
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  expect([...host.querySelectorAll('[data-filter]')].map(el => el.getAttribute('data-filter'))).toEqual(['scope', 'show', 'involving']);
+  host.querySelector<HTMLButtonElement>('[data-filter=scope] [data-value=all]')!.click();
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(request.mock.calls[1][0]).toBe('/issues?scope=all&show=unresolved&involving=everyone');
 });

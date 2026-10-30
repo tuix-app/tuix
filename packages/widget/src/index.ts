@@ -115,11 +115,12 @@ function loadCore(interactive: boolean): Promise<void> | undefined {
   if (interactive) button.disabled = true;
   loading = import('./core').then(module => {
     if (current !== generation) return;
-    core = module.mount(shadow, button, options, user, active => {
+    core = module.mount(shadow, button, options, user, (active, clickedAway) => {
       opened = active;
       // A composer hidden behind Settings is not closed: focus stays with the flyout and the counts cannot have changed.
       const closed = !active && !suspending;
-      if (closed) (returnFocus?.isConnected ? returnFocus : button).focus();
+      // A click on the page put the focus where it wanted it.
+      if (closed && !clickedAway) (returnFocus?.isConnected ? returnFocus : button).focus();
       settings?.close();
       settings?.active(active);
       // The summary refreshes whenever the panel closes.

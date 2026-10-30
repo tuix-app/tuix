@@ -1,5 +1,16 @@
 # Widget changelog
 
+## Unreleased
+
+## 0.3.1
+
+- **Click outside to close.** A click on the page closes the sidebar, like Escape and the X, and leaves the focus where the click put it. A comment being written is set aside instead, with its element and text, as Settings does; the launcher brings it back. Comment mode ignores the page, since clicking it chooses the element, and a chat window beside its element stays open. A press inside the panel that ends outside it (a dragged text selection) keeps it open.
+- **Reply & pass** and **Reply** for fixers. A signed fixer who is not the report's reporter sees two buttons under the reply box, in the chat window and the side panel: **Reply & pass** (the main one, and what submitting the form does) hands the turn to the reporter, **Reply** keeps it where it is. The turn line follows the choice at once and goes back if sending fails. Everyone else, the reporter included, keeps the single Reply and sends no choice. Polish: "Odpowiedz i przekaż" and "Odpowiedz", each with a hover and screen-reader description of what it does with the turn. Updates gain a **Back with you** kind (`turn_returned`; "Wróciło do Ciebie"), for a report whose turn came back to its owner after it stalled with someone else. Reports and threads may carry `turn_person` (who holds the turn); the widget reads it into its types and shows nothing from it. Deploy dependency: publish server support for `turn` on `POST /v1/issues/:id/comments` (`reporter` or `keep`) before this widget, because the buttons send it. An older server does not know the field and takes the comment as a plain reply, so the turn follows the reply as before; the widget's turn line then corrects itself on the next refresh.
+- Won't fix is gone: it was merged into Closed. Fixers get **Close** (after Start and Ready for review) instead of Won't fix, with no note to write; why a report was closed goes in a reply. A `wont_fix` from an older server reads as Closed. Report actions now end with Close: Done, Still broken or Reopen, Start, Ready for review, Close.
+- Group Settings into Page markers, Developer options (local only), and Notifications. Explain marker scope and rename the visibility switch to **Show markers when the feedback panel is closed**. Keep dots and panel-only visibility as defaults, with existing choices preserved. English and Polish copy updated.
+- Move Pages beside Status and Involving in Reports. Replace Hide closed with explicit Unresolved, Open & in progress, Ready to verify, Finished, and All reports choices. Fresh browsers default to Unresolved so reports awaiting verification remain visible. Migrate saved filters without changing their scope; All reports now always includes finished work.
+- Deploy dependency: publish server support for `GET /v1/issues?show=finished` before this widget. The server filters Done, Won’t fix, and Closed before pagination; tenant and environment restrictions remain unchanged.
+
 ## 0.3.0
 
 - **Fill** marker style: a third marker style besides dot and border, the element's box filled with the state colour at 50% opacity. Like border markers, it lets clicks pass through to the host app.

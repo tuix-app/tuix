@@ -62,6 +62,7 @@ class Matrix {
 const target = (html = '<button id="selected">Save</button>') => { document.body.innerHTML = html; return document.querySelector<HTMLElement>('#selected')!; };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.resetAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -330,6 +331,63 @@ describe('selected element in screenshot evidence', () => {
     vi.mocked(createContext).mockResolvedValue({} as Awaited<ReturnType<typeof createContext>>);
     vi.mocked(domToCanvas).mockRejectedValue(new Error('unavailable'));
     expect(await screenshot(selected, '#0f766e')).toBeNull();
+  });
+
+  it('lets browser input tasks run between batches of screenshot cloning', async () => {
+    vi.useFakeTimers();
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const selected = target(), events: string[] = [];
+    let options: Options;
+    vi.mocked(createContext).mockImplementation(async (_node, value) => {
+      options = value!;
+      return context;
+    });
+    vi.mocked(domToCanvas).mockImplementation(async () => {
+      clock.mockReturnValue(9);
+      setTimeout(() => events.push('input'), 0);
+      await options.onCloneEachNode?.(document.createElement('button'));
+      events.push('cloned');
+      return fakeCanvas(1024, 768).canvas;
+    });
+    const result = screenshot(selected, '#f0906a');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await result).not.toBeNull();
+    expect(events).toEqual(['input', 'cloned']);
+    expect(destroyContext).toHaveBeenCalledOnce();
+  });
+
+  it('waits for the style sandbox navigation before resuming a yielded clone', async () => {
+    vi.useFakeTimers();
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const selected = target(), events: string[] = [];
+    const sandbox = Object.assign(new EventTarget(), {
+      contentDocument: { URL: 'about:blank', readyState: 'loading', body: null as object | null },
+    });
+    const captureContext = { sandbox } as unknown as Awaited<ReturnType<typeof createContext>>;
+    let options: Options;
+    vi.mocked(createContext).mockImplementation(async (_node, value) => {
+      options = value!;
+      return captureContext;
+    });
+    vi.mocked(domToCanvas).mockImplementation(async () => {
+      clock.mockReturnValue(9);
+      setTimeout(() => events.push('input'), 0);
+      setTimeout(() => {
+        Object.assign(sandbox.contentDocument, { URL: 'about:srcdoc', readyState: 'complete', body: {} });
+        sandbox.dispatchEvent(new Event('load'));
+      }, 10);
+      await options.onCloneEachNode?.(document.createElement('button'));
+      expect(sandbox.contentDocument.body).not.toBeNull();
+      events.push('cloned');
+      return fakeCanvas(1024, 768).canvas;
+    });
+    const result = screenshot(selected, '#f0906a');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toEqual(['input']);
+    await vi.runAllTimersAsync();
+    expect(await result).not.toBeNull();
+    expect(events).toEqual(['input', 'cloned']);
+    expect(destroyContext).toHaveBeenCalledWith(captureContext);
   });
 
   it('takes the viewport from <body> in quirks mode, where the root has the document size', () => {

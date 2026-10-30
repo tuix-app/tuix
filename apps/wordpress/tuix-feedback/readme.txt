@@ -46,14 +46,14 @@ Tuix terms of service: https://tuix.app/terms. Tuix privacy policy: https://tuix
 
 == Installation ==
 
-You need a Tuix project and a Tuix admin account. Tuix → Project settings → Install tuix → WordPress plugin shows these steps with your project's values filled in.
+You need a Tuix project and a Tuix admin account. Tuix → Project settings → Installation → WordPress plugin shows these steps with your project's values filled in.
 
 1. **Allow your site in Tuix.** In Tuix → Project settings, add the site's exact address, such as https://www.example.com, to Allowed origins and save. Add both the www and bare domain if the site answers on both. Use a separate Tuix environment (uat) for a staging site.
-2. **Install the plugin.** In WordPress open Plugins → Add New Plugin, search for Tuix Feedback, then Install Now and Activate. A site that cannot reach wordpress.org can download tuix-feedback.zip from Tuix → Project settings → Install tuix → WordPress plugin and add it with Upload Plugin.
+2. **Install the plugin.** In WordPress open Plugins → Add New Plugin, search for Tuix Feedback, then Install Now and Activate. A site that cannot reach wordpress.org can download tuix-feedback.zip from Tuix → Project settings → Installation → WordPress plugin and add it with Upload Plugin.
 3. **Connect it.** In WordPress open Settings → Tuix and enter:
    * Tuix address: where your Tuix runs, for example https://tuix.app
-   * Public project key: Tuix → Project settings → Public project key (starts with pk_)
-   * Signing key: Tuix → Project settings → Server-only signing key → Reveal signing key
+   * Public project key: Tuix → Project settings → Installation → Public project key (starts with pk_)
+   * Signing key: Tuix → Project settings → Installation → Server-only signing key → Reveal signing key
    * Environment: production for the live site, uat for staging, local for a site on localhost
 4. **Choose who sees it.** Administrators and Editors by default. Only roles that work in wp-admin are offered; subscribers and customers can never comment. Optionally also show it in wp-admin. Save.
 5. **Check the connection.** Click Check connection. It signs in to Tuix from your server exactly as the widget would and should say "Connected".

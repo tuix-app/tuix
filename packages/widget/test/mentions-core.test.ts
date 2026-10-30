@@ -48,6 +48,15 @@ const replies = () => mock.request.mock.calls.filter(([path]) => path === '/issu
 const send = async (root: ShadowRoot) => { await vi.advanceTimersByTimeAsync(10); area(root).closest('form')!.requestSubmit(); await vi.advanceTimersByTimeAsync(200); };
 const live = (root: ShadowRoot) => root.querySelector('.mention-field [role="status"]')!.textContent;
 
+it('submits the latest reply without waiting for a parent render', async () => {
+  const root = await open();
+  type(root, 'Every final character');
+  area(root).form!.requestSubmit();
+  expect(replies()).toEqual([['POST', { body: 'Every final character' }]]);
+  await vi.advanceTimersByTimeAsync(200);
+  expect(area(root).value).toBe('');
+});
+
 it('suggests people after a debounced lookup, moves and picks with the keyboard, and sends the picked id', async () => {
   const root = await open();
   const field = area(root);

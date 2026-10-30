@@ -5,7 +5,9 @@ vi.mock('@fontsource-variable/karla/files/karla-latin-ext-wght-normal.woff2?url'
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('../src/api', () => ({ Api: class { environment = 'uat'; request = mocks.request; destroy() {} } }));
 import { tuix } from '../src/index';
-const types = ['keydown', 'keypress', 'keyup'];
+const keys = ['keydown', 'keypress', 'keyup'];
+const edits = ['beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend'];
+const types = [...keys, ...edits];
 let shortcut: ((event: Event) => void) | undefined;
 afterEach(async () => {
   tuix.destroy(); await vi.advanceTimersByTimeAsync(200);
@@ -15,9 +17,9 @@ afterEach(async () => {
 });
 const report = { id: '00000000-0000-4000-8000-000000000003', number: 3, title: 'Save overlaps', body: 'Save overlaps', status: 'open', state: 'open', type: 'bug', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Anna' }, comments: [], allowed_states: [], inserted_at: '2026-10-09T10:00:00Z' };
 /** Real keys are composed: they leave the shadow root, retargeted to <tuix-widget>. */
-const press = (target: Element, key: string, init: KeyboardEventInit = {}) => { for (const type of types) target.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true, composed: true, cancelable: true, ...init })); };
+const press = (target: Element, key: string, init: KeyboardEventInit = {}) => { for (const type of keys) target.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true, composed: true, cancelable: true, ...init })); };
 
-it('keeps keys pressed in the widget from the page, while Escape and the panel shortcuts still work', async () => {
+it('keeps widget keys and edits from host handlers, while native editing, Escape and submission still work', async () => {
   vi.useFakeTimers();
   mocks.request.mockImplementation(async (path: string, method = 'GET') => path === '/config' ? { telemetry: false, capture: { screenshot: false, console: false, network: false } }
     : path.startsWith('/issues?') ? { issues: [], next_before: null } : path === '/issues/' + report.id || (path === '/issues' && method === 'POST') ? report : { notifications: [] });
@@ -26,7 +28,10 @@ it('keeps keys pressed in the widget from the page, while Escape and the panel s
   // A host shortcut handler in the bubble phase, on the document and the window, as the dashboard's j/k keys are.
   // It must see nothing pressed in the widget but Escape.
   const seen: string[] = [];
-  shortcut = event => { seen.push(event.type + ' ' + (event as KeyboardEvent).key); };
+  shortcut = event => {
+    seen.push(event.type + ' ' + (event as KeyboardEvent).key);
+    if (event.type === 'beforeinput') event.preventDefault();
+  };
   for (const type of types) { document.addEventListener(type, shortcut); window.addEventListener(type, shortcut); }
   const target = document.createElement('button'); target.textContent = 'Save'; document.body.append(target);
   Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [target] });
@@ -35,6 +40,11 @@ it('keeps keys pressed in the widget from the page, while Escape and the panel s
   tuix.init({ project: 'keys', lang: 'en' }); tuix.identify({ id: 'a', name: 'A' });
   await vi.waitFor(() => expect(root.querySelector('.mention-field textarea')).not.toBeNull());
   const reply = root.querySelector<HTMLTextAreaElement>('.mention-field textarea')!;
+  const localEdits: string[] = [];
+  for (const type of edits) reply.addEventListener(type, () => localEdits.push(type));
+  for (const type of edits) expect(reply.dispatchEvent(new Event(type, { bubbles: true, composed: true, cancelable: true }))).toBe(true);
+  expect(localEdits).toEqual(edits);
+  expect(seen).toEqual([]);
   press(reply, ' '); press(reply, 'j');
   // The settings flyout shares the shadow root: its Environment select (local development) is a field too.
   press(root.querySelector('.settings-flyout select')!, 'j');
@@ -45,15 +55,19 @@ it('keeps keys pressed in the widget from the page, while Escape and the panel s
   expect(seen).toEqual([]);
   // Escape from a field still reaches the page, and the panel's own capture handler still closes it.
   seen.length = 0; press(reply, 'Escape'); await vi.advanceTimersByTimeAsync(50);
-  expect(seen).toEqual(types.flatMap(type => [type + ' Escape', type + ' Escape']));
+  expect(seen).toEqual(keys.flatMap(type => [type + ' Escape', type + ' Escape']));
   expect(root.querySelector('.panel')).toBeNull();
   // The composer: a space typed in it stays in the widget, and Ctrl+Enter still sends it.
   root.querySelector<HTMLButtonElement>('#tuix-launcher')!.click(); await vi.advanceTimersByTimeAsync(200);
   root.querySelector<HTMLElement>('.pick-surface')!.click(); await vi.advanceTimersByTimeAsync(50);
   const body = root.querySelector<HTMLTextAreaElement>('.composer textarea')!;
   seen.length = 0; press(body, ' ');
-  body.value = 'Save overlaps'; body.dispatchEvent(new Event('input', { bubbles: true })); await vi.advanceTimersByTimeAsync(50);
+  body.value = 'Save overlaps'; body.dispatchEvent(new Event('input', { bubbles: true, composed: true })); await vi.advanceTimersByTimeAsync(50);
   press(body, 'Enter', { ctrlKey: true }); await vi.advanceTimersByTimeAsync(100);
   expect(seen).toEqual([]);
   expect(mocks.request).toHaveBeenCalledWith('/issues', 'POST', expect.objectContaining({ body: 'Save overlaps' }));
+  // Host-owned fields retain the application's editing handlers.
+  const hostField = document.createElement('textarea'); document.body.append(hostField);
+  expect(hostField.dispatchEvent(new Event('beforeinput', { bubbles: true, composed: true, cancelable: true }))).toBe(false);
+  expect(seen).toEqual(['beforeinput undefined', 'beforeinput undefined']);
 });

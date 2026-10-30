@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Api } from './api';
 import type { translations } from './i18n';
 import type { Person, Segment } from './types';
+import { useBufferedText, type TextBuffer } from './text-buffer';
 
 /** A person picked in the composer: the id the server takes and the label inserted after "@". */
 export interface Mention { id: string; label: string }
@@ -51,7 +52,7 @@ export function CommentText({ comment }: { comment: { body: string; segments?: S
 
 interface FieldProps {
   api: Pick<Api, 'request'>; issue: string; enabled: boolean; label: string; t: ReturnType<typeof translations>;
-  value: string; onValue: (value: string) => void; picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef;
+  buffer: TextBuffer; picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef;
 }
 
 /**
@@ -59,9 +60,10 @@ interface FieldProps {
  * for people (debounced, stale answers dropped, each query once per thread) and lists them under the textarea. Without
  * `enabled` it is a plain textarea; a failed lookup only hides the list.
  */
-export function MentionField({ api, issue, enabled, label, t, value, onValue, picks, onPick, escape }: FieldProps) {
+export function MentionField({ api, issue, enabled, label, t, buffer, picks, onPick, escape }: FieldProps) {
+  const area = useBufferedText(buffer);
   const [people, setPeople] = useState<Person[]>([]), [active, setActive] = useState(0), [live, setLive] = useState(''), [off, setOff] = useState(false);
-  const area = useRef<HTMLTextAreaElement>(null), list = useRef<HTMLUListElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const trigger = useRef<{ at: number; query: string } | null>(null), dismissed = useRef(-1), sequence = useRef(0);
   // The person a finger is on in the list: a tap (like any click, a screen reader's too) picks on click, and the list outlives the textarea's blur until then.
   const touched = useRef<{ timer?: ReturnType<typeof setTimeout> } | null>(null);
@@ -110,7 +112,7 @@ export function MentionField({ api, issue, enabled, label, t, value, onValue, pi
     // The value is set from code, which maxlength does not check: a pick that would not fit inserts nothing.
     if (text.length > MAXLENGTH) { close(true); return; }
     field.value = text; const caret = found.at + insert.length + (space ? 0 : 1); field.setSelectionRange(caret, caret); field.focus();
-    close(true); onValue(text); onPick({ id: person.id, label: person.name });
+    close(true); buffer.set(text); onPick({ id: person.id, label: person.name });
   }
   function keydown(event: KeyboardEvent) {
     if (!open || event.isComposing) return;
@@ -126,8 +128,8 @@ export function MentionField({ api, issue, enabled, label, t, value, onValue, pi
   useEffect(() => { list.current?.children[active]?.scrollIntoView?.({ block: 'nearest' }); }, [active]);
   useEffect(() => () => { release(); sequence.current++; clearTimeout(searchTimer.current); clearTimeout(liveTimer.current); }, []);
   return <div class="mention-field">
-    <label>{label}<textarea ref={area} value={value} required maxLength={MAXLENGTH}
-      onInput={event => { onValue(event.currentTarget.value); update(); }} onKeyDown={keydown} onBlur={() => { if (trigger.current && !touched.current) close(); }}
+    <label>{label}<textarea ref={area} required maxLength={MAXLENGTH}
+      onInput={event => { buffer.set(event.currentTarget.value); update(); }} onKeyDown={keydown} onBlur={() => { if (trigger.current && !touched.current) close(); }}
       onClick={() => { if (trigger.current) update(); }} onKeyUp={event => { if (trigger.current && /^(Arrow(Left|Right)|Home|End)$/.test(event.key)) update(); }}
       aria-autocomplete={on ? 'list' : undefined} aria-controls={open ? 'tuix-mention-list' : undefined}
       aria-activedescendant={open ? 'tuix-mention-' + active : undefined} aria-describedby={on ? 'tuix-mention-hint' : undefined}/></label>

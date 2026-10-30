@@ -121,6 +121,14 @@ defmodule TuixPhoenixTest do
     assert_raise ArgumentError, fn -> render_component(&TuixPhoenix.widget/1, user: nil) end
   end
 
+  test "the integration script is not tracked as a host static asset" do
+    configure()
+    html = render_component(&TuixPhoenix.assets/1, nonce: "n")
+    assert html =~ "/tuix-assets/"
+    # Not in the host's manifest: static_changed?/1 would always be true and reload forever.
+    refute html =~ "phx-track-static"
+  end
+
   test "bundled assets are served with integrity matching shipped bytes" do
     opts = TuixPhoenix.Plug.init([])
 

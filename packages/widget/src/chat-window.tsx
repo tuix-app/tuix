@@ -6,6 +6,8 @@ import type { Placement } from './chat-placement';
 import type { Mention, EscapeRef } from './mentions';
 import type { Api } from './api';
 import type { Issue } from './types';
+import type { TurnChoice } from './states';
+import type { TextBuffer } from './text-buffer';
 
 /** How many of the newest replies the window shows before "Show earlier". */
 export const CHAT_REPLIES = 5;
@@ -21,7 +23,7 @@ export interface ChatWindowProps {
   gone: boolean; moved: boolean;
   loading: boolean; error: string; notice: string; busy: boolean; closed: boolean;
   expanded: boolean; onExpand: () => void;
-  reply: string; onReply: (value: string) => void; picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef; onSend: () => void;
+  reply: TextBuffer; picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef; onSend: (turn?: TurnChoice) => void;
   /** Done / Still broken, when the caller is the reporter of a report in review. */
   verify: null | { works: boolean; broken: boolean; reviewing: boolean; note: string; onNote: (value: string) => void; onWorks: () => void; onBroken: () => void; onCancel: () => void; onSend: () => void };
   onRetry: () => void; onFull: () => void; onClose: () => void;
@@ -61,7 +63,7 @@ export function ChatWindow(p: ChatWindowProps) {
       </>}
     </div>
     <footer>
-      {thread && !p.closed && !p.verify?.reviewing && <ReplyForm api={p.api} thread={thread} t={t} value={p.reply} onValue={p.onReply} busy={p.busy} picks={p.picks} onPick={p.onPick} escape={p.escape} onSubmit={p.onSend}/>}
+      {thread && !p.closed && !p.verify?.reviewing && <ReplyForm api={p.api} thread={thread} t={t} buffer={p.reply} busy={p.busy} picks={p.picks} onPick={p.onPick} escape={p.escape} onSubmit={p.onSend}/>}
       <button type="button" class="text-button" data-action="open-full-thread" onClick={p.onFull}>{t.openFullThread}</button>
     </footer>
   </section>;

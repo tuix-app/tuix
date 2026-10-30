@@ -45,6 +45,8 @@ export interface Issue {
   unread?: boolean;
   /** Whose move it is (§5): on list entries and threads; null once finished. Missing from servers before turns: nothing is shown. */
   turn?: Turn | null;
+  /** Who holds the turn: `member:<uuid>` or `end_user:<uuid>`; null when finished or nobody owns it yet. Read into the type only; missing from older servers. */
+  turn_person?: string | null;
 }
 /** A comment with mentions, in order: plain text and mentioned labels (without "@"). Rendered as text, never HTML. */
 export type Segment = { text: string } | { mention: string };

@@ -180,9 +180,9 @@ it('keeps page markers on unresolved reports from everyone while the panel list 
 it('opens Reports with a filter as a session override: Pages All, the chosen Show and Involving', async () => {
   const { root } = fixture();
   core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(200);
-  expect(readPreferences('updates')).toMatchObject({ scope: 'page', show: 'open', involving: 'everyone' });
+  expect(readPreferences('updates')).toMatchObject({ scope: 'page', show: 'unresolved', involving: 'everyone' });
   expect(paths()).toContain('/issues?scope=all&show=verify&involving=me');
-  expect(root.querySelector('[data-filter=show] [data-value=verify]')!.getAttribute('aria-pressed')).toBe('true');
+  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
   expect(root.querySelector('[data-filter=involving] [data-value=me]')!.getAttribute('aria-pressed')).toBe('true');
 });
 

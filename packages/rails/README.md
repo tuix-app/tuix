@@ -104,7 +104,7 @@ previews need `blob:` and `data:`. Capture requires `style-src-attr 'unsafe-inli
 and the empty stylesheet hash
 `'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='` in the applicable style
 directive. Account for `script-src-elem`/`style-src-elem` when present. Test capture
-against the real host policy; Tuix → Project settings → Install tuix → Content
+against the real host policy; Tuix → Project settings → Installation → Content
 Security Policy lists the exact sources for your project.
 
 ## Development

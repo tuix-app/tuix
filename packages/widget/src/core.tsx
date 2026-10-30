@@ -4,6 +4,7 @@ import { EvidencePreview } from './evidence-preview';
 import { mentionIds, type Mention, type EscapeRef } from './mentions';
 import { ThreadComments, ReplyForm, VerifyTools, CloseIcon } from './thread';
 import { ChatWindow } from './chat-window';
+import { createTextBuffer, ReportText, type TextBuffer } from './text-buffer';
 import { placeChat, CHAT_W, CHAT_MAX_H, CHAT_MIN_WIDTH } from './chat-placement';
 import { tokenCss, outlineColor } from './tokens';
 import { render, Fragment } from 'preact';
@@ -13,7 +14,7 @@ import { linkedIssue } from './deeplink';
 import { deploymentReporter } from './deployment';
 import { liveUpdates } from './live';
 import { startCapture } from './capture';
-import { locate, resolve, routeKey, ignored, type LocatorBundle, type Resolution } from './locators';
+import { locate, resolve, createResolver, routeKey, ignored, type LocatorBundle, type Resolution } from './locators';
 import { frameBatch } from './frame-batch';
 import { locatorTelemetry, runtimeTelemetry } from './telemetry';
 import { sourceLocation, editorLink, readEditor, saveEditor, defaultEditor, type SourceLocation } from './source';
@@ -21,7 +22,7 @@ import { pickElement } from './picker';
 import { readMarkers } from './markers';
 import { readPreferences, savePreferences, preferenceEvent, type OpenFilter, type PreferenceChange } from './preferences';
 import { translations, statusLabel, turnLine } from './i18n';
-import { stateOf, fixPending, normalizeState, terminal, unresolved, markActive, turnAfterReply, type State } from './states';
+import { stateOf, fixPending, normalizeState, terminal, unresolved, markActive, turnAfterReply, type State, type TurnChoice } from './states';
 import type { RemoteConfig, Config, Core, Identity, Issue, Update, EmailPreference } from './types';
 import css from './widget.css?inline';
 import fontUrl from '@fontsource-variable/karla/files/karla-latin-wght-normal.woff2?url';
@@ -43,7 +44,7 @@ const PANEL_W = 360;
 /** Pin and marker color follows the conversation: peach open, gold in progress, an aqua ring in review. */
 const pinState = (state: string) => state === 'in_review' ? 'verify' : state === 'in_progress' ? 'warm' : 'open';
 /** Fixer transitions; on an unassigned report the server assigns the caller first. */
-const fixerStates: readonly string[] = ['in_progress', 'in_review', 'wont_fix'];
+const fixerStates: readonly string[] = ['in_progress', 'in_review'];
 /** How often tuix emails a person (the server's `Tuix.EmailSchedule`), in the order offered. */
 const emailSchedules = ['immediately', 'every_15_minutes', 'hourly', 'twice_daily', 'daily'] as const;
 /** The browser's IANA zone, which the server checks; without one, summaries follow UTC. */
@@ -59,7 +60,7 @@ function screenshotModule() {
   screenshotLoad ??= import('./screenshot').catch(error => { screenshotLoad = undefined; throw error; });
   return screenshotLoad;
 }
-interface Draft { body: string; type: string; severity: string; locators: LocatorBundle; key: string; route: string; url: string }
+interface Draft { body: TextBuffer; type: string; severity: string; locators: LocatorBundle; key: string; route: string; url: string }
 interface Box { x: number; y: number; width: number; height: number }
 interface Pin { issue: Issue; box: Box; orphan: boolean }
 const uuid = () => {
@@ -151,7 +152,7 @@ export interface Hooks {
   changed?: () => void;
 }
 
-export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Config, identity: Identity, onPanel: (active: boolean) => void, started?: number, hooks: Hooks = {}): Core {
+export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Config, identity: Identity, onPanel: (active: boolean, clickedAway?: boolean) => void, started?: number, hooks: Hooks = {}): Core {
   const style = document.createElement('style'); if (initial.nonce) style.nonce = initial.nonce;
   style.textContent = tokenCss + css;
   const fonts: FontFace[] = [];
@@ -177,6 +178,9 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
   const runtime = runtimeTelemetry(api);
   const reportDeployment = deploymentReporter(api, initial.release);
   let activationStarted = 0, activation = 0, firstStarted = started, panelActive = false, chatActive = false;
+  /** The panel is closing because of a click on the page: the focus stays where that click put it. */
+  let clickedAway = false;
+  const panelChanged = (active: boolean) => clickedAway ? onPanel(active, true) : onPanel(active);
   /** The sidebar or a chat window is open: a thread is on screen and keeps live. */
   const engaged = () => panelActive || chatActive;
   let live: ReturnType<typeof liveUpdates> | undefined;
@@ -195,11 +199,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
   function App() {
     const t = translations(initial.lang);
     const [open, setOpen] = useState(false), [config, setConfig] = useState(initial), [ready, setReady] = useState(false);
+    const remoteConfig = useRef('');
     const [issues, setIssues] = useState<Issue[]>([]), [thread, setThread] = useState<Issue | null>(null);
     // Reading a report or a newer turn edits its entry in place. Marker resolution and the panel list follow `located`, which keeps its identity through such edits and changes only when a report comes, goes or is relocated.
     const located = useRef(issues), issuesRef = useRef(issues), repin = useRef(() => {});
     issuesRef.current = issues;
-    if (located.current !== issues && !(located.current.length === issues.length && issues.every((issue, index) => issue.id === located.current[index].id && issue.locators === located.current[index].locators))) located.current = issues;
+    if (located.current !== issues && !(located.current.length === issues.length && issues.every((issue, index) => issue.id === located.current[index].id && JSON.stringify(issue.locators) === JSON.stringify(located.current[index].locators)))) located.current = issues;
     const [source, setSource] = useState<SourceLocation | null>(null);
     const [editor, setEditor] = useState(() => api.environment === 'local' ? readEditor() : defaultEditor);
     const [editorNotice, setEditorNotice] = useState('');
@@ -221,7 +226,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     // A handoff URL the person can open with their own click when the new tab did not open.
     const [handoffUrl, setHandoffUrl] = useState('');
     const [updatesError, setUpdatesError] = useState('');
-    // A status change that needs a note (Won't fix, Still broken) waits here for it.
+    // A status change that needs a note (Still broken) waits here for it.
     const [pendingState, setPendingState] = useState<State | null>(null), [stateNote, setStateNote] = useState('');
     const [route, setRoute] = useState(currentRoute(initial));
     const [pageUrl, setPageUrl] = useState(location.origin + location.pathname);
@@ -235,7 +240,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const pointer = useRef({ x: 0, y: 0 }), cardPoint = useRef({ x: 0, y: 0 }), overCard = useRef(false), cardEscape = useRef<Event | null>(null), dismissed = useRef<string | null>(null), refocusing = useRef(false);
     const draftRef = useRef<Draft | null>(null); draftRef.current = draft;
     const [shot, setShot] = useState<Blob | null>(null), [preview, setPreview] = useState(''), [capturing, setCapturing] = useState(false);
-    const [busy, setBusy] = useState(false), [reply, setReply] = useState(''), [updates, setUpdates] = useState<Update[]>([]);
+    const [busy, setBusy] = useState(false), [updates, setUpdates] = useState<Update[]>([]);
+    const [reply] = useState(createTextBuffer);
     // People picked in the reply composer; only those still named in the reply are sent.
     const [mentions, setMentions] = useState<Mention[]>([]);
     const mentionEscape: EscapeRef = useRef(null);
@@ -399,7 +405,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       if (!value) { suspendedRef.current = false; setSuspended(false); chosen.current = null; reselecting.current = null; setPicking(false); setDraft(null); }
       if (!value && !keepChat) { dropChat(); setThread(null); setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); shotSequence.current++; threadSequence.current++; }
       // Markers can open the sidebar without the host SDK, which owns the launcher's open state.
-      onPanel(value);
+      panelChanged(value);
     };
     // Settings opened while composing: hide the composer, keep its selection and text; the launcher or Reports returns to it.
     suspend = () => {
@@ -408,7 +414,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       if (!kept) return false;
       if (!draftRef.current) { reselecting.current = null; draftRef.current = kept; setDraft(kept); setPicking(false); }
       suspendedRef.current = true; setSuspended(true); setHighlight(null);
-      onPanel(false);
+      panelChanged(false);
       return true;
     };
     showSettings = value => { if (value && initial.launcher !== false) markActive(initial.project); setFlyout(value); };
@@ -438,7 +444,11 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       try {
         // Page markers ignore the panel's filters: this page's unresolved reports from everyone.
         const result = await api.request<{ issues: Issue[] }>('/issues?' + new URLSearchParams({ route_key: route, page_url: pageUrl, show: 'unresolved', involving: 'everyone', ...(envFilter ? { environments: envFilter } : {}) }));
-        if (current() && !disposed && sequence === listSequence.current && pageUrl === location.origin + location.pathname) { setIssues(result.issues.filter(issue => unresolved.includes(stateOf(issue)) && (!issue.url || issue.url === pageUrl))); runtime.loaded(performance.now() - activationStarted); }
+        if (current() && !disposed && sequence === listSequence.current && pageUrl === location.origin + location.pathname) {
+          const next = result.issues.filter(issue => unresolved.includes(stateOf(issue)) && (!issue.url || issue.url === pageUrl));
+          setIssues(values => JSON.stringify(values) === JSON.stringify(next) ? values : next);
+          runtime.loaded(performance.now() - activationStarted);
+        }
         return true;
       } catch { if (current() && !disposed && sequence === listSequence.current) { setError(t.loadError); runtime.error('list'); } return false; }
     }
@@ -458,7 +468,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
             const element = resolution.element; setThreadOrphan(resolution.orphaned);
             setSource(sourceLocation(element, api.environment));
             if (scroll) {
-              setReply(''); setMentions([]); setFixNote('');
+              reply.set(''); setMentions([]); setFixNote('');
               // The chat window opens beside an element that is on screen already; the page stays where it is.
               if (!inChat) element?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'instant' : 'smooth' });
             }
@@ -532,7 +542,9 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         console: remote.capture?.console !== false && initial.capture?.console !== false,
         network: remote.capture?.network !== false && initial.capture?.network !== false,
       } } as Config;
-      setConfig(next);
+      // Compare the JSON response, never traverse arbitrary host-provided context.
+      const serialized = JSON.stringify(remote);
+      if (remoteConfig.current !== serialized) { remoteConfig.current = serialized; setConfig(next); }
       void reportDeployment(panelActive && !disposed, next.enabled !== false);
       runtime.allowed(next.enabled !== false && next.telemetry !== false);
       if (next.enabled === false) { live?.stop(); threadSequence.current++; shotSequence.current++; setPicking(false); setHighlight(null); setReviewing(false); setShot(null); setCapturing(false); setNotice(t.disabled); setReady(false); setIssues([]); setDraft(null); setThread(null); dropChat(); capture.current?.stop(); capture.current = null; return; }
@@ -645,7 +657,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     }, [tracking, config]);
     useManagedEffect(() => {
       if (!marking || !ready) { setPins([]); away.current = new Map(); return; }
-      let frame = 0, debounce: ReturnType<typeof setTimeout>;
+      let frame = 0;
       let resolved: { issue: Issue; resolution: Resolution }[] = [];
       let cancelResolution = () => {};
       let resolving = false, refreshPending = false;
@@ -672,18 +684,21 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       const refresh = () => {
         if (resolving) { refreshPending = true; return; }
         resolving = true;
-        cancelResolution = frameBatch(issues, issue => ({ issue, resolution: resolve(issue.locators, document, api.environment === 'local') }), values => {
+        const resolveMarker = createResolver(api.environment === 'local');
+        cancelResolution = frameBatch(issues, issue => ({ issue, resolution: resolveMarker(issue.locators) }), values => {
           // From here the resolution can be reused: an edited entry may redraw the markers from it.
           resolved = values; resolving = false; repin.current = schedule; schedule();
           reportLocators(config.telemetry !== false, values, config.release);
           if (refreshPending) { refreshPending = false; refresh(); }
         });
       };
-      const observer = new MutationObserver(() => { schedule(); clearTimeout(debounce); debounce = setTimeout(refresh, 150); });
       const docs = documents();
-      docs.forEach(doc => { const target = doc.body ?? doc.documentElement; if (target) observer.observe(target, { childList: true, subtree: true, attributes: true }); doc.addEventListener('scroll', schedule, true); });
+      docs.forEach(doc => doc.addEventListener('scroll', schedule, true));
+      // Host apps explicitly opt in after replacing content without navigation.
+      // Ordinary DOM mutations, including typing, never initiate marker work.
+      window.addEventListener('tuix:refresh-markers', refresh);
       window.addEventListener('resize', schedule); refresh();
-      return () => { repin.current = () => {}; observer.disconnect(); cancelResolution(); cancelAnimationFrame(frame); clearTimeout(debounce); docs.forEach(doc => doc.removeEventListener('scroll', schedule, true)); window.removeEventListener('resize', schedule); };
+      return () => { repin.current = () => {}; cancelResolution(); cancelAnimationFrame(frame); docs.forEach(doc => doc.removeEventListener('scroll', schedule, true)); window.removeEventListener('resize', schedule); window.removeEventListener('tuix:refresh-markers', refresh); };
     }, [marking, ready, located.current, config]);
     // An edited entry (read, a newer turn) redraws the markers and card from the resolution already made.
     useManagedEffect(() => { repin.current(); }, [issues]);
@@ -730,6 +745,22 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       window.addEventListener('resize', follow);
       return () => { docs.forEach(doc => { doc.removeEventListener('click', tap, true); doc.removeEventListener('mousedown', hold, true); doc.removeEventListener('scroll', follow, true); }); window.removeEventListener('resize', follow); };
     }, [visible, picking, ready, touchPick]);
+    // A click on the page closes the sidebar, as Escape does. A comment being written is set aside with its
+    // element and text, as Settings does, and the launcher brings it back. Comment mode ignores the page: clicking
+    // it chooses the element. A chat window is not the sidebar and stays. Both the press and the click must land
+    // outside, so a text selection dragged out of the panel keeps it open.
+    useManagedEffect(() => {
+      if (!visible || picking) return;
+      let away = false;
+      const out = (event: Event) => !event.composedPath().includes(root.host);
+      const press = (event: Event) => {
+        if (event.type == 'pointerdown') away = out(event);
+        else if (away && out(event)) { away = false; clickedAway = true; try { draftRef.current && suspend() || close(); } finally { clickedAway = false; } }
+      };
+      const docs = documents(), types = ['pointerdown', 'click'];
+      docs.forEach(doc => types.forEach(type => doc.addEventListener(type, press, true)));
+      return () => docs.forEach(doc => types.forEach(type => doc.removeEventListener(type, press, true)));
+    }, [visible, picking]);
     // A suspended composer is hidden behind the settings flyout: Escape there closes only the flyout.
     useManagedEffect(() => {
       if (!visible) return;
@@ -792,7 +823,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     async function compose(element: Element) {
       if (!ready || config.enabled === false) return;
       const previous = reselecting.current; reselecting.current = null;
-      const next = { body: previous?.body ?? '', type: previous?.type ?? 'bug', severity: previous?.severity ?? '', locators: locate(element), key: previous?.key ?? uuid(), route, url: location.origin + location.pathname };
+      const next = { body: previous?.body ?? createTextBuffer(), type: previous?.type ?? 'bug', severity: previous?.severity ?? '', locators: locate(element), key: previous?.key ?? uuid(), route, url: location.origin + location.pathname };
       setDraft(next); setPicking(false); setThread(null); setShot(null); setError('');
       await captureShot(element);
     }
@@ -813,13 +844,15 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       catch { if (!disposed && sequence === shotSequence.current) runtime.error('screenshot'); /* Screenshot failure never blocks text feedback. */ }
       finally { if (timer) clearTimeout(timer); if (!disposed && sequence === shotSequence.current) setCapturing(false); }
     }
-    function editDraft(change: Partial<Draft>) { if (draft) { const value = { ...draft, ...change }; setDraft(value); } }
+    function editDraft(change: Partial<Draft>) { setDraft(value => value && { ...value, ...change }); }
     async function submit() {
-      if (!ready || config.enabled === false || !draft || busy || capturing || !draft.body.trim()) return;
+      if (!ready || config.enabled === false || !draft || busy || capturing) return;
+      const body = draft.body.current;
+      if (!body.trim()) return;
       const submittedActivation = activation;
       const submittedThread = ++threadSequence.current;
       setBusy(true); setError('');
-      const optimistic: Issue = { id: draft.key, number: 0, title: draft.body.split('\n')[0], status: 'sending', type: draft.type, severity: draft.severity, env_name: api.environment, url: draft.url, route_key: draft.route, locators: draft.locators, author: { name: identity.name }, comment_count: 0, inserted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const optimistic: Issue = { id: draft.key, number: 0, title: body.split('\n')[0], status: 'sending', type: draft.type, severity: draft.severity, env_name: api.environment, url: draft.url, route_key: draft.route, locators: draft.locators, author: { name: identity.name }, comment_count: 0, inserted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       setIssues(values => [optimistic, ...values]); setDraft(null); setNotice(t.sending);
       try {
         const attachments: string[] = [];
@@ -827,7 +860,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           const upload = await api.request<{ id: string; url: string; headers: Record<string, string> }>('/uploads', 'POST', { content_type: 'image/png', byte_size: shot.size });
           await api.upload(upload.url, upload.headers, shot); attachments.push(upload.id);
         }
-        const issue = await api.request<Issue>('/issues', 'POST', { body: draft.body, type: draft.type, severity: draft.type === 'bug' ? draft.severity || null : null, locators: draft.locators, route_key: draft.route, url: draft.url, idempotency_key: draft.key, release: config.release, widget_version: VERSION, environment: environment(config), ...capture.current?.snapshot(), attachments });
+        const issue = await api.request<Issue>('/issues', 'POST', { body, type: draft.type, severity: draft.type === 'bug' ? draft.severity || null : null, locators: draft.locators, route_key: draft.route, url: draft.url, idempotency_key: draft.key, release: config.release, widget_version: VERSION, environment: environment(config), ...capture.current?.snapshot(), attachments });
         if (disposed) return;
         if (submittedActivation === activation) runtime.submitted(performance.now() - activationStarted);
         if (submittedThread === threadSequence.current && submittedActivation === activation && panelActive) {
@@ -836,21 +869,22 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       } catch { if (!disposed) { if (submittedThread === threadSequence.current && submittedActivation === activation && panelActive) { setNotice(''); setDraft(draft); setError(t.error); } runtime.error('submit'); } }
       finally { if (!disposed) { setBusy(false); setNotice(value => value === t.sending ? '' : value); setIssues(values => values.filter(issue => issue.id !== optimistic.id)); } }
     }
-    async function replyToThread() {
-      if (!thread || busy || !reply.trim()) return;
-      const sequence = threadSequence.current, body = reply, pending = uuid(), picked = mentions, ids = mentionIds(body, picked);
-      setBusy(true); setError(''); setReply(''); setMentions([]);
-      const turn = thread.turn;
-      setThread(value => value && { ...value, turn: turnAfterReply(value), comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
+    async function replyToThread(choice?: TurnChoice) {
+      const body = reply.current;
+      if (!thread || busy || !body.trim()) return;
+      const sequence = threadSequence.current, pending = uuid(), picked = mentions, ids = mentionIds(body, picked);
+      setBusy(true); setError(''); reply.set(''); setMentions([]);
+      const turn = thread.turn, turnPerson = thread.turn_person;
+      setThread(value => value && { ...value, turn: turnAfterReply(value, choice), ...(turnAfterReply(value, choice) !== value.turn && { turn_person: undefined }), comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
       try {
         // Servers before mentions read only `body`; a reply without mentions sends nothing else.
-        await api.request('/issues/' + thread.id + '/comments', 'POST', ids.length ? { body, mentions: ids } : { body });
+        await api.request('/issues/' + thread.id + '/comments', 'POST', { body, ...(ids.length ? { mentions: ids } : {}), ...(choice ? { turn: choice } : {}) });
         if (!disposed && engaged() && sequence === threadSequence.current) void openThread(thread, false, null);
       } catch {
         if (!disposed && engaged() && sequence === threadSequence.current) {
-          setThread(value => value && { ...value, turn, comments: value.comments?.filter(comment => comment.id !== pending) });
+          setThread(value => value && { ...value, turn, turn_person: turnPerson, comments: value.comments?.filter(comment => comment.id !== pending) });
           // The picks come back with the text; pruning before the next send drops any the text no longer names.
-          setReply(value => value || body); setMentions(value => [...value, ...picked.filter(pick => !value.some(kept => kept.id === pick.id))]);
+          reply.set(reply.current || body); setMentions(value => [...value, ...picked.filter(pick => !value.some(kept => kept.id === pick.id))]);
           setError(t.replyError); runtime.error('reply');
         }
       } finally { if (!disposed) setBusy(false); }
@@ -996,7 +1030,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const logs = capture.current?.snapshot();
     /** Updates on your reports: five newest in an internal scroll, Mark all as read and the email switch. */
     const updatesSection = <section class="updates" aria-labelledby="tuix-updates-title">
-      <div class="updates-head"><h3 id="tuix-updates-title">{t.updates}</h3>{updates.length > 0 && <button type="button" class="text-button" data-action="read-updates" onClick={() => void readAllUpdates()}>{t.markAllRead}</button>}</div>
+      <div class="updates-head"><h3 id="tuix-updates-title">{t.notifications}</h3>{updates.length > 0 && <button type="button" class="text-button" data-action="read-updates" onClick={() => void readAllUpdates()}>{t.markAllRead}</button>}</div>
+      <p class="muted">{t.updates}</p>
       {updates.length ? <ul class="update-list">{updates.slice(0, 5).map(update => {
         const label = t.updateKinds[update.state_kind ?? ''] ?? t.updateKinds[normalizeState(update.kind)] ?? statusLabel(update.issue?.state ?? update.issue?.status ?? '', initial.lang);
         const title = update.issue ? `#${update.issue.number} ${update.issue.title}` : t.updateUnavailable;
@@ -1030,14 +1065,14 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const reporter = !!(thread?.reporter ?? thread?.own);
     // Fixer powers: the fixer, or anyone allowed to be one on an unassigned report (Start assigns them first).
     const takeable = !!thread?.can_be_fixer && !closedThread && (!!thread.fixer || !thread.assignee);
-    // The server's allowed states decide, on finished reports too (a reporter may still close a Done report). Fixer
-    // states also need can_be_fixer: an unsigned session may be the assignee, but the server refuses its fixer actions (§5).
+    // The server's allowed states decide, on finished reports too (a reporter may still close a Done report; a fixer
+    // may close a report that will not be fixed, saying why in a reply). Fixer states also need can_be_fixer: an unsigned session may be the assignee, but the server refuses its fixer actions (§5).
     const may = (next: State) => !!thread && next !== threadState && (fixerStates.includes(next) ? !!thread.can_be_fixer && (allowed.has(next) || takeable) : allowed.has(next));
     // The reporter decides a report in review in the verification block, which can attach a new screenshot.
     const verifying = threadState === 'in_review' && reporter && (may('done') || may('open'));
-    const actions = ([['done', t.actionDone], ['closed', t.actionClose], ['open', threadState === 'in_review' ? t.stillBroken : t.actionReopen], ['in_progress', t.actionStart], ['in_review', t.actionReview], ['wont_fix', t.actionWontFix]] as [State, string][])
+    const actions = ([['done', t.actionDone], ['open', threadState === 'in_review' ? t.stillBroken : t.actionReopen], ['in_progress', t.actionStart], ['in_review', t.actionReview], ['closed', t.actionClose]] as [State, string][])
       .filter(([next]) => may(next) && !(verifying && (next === 'done' || next === 'open')) && (next !== 'open' || threadState === 'in_review' || closedThread));
-    const needsNote = (next: State) => next === 'wont_fix' || (next === 'open' && threadState === 'in_review');
+    const needsNote = (next: State) => next === 'open' && threadState === 'in_review';
     const canAssign = !!thread?.can_be_fixer && !thread.fixer && !thread.assignee?.me && !closedThread;
     const canFix = !!thread && api.environment === 'local' && takeable && (threadState === 'open' || threadState === 'in_progress') && !fixPending(thread);
     /** A marker or its hover card was chosen: the report opens in a chat window, or in the sidebar where there is no room (people-and-statuses §7 item 16). */
@@ -1118,7 +1153,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           {!chat && loading && <p role="status">{t.loading}</p>}
           {/* Hosts without a launcher have no flyout, so their updates stay at the top of Reports. */}
           {!panelThread && ready && !slot && (updates.length > 0 || emailPreference?.email_available) && updatesSection}
-          {!panelThread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} hideClosed={preferences.hideClosed} involving={shown.involving} onInvolvingChange={involving => savePreferences(initial.project, { involving })} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : located.current}/>}
+          {!panelThread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} onScopeChange={scope => savePreferences(initial.project, { scope })} involving={shown.involving} onInvolvingChange={involving => savePreferences(initial.project, { involving })} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : located.current}/>}
           {panelThread && <><button onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
             <p class="muted">#{panelThread.number} · {panelThread.author.name} · {panelThread.env_name}</p>
             <p class="report-kind">{t[panelThread.type as 'bug'] ?? panelThread.type}{panelThread.severity ? ` · ${t[panelThread.severity as 'major'] ?? panelThread.severity}` : ''}</p>
@@ -1146,8 +1181,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
             {!reviewing && !pendingState && actions.length > 0 && <div class="thread-actions">{actions.map(([next, label]) =>
               <button type="button" key={next} data-state-action={next} disabled={busy} onClick={() => { if (needsNote(next)) { setPendingState(next); setStateNote(''); setError(''); } else void changeState(next); }}>{label}</button>)}</div>}
             {pendingState && <form class="state-note" onSubmit={event => { event.preventDefault(); if (stateNote.trim()) void changeState(pendingState, stateNote); }}>
-              <label>{pendingState === 'wont_fix' ? t.wontFixNote : t.reviewNote}<textarea value={stateNote} onInput={event => setStateNote(event.currentTarget.value)} required maxLength={2000} disabled={busy}/></label>
-              <div class="verification-actions"><button type="button" disabled={busy} onClick={() => { setPendingState(null); setStateNote(''); focusState(); }}>{t.cancel}</button><button type="submit" class="primary" disabled={busy || !stateNote.trim()}>{pendingState === 'wont_fix' ? t.actionWontFix : t.stillBroken}</button></div>
+              <label>{t.reviewNote}<textarea value={stateNote} onInput={event => setStateNote(event.currentTarget.value)} required maxLength={2000} disabled={busy}/></label>
+              <div class="verification-actions"><button type="button" disabled={busy} onClick={() => { setPendingState(null); setStateNote(''); focusState(); }}>{t.cancel}</button><button type="submit" class="primary" disabled={busy || !stateNote.trim()}>{t.stillBroken}</button></div>
             </form>}
             {canFix && <details class="fix-tools">
               <summary>{t.markFixed}</summary>
@@ -1175,8 +1210,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
                 </form>
               </details>
             </div>}
-            {!reviewing && !closedThread && <ReplyForm api={api} thread={panelThread} t={t} value={reply} onValue={setReply} busy={busy}
-              picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])} escape={mentionEscape} onSubmit={() => void replyToThread()}/>}
+            {!reviewing && !closedThread && <ReplyForm api={api} thread={panelThread} t={t} buffer={reply} busy={busy}
+              picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])} escape={mentionEscape} onSubmit={choice => void replyToThread(choice)}/>}
           </>}
         </div>
       </section>}
@@ -1189,7 +1224,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
               reselecting.current = draft; shotSequence.current++; setShot(null); setCapturing(false); setDraft(null); setPicking(true);
             }}>{t.changeElement}</button>
           </div>
-          <label>{t.body}<textarea value={draft.body} onInput={event => editDraft({ body: event.currentTarget.value })} required maxLength={2000} disabled={busy}/></label>
+          <label>{t.body}<ReportText buffer={draft.body} disabled={busy}/></label>
           <div class="form-row"><label>{t.type}<select value={draft.type} onChange={event => editDraft({ type: event.currentTarget.value })} disabled={busy}>{(['bug','ux','question','idea'] as const).map(type => <option value={type}>{t[type]}</option>)}</select></label>{draft.type === 'bug' && <label>{t.severity}<select value={draft.severity} onChange={event => editDraft({ severity: event.currentTarget.value })} disabled={busy}><option value="">{t.optional}</option>{(['blocking','major','minor'] as const).map(level => <option value={level}>{t[level]}</option>)}</select></label>}</div>
           <section class="composer-evidence">
             <h3>{t.screenshot}</h3>
@@ -1206,8 +1241,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       </section>}
       {chat && chatPlace && <ChatWindow t={t} lang={initial.lang} api={api} issue={chatPin?.issue ?? chat} thread={chatThread} state={chatState} turn={chatTurn} tone={pinState(chatState)} place={chatPlace} windowRef={chatEl}
         gone={!chatPin && !chatAway && !terminal.includes(chatState)} moved={!!chatPin?.orphan} loading={loading} error={error} notice={notice} busy={busy} closed={closedThread}
-        expanded={expanded} onExpand={() => { holdChatFocus(); setExpanded(true); }} reply={reply} onReply={setReply} picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])}
-        escape={mentionEscape} onSend={() => { holdChatFocus(); void replyToThread(); }}
+        expanded={expanded} onExpand={() => { holdChatFocus(); setExpanded(true); }} reply={reply} picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])}
+        escape={mentionEscape} onSend={choice => { holdChatFocus(); void replyToThread(choice); }}
         verify={chatThread && verifying ? { works: may('done'), broken: may('open'), reviewing, note: reviewNote, onNote: setReviewNote, onWorks: () => { holdChatFocus(); void verifyThread('works'); }, onBroken: () => { holdChatFocus(); startReview(); }, onCancel: () => { holdChatFocus(); cancelReview(); }, onSend: () => { holdChatFocus(); void verifyThread('broken'); } } : null}
         onRetry={() => void openThread(chat, true, null, true)} onFull={fullThread} onClose={() => closeChat()}/>}
     </div>;

@@ -211,6 +211,7 @@ async function attempt(target: Element, accent: string, mode: Mode, deadline: nu
   const marked = target.ownerDocument === document && target !== document.body && target !== root;
   let seen = null as { box: DOMRect; scroll: { x: number; y: number } } | null, kept: Blob | null = null;
   const before = new WeakMap<Element, string>();
+  let lastYield = performance.now();
   let context: Context<HTMLElement> | undefined;
   const work = (async () => {
     context = await createContext(root, {
@@ -235,9 +236,32 @@ async function attempt(target: Element, accent: string, mode: Mode, deadline: nu
         const element = node as Element;
         return !element.closest('tuix-widget') && !element.parentElement?.closest(privateSelector);
       },
-      onCloneEachNode(cloned) {
+      async onCloneEachNode(cloned) {
         const transform = (cloned as HTMLElement).style?.transform;
         if (transform) before.set(cloned as Element, transform);
+        // The renderer otherwise chains microtasks for the entire document.
+        // A timeout budget cannot interrupt that chain, nor can keyboard input.
+        // Yield a browser task between short batches, keeping the same deadline.
+        if (performance.now() - lastYield >= 8) {
+          // The library creates its style sandbox synchronously, then navigates
+          // it to srcdoc. Let that navigation finish before resuming style reads:
+          // halfway through navigation the iframe document has no body.
+          const sandbox = context?.sandbox;
+          if (sandbox && (sandbox.contentDocument?.URL !== 'about:srcdoc' || sandbox.contentDocument.readyState !== 'complete')) {
+            await new Promise<void>(resolve => {
+              const done = () => {
+                sandbox.removeEventListener('load', done);
+                abort.signal.removeEventListener('abort', done);
+                resolve();
+              };
+              sandbox.addEventListener('load', done, { once: true });
+              abort.signal.addEventListener('abort', done, { once: true });
+              if (abort.signal.aborted) done();
+            });
+          }
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+          lastYield = performance.now();
+        }
       },
       onCloneNode(cloned) {
         if (performance.now() > deadline) throw new Error('Screenshot timeout');

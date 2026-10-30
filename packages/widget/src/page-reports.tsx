@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState, useId } from 'preact/hooks';
 import type { Api } from './api';
 import type { Issue } from './types';
 import { translations, statusLabel } from './i18n';
@@ -27,23 +27,26 @@ export function InvolvingFilter({ involving, onChange, lang }: {
   </fieldset>;
 }
 
-/** Show: Open (open and in progress), To verify (in review) or All. */
+/** A single status choice: All reports always includes finished reports. */
 export function ReportFilter({ show, onChange, lang }: {
   show: Show; onChange: (value: Show) => void; lang?: 'en' | 'pl';
 }) {
-  const t = translations(lang);
-  return <fieldset class="report-filter segmented" data-filter="show">
-    <legend>{t.show}</legend>
-    {([['open', t.statusOpen], ['verify', t.statusVerify], ['all', t.statusAll]] as const).map(([value, label]) =>
-      <button type="button" key={value} data-value={value} aria-pressed={show === value} onClick={() => onChange(value)}>{label}</button>)}
-  </fieldset>;
+  const t = translations(lang), id = useId();
+  const help = show === 'finished' ? t.finishedHelp : show === 'unresolved' ? t.unresolvedHelp : '';
+  return <div class="report-filter report-status" data-filter="show">
+    <label for={id}>{t.status}</label>
+    <select id={id} value={show} aria-describedby={help ? id + '-help' : undefined} onChange={event => onChange(event.currentTarget.value as Show)}>
+      {([['unresolved', t.statusUnresolved], ['open', t.statusActive], ['verify', t.statusReady], ['finished', t.statusFinished], ['all', t.statusEverything]] as const).map(([value, label]) =>
+        <option key={value} value={value}>{label}</option>)}
+    </select>
+    {help && <p id={id + '-help'} class="filter-help">{help}</p>}
+  </div>;
 }
 
-export function PageReports({ api, environments, lang, route, pageUrl, show, onShowChange, hideClosed = true, involving = 'everyone', onInvolvingChange, onOpen, refreshKey }: {
+export function PageReports({ api, environments, lang, route, pageUrl, show, onShowChange, onScopeChange, involving = 'everyone', onInvolvingChange, onOpen, refreshKey }: {
   api: Pick<Api, 'request'>; environments: string; lang?: 'en' | 'pl';
   route?: string; pageUrl?: string; show: Show; onShowChange: (value: Show) => void;
-  /** Settings' Hide closed: Show: All leaves out Done, Won't fix and Closed reports. */
-  hideClosed?: boolean;
+  onScopeChange?: (value: 'page' | 'all') => void;
   involving?: Involving; onInvolvingChange?: (value: Involving) => void;
   onOpen?: (issue: Issue) => void; refreshKey?: unknown;
 }) {
@@ -61,7 +64,7 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
       const query = new URLSearchParams({
         ...(route === undefined ? { scope: 'all' } : { route_key: route }),
         ...(route !== undefined && pageUrl ? { page_url: pageUrl } : {}),
-        show: showQuery(show, hideClosed), involving, ...(environments ? { environments } : {}),
+        show: showQuery(show), involving, ...(environments ? { environments } : {}),
         ...(before ? { before: String(before) } : {}),
       });
       const result = await api.request<{ issues: Issue[]; next_before: number | null }>('/issues?' + query);
@@ -72,7 +75,7 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
     finally { if (current === generation.current) { pending.current = false; setLoading(false); } }
   }
   useEffect(() => {
-    const current = [api, environments, route, pageUrl, show, hideClosed, involving];
+    const current = [api, environments, route, pageUrl, show, involving];
     const sameSelection = current.every((value, index) => value === selection.current[index]);
     selection.current = current;
     generation.current++; pending.current = false;
@@ -81,7 +84,7 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
     if (!sameSelection) { setIssues([]); setNext(null); }
     void load(undefined, sameSelection && issues.length > 0);
     return () => { generation.current++; };
-  }, [api, environments, route, pageUrl, show, hideClosed, involving, refreshKey]);
+  }, [api, environments, route, pageUrl, show, involving, refreshKey]);
   const pages = new Map<string, Issue[]>();
   for (const issue of issues) {
     const key = issue.url ?? issue.route_key ?? '';
@@ -89,6 +92,11 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
   }
   return <div class="page-reports">
     <div class="report-filters">
+      {onScopeChange && <fieldset class="report-filter segmented" data-filter="scope">
+        <legend>{t.pages}</legend>
+        <button type="button" data-value="page" aria-pressed={route !== undefined} onClick={() => onScopeChange('page')}>{t.thisPage}</button>
+        <button type="button" data-value="all" aria-pressed={route === undefined} onClick={() => onScopeChange('all')}>{t.allPages}</button>
+      </fieldset>}
       <ReportFilter show={show} onChange={onShowChange} lang={lang}/>
       {onInvolvingChange && <InvolvingFilter involving={involving} onChange={onInvolvingChange} lang={lang}/>}
     </div>

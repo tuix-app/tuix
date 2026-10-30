@@ -3,6 +3,8 @@ import { MentionField, CommentText, type Mention, type EscapeRef } from './menti
 import type { Api } from './api';
 import type { translations } from './i18n';
 import type { Issue } from './types';
+import type { TextBuffer } from './text-buffer';
+import type { TurnChoice } from './states';
 
 /** Pieces of a report's thread that the side panel and the anchored chat window share, so the two cannot drift apart. */
 type T = ReturnType<typeof translations>;
@@ -15,14 +17,20 @@ export function ThreadComments({ comments, lang, t }: { comments: NonNullable<Is
 }
 
 interface ReplyProps {
-  api: Pick<Api, 'request'>; thread: Pick<Issue, 'id' | 'can_mention'>; t: T; value: string; onValue: (value: string) => void; busy: boolean;
-  picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef; onSubmit: () => void;
+  api: Pick<Api, 'request'>; thread: Pick<Issue, 'id' | 'can_mention' | 'fixer' | 'can_be_fixer' | 'reporter'>; t: T; buffer: TextBuffer; busy: boolean;
+  picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef; onSubmit: (turn?: TurnChoice) => void;
 }
-/** The reply form: the mention-aware textarea and Reply. Sending, the pending comment and the restore on failure stay with the owner of the thread. */
-export function ReplyForm({ api, thread, t, value, onValue, busy, picks, onPick, escape, onSubmit }: ReplyProps) {
-  return <form onSubmit={event => { event.preventDefault(); onSubmit(); }}>
-    <MentionField key={thread.id} api={api} issue={thread.id} enabled={!!thread.can_mention} label={t.replyLabel} t={t} value={value} onValue={onValue}
-      picks={picks} onPick={onPick} escape={escape}/><button type="submit" class="primary" disabled={busy}>{t.reply}</button></form>;
+/**
+ * The reply form: the mention-aware textarea and Reply. A signed fixer who is not the reporter chooses the turn instead: Reply & pass
+ * (primary, hands it to the reporter) or Reply (keeps it). Sending, the pending comment and the restore on failure stay with the owner of the thread.
+ */
+export function ReplyForm({ api, thread, t, buffer, busy, picks, onPick, escape, onSubmit }: ReplyProps) {
+  const choosing = !!(thread.fixer && thread.can_be_fixer && !thread.reporter);
+  return <form onSubmit={event => { event.preventDefault(); onSubmit(choosing ? 'reporter' : undefined); }}>
+    <MentionField key={thread.id} api={api} issue={thread.id} enabled={!!thread.can_mention} label={t.replyLabel} t={t} buffer={buffer}
+      picks={picks} onPick={onPick} escape={escape}/>{choosing
+      ? <div class="reply-actions"><button type="button" data-turn="keep" title={t.replyKeepHint} aria-label={`${t.reply}: ${t.replyKeepHint}`} disabled={busy} onClick={() => onSubmit('keep')}>{t.reply}</button><button type="submit" class="primary" data-turn="reporter" title={t.replyPassHint} aria-label={`${t.replyPass}: ${t.replyPassHint}`} disabled={busy}>{t.replyPass}</button></div>
+      : <button type="submit" class="primary" disabled={busy}>{t.reply}</button>}</form>;
 }
 
 interface VerifyProps {

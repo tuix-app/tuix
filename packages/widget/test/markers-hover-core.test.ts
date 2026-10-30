@@ -308,7 +308,7 @@ it('does not resolve the markers again when a report is read, and still redraws 
   enter(root.querySelector('.pin')!); await wait(250);
   expect(card(root)!.querySelector('.unread-dot')).not.toBeNull();
   leave(root.querySelector('.pin')!); await wait(250);
-  // Reading acknowledges the report. Neither the list nor the settings (a new settings object re-resolves too) are read again before the card is drawn.
+  // Reading acknowledges the report without waiting for list/settings responses.
   mock.request.mockImplementation(async (path: string) => {
     if (path === '/config') return new Promise(() => {});
     if (path.startsWith('/issues?')) return new Promise(() => {});
@@ -325,18 +325,21 @@ it('does not resolve the markers again when a report is read, and still redraws 
   expect(card(root)!.querySelector('.unread-dot')).toBeNull();
 });
 
-it('keeps every marker while the list is fetched again and resolved over several frames', async () => {
+it('ignores an identical list response and keeps markers visible throughout an explicit refresh', async () => {
   const reports = Array.from({ length: 12 }, (_, index) => report(index + 1)), boxes: Record<number, Box> = {};
   for (const { number } of reports) boxes[number] = [20 + number * 30, 100, 20, 20];
   const { root } = await page(reports, boxes);
   expect(root.querySelectorAll('.pin').length).toBe(12);
-  // Each list answer carries fresh locator objects, so the markers are resolved again; more than a frame batch (8) of reports takes more than one frame. The settings stay as they were, so nothing else restarts the resolution.
+  // Fresh response objects are not new locators. Only the explicit event below
+  // should resolve again; 12 reports take more than one frame batch (8).
   mock.request.mockImplementation(async (path: string) => path.startsWith('/issues?') ? { issues: structuredClone(reports) } : path === '/config' ? new Promise(() => {}) : { notifications: [] });
   vi.mocked(frameBatch).mockClear();
   const counts: number[] = [];
-  await wait(55_000);
-  for (let elapsed = 0; elapsed < 12_000; elapsed += 4) { await wait(4); counts.push(root.querySelectorAll('.pin').length); }
-  expect(frameBatch).toHaveBeenCalled();
+  await wait(60_100);
+  expect(frameBatch).not.toHaveBeenCalled();
+  window.dispatchEvent(new Event('tuix:refresh-markers'));
+  for (let elapsed = 0; elapsed < 100; elapsed += 4) { await wait(4); counts.push(root.querySelectorAll('.pin').length); }
+  expect(frameBatch).toHaveBeenCalledOnce();
   expect(Math.min(...counts)).toBe(12);
 });
 

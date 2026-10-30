@@ -187,12 +187,19 @@ it('opens the full thread in the sidebar with what the window loaded, without an
   const { root } = await page([report(7)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
   mock.request.mockClear(); mock.panel.mockClear();
+  typeIn(reply(root), 'Keep typing across views');
   button(win(root)!, 'Open full thread').click(); await wait(200);
   expect(win(root)).toBeNull();
   expect(root.querySelector('.panel .thread-body')?.textContent).toBe('Body 7');
   expect([...root.querySelectorAll('.panel .comment p')].map(item => item.textContent)).toEqual(['Reply 1', 'Reply 2']);
   expect(mock.panel).toHaveBeenLastCalledWith(true);
   expect(calls('/issues/issue-7')).toHaveLength(0);
+  const field = root.querySelector<HTMLTextAreaElement>('.panel .mention-field textarea')!;
+  expect(field.value).toBe('Keep typing across views');
+  typeIn(field, 'Keep typing across views, including this final character');
+  field.form!.requestSubmit();
+  expect(calls('/issues/issue-7/comments')[0][2]).toEqual({ body: 'Keep typing across views, including this final character' });
+  await wait(200);
 });
 
 it('sends a reply with an optimistic comment and refreshes the thread', async () => {
@@ -375,12 +382,15 @@ it('follows the element on scroll and resize, flips to the left near the right e
   expect(win(root)!.dataset.side).toBe('above');
 });
 
-it('stays where it was and says so when the element leaves the page', async () => {
+it('detects a detached element on the next resize and keeps its conversation usable', async () => {
   const { root } = await page([report(7)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
   const at = { left: win(root)!.style.left, top: win(root)!.style.top };
   expect(win(root)!.querySelector('.chat-moved')).toBeNull();
   document.querySelector('[data-testid="t7"]')!.remove(); await wait(400);
+  // Host mutations are not observed; the next positioning event notices removal.
+  expect(root.querySelector('.pin')).not.toBeNull();
+  window.dispatchEvent(new Event('resize')); await wait(50);
   expect(root.querySelector('.pin')).toBeNull();
   expect(win(root)).not.toBeNull();
   expect(win(root)!.style.left).toBe(at.left);

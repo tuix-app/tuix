@@ -2,11 +2,12 @@
  * Report states (people-and-statuses §5). Servers send `state`; older servers only the legacy `status`, which
  * the widget still reads so lists and markers show. Actions are not backfilled: they need a §6 server.
  */
-export type State = 'open' | 'in_progress' | 'in_review' | 'done' | 'wont_fix' | 'closed';
-const legacy: Record<string, State> = { acknowledged: 'in_progress', fixed_awaiting_deploy: 'in_progress', awaiting_verification: 'in_review', resolved: 'done' };
+export type State = 'open' | 'in_progress' | 'in_review' | 'done' | 'closed';
+/** Older names; Won't fix merged into Closed. */
+const legacy: Record<string, State> = { acknowledged: 'in_progress', fixed_awaiting_deploy: 'in_progress', awaiting_verification: 'in_review', resolved: 'done', wont_fix: 'closed' };
 /** Markers and "open" counts. */
 export const unresolved: readonly string[] = ['open', 'in_progress', 'in_review'];
-export const terminal: readonly string[] = ['done', 'wont_fix', 'closed'];
+export const terminal: readonly string[] = ['done', 'closed'];
 /** Maps either vocabulary to the new one; unknown values (such as the optimistic `sending`) pass through. */
 export function normalizeState(value?: string | null): string { return legacy[value ?? ''] ?? value ?? ''; }
 export function stateOf(issue: { state?: string | null; status?: string }): string { return issue.state ? issue.state : normalizeState(issue.status); }
@@ -21,10 +22,14 @@ export function turnOf(issue: { turn?: string | null }): Turn | null { return is
 /**
  * The turn once the viewer's reply is in, before the server confirms it: the same rule as the server's. A reporter's reply hands the report
  * to the team; a fixer's to the reporter; anyone else's counts as "someone else" and leaves it with the team. In review and finished
- * reports keep theirs, and so does a server without turns.
+ * reports keep theirs, and so does a server without turns. A fixer's explicit choice (§5) wins: `keep` leaves the turn where it is,
+ * `reporter` hands it to the reporter; no choice follows the rule above.
  */
-export function turnAfterReply(issue: { turn?: Turn | null; reporter?: boolean; fixer?: boolean }): Turn | null | undefined {
+export type TurnChoice = 'reporter' | 'keep';
+export function turnAfterReply(issue: { turn?: Turn | null; reporter?: boolean; fixer?: boolean }, choice?: TurnChoice): Turn | null | undefined {
   if (issue.turn !== 'team' && issue.turn !== 'reporter') return issue.turn;
+  if (choice === 'keep') return issue.turn;
+  if (choice === 'reporter') return 'reporter';
   return !issue.reporter && issue.fixer ? 'reporter' : 'team';
 }
 export function fixPending(issue: { fix_pending?: boolean; status?: string }): boolean { return issue.fix_pending ?? issue.status === 'fixed_awaiting_deploy'; }

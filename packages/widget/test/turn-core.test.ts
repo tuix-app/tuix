@@ -111,6 +111,14 @@ it('hands the turn over when the viewer replies, by the same rule as the server'
   expect(turnAfterReply({ reporter: true })).toBeUndefined();
 });
 
+it('lets the fixer choose: keep leaves the turn, reporter hands it over, verify and finished stay', () => {
+  expect(turnAfterReply({ turn: 'team', fixer: true }, 'keep')).toBe('team');
+  expect(turnAfterReply({ turn: 'reporter', fixer: true }, 'keep')).toBe('reporter');
+  expect(turnAfterReply({ turn: 'team', fixer: true }, 'reporter')).toBe('reporter');
+  expect(turnAfterReply({ turn: 'reporter', fixer: true }, 'reporter')).toBe('reporter');
+  for (const choice of ['keep', 'reporter'] as const) { expect(turnAfterReply({ turn: 'verify', fixer: true }, choice)).toBe('verify'); expect(turnAfterReply({ turn: null, fixer: true }, choice)).toBeNull(); expect(turnAfterReply({ fixer: true }, choice)).toBeUndefined(); }
+});
+
 /** Answers from copies, as a server does: the widget never holds the object the test changes. */
 const served = (stored: Report) => (path: string) => path.startsWith('/issues?') ? { issues: [structuredClone(stored)] } : path === '/issues/' + stored.id ? structuredClone(stored) : undefined;
 const hover = async (root: ShadowRoot) => { dots(root)[0].dispatchEvent(new Event('pointerenter')); await wait(400); return root.querySelector<HTMLElement>('.hover-card'); };
@@ -216,4 +224,64 @@ it('hands the turn over at once when the reporter replies, and takes it back if 
   // The hover card follows the thread once the window is closed.
   escape(); await wait(100);
   expect((await hover(root))!.querySelector('.turn')?.textContent).toBe('The team is on it');
+});
+
+const comments = () => calls('/issues/issue-7/comments').filter(([, method]) => method === 'POST');
+const fixerView = { turn: 'team', reporter: false, fixer: true, can_be_fixer: true, turn_person: 'member:abc' };
+
+it('gives a signed fixer Reply & pass and Reply, each sending its choice and moving the turn', async () => {
+  for (const [label, turn, line] of [['Reply & pass', 'reporter', 'Waiting for the reporter'], ['Reply', 'keep', 'Your turn']] as const) {
+    const stored: Report & { turn?: string | null } = report(7, fixerView);
+    const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: (path, method, body) => { if (path === '/issues/issue-7/comments' && method === 'POST') { if ((body as { turn?: string }).turn === 'reporter') stored.turn = 'reporter'; return { id: 'c3' }; } return served(stored)(path); } });
+    dots(root)[0].click(); await wait(200);
+    const form = reply(root).closest('form')!;
+    expect([...form.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Reply', 'Reply & pass']);
+    expect(button(form, 'Reply & pass').classList.contains('primary')).toBe(true);
+    expect(button(form, 'Reply & pass').title).toMatch(/hand the turn to the reporter/);
+    expect(button(form, 'Reply').title).toMatch(/keep the turn/);
+    typeIn(reply(root), 'Looking'); await wait(10);
+    button(form, label).click(); await wait(5);
+    // Before the server answers, and after it has.
+    expect(win(root)!.querySelector('header .turn')?.textContent).toBe(line);
+    await wait(200);
+    expect(win(root)!.querySelector('header .turn')?.textContent).toBe(line);
+    expect(comments()).toHaveLength(1);
+    expect(comments()[0][2]).toEqual({ body: 'Looking', turn });
+    core!.destroy(); core = undefined; document.body.replaceChildren(); localStorage.clear(); mock.request.mockReset();
+  }
+});
+
+it('Reply & pass is what submitting the form does for a fixer', async () => {
+  const stored: Report & { turn?: string | null } = report(7, fixerView);
+  const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: served(stored) });
+  dots(root)[0].click(); await wait(200);
+  typeIn(reply(root), 'Done here'); await submit(root);
+  expect(comments()[0][2]).toEqual({ body: 'Done here', turn: 'reporter' });
+});
+
+it('restores the turn and who holds it when a fixer\'s reply fails', async () => {
+  let release: () => void = () => {};
+  const stored: Report & { turn?: string | null } = report(7, fixerView);
+  const { root } = await page([stored], { 7: [100, 200, 40, 20] }, {
+    handler: (path, method) => path === '/issues/issue-7/comments' && method === 'POST' ? new Promise((_, reject) => { release = () => reject(Object.assign(new Error('offline'), { status: 500 })); }) : served(stored)(path),
+  });
+  dots(root)[0].click(); await wait(200);
+  typeIn(reply(root), 'Soon'); await wait(10);
+  button(win(root)!, 'Reply & pass').click(); await wait(5);
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Waiting for the reporter');
+  release(); await wait(200);
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Your turn');
+  expect(win(root)!.querySelector('[role="alert"]')?.textContent).toContain('Could not send your reply');
+});
+
+it('keeps the single Reply for the reporter, other viewers and a fixer who cannot be one, with no turn sent', async () => {
+  for (const view of [{ turn: 'reporter', reporter: true, fixer: false }, { turn: 'team', reporter: false, fixer: false }, { turn: 'team', reporter: true, fixer: true, can_be_fixer: true }, { turn: 'team', reporter: false, fixer: true }, { turn: 'team' }]) {
+    const stored: Report & { turn?: string | null } = report(7, view);
+    const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: served(stored) });
+    dots(root)[0].click(); await wait(200);
+    expect([...reply(root).closest('form')!.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Reply']);
+    typeIn(reply(root), 'Hi'); await submit(root);
+    expect(comments()[0][2]).toEqual({ body: 'Hi' });
+    core!.destroy(); core = undefined; document.body.replaceChildren(); localStorage.clear(); mock.request.mockReset();
+  }
 });

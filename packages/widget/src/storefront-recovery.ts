@@ -36,7 +36,7 @@ export function mountStorefrontRecovery(config: Pick<StorefrontBoot, 'project' |
   const root = host.attachShadow({ mode: 'closed' }); isolateKeys(root);
   const style = document.createElement('style');
   if (config.nonce) style.nonce = config.nonce;
-  style.textContent = tokenCss + css + ".tuix-app .review-launcher{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:44px;min-height:44px;height:44px;padding:0;border-radius:50%;font:700 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:-.04em;box-shadow:0 12px 28px -10px rgba(0,0,0,.55),0 0 22px 2px var(--tx-glow)}.tuix-app .review-message{margin-top:16px}.tuix-app .review-message.error{color:var(--tx-err)}";
+  style.textContent = tokenCss + css + ".tuix-app .review-launcher{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:44px;min-height:44px;height:44px;padding:0;border-radius:50%;font:600 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:0;box-shadow:0 12px 28px -10px rgba(0,0,0,.55)}.tuix-app .review-message{margin-top:16px}.tuix-app .review-message.error{color:var(--tx-err)}";
   const fonts: FontFace[] = [];
   if (typeof FontFace !== 'undefined') {
     for (const url of [fontUrl, fontExtendedUrl]) {

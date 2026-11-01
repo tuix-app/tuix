@@ -80,5 +80,164 @@
         "hash": "ca6e750e1b8ca60d2b17dd3f0a5cd7a590666a20c8543ee39ba30054c3a1030b"
       }
     }
+  ],
+  "v3_cases": [
+    {
+      "label": "v3 signs id, email, group and group name",
+      "user": {
+        "id": 42,
+        "name": "Ada",
+        "email": "  ADA@example.com  ",
+        "group": "acme",
+        "group_name": "Acme Inc"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "email": "ada@example.com",
+        "group": "acme",
+        "group_name": "Acme Inc",
+        "hash": "cbb51249813e47579ec97ba975a8bd902d774cdf1d2610efa4fd19b09fce53c8"
+      }
+    },
+    {
+      "label": "v3 without email or group name",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": "acme"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "group": "acme",
+        "hash": "1fb637c9c29ca41ffb7e4409ab00730415d22f4aa9108e0d69ebf2b86434ca39"
+      }
+    },
+    {
+      "label": "v3 with an email and no group name",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "email": "ada@example.com",
+        "group": "acme"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "email": "ada@example.com",
+        "group": "acme",
+        "hash": "bae4fd62e5a84fd4f1c72fe12ced4a005158b73bc7007243abcc4c9ac68cc986"
+      }
+    },
+    {
+      "label": "v3 integer ID and null group name",
+      "user": {
+        "id": 42,
+        "name": "Ada",
+        "group_name": null,
+        "group": "acme"
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "group": "acme",
+        "hash": "1fb637c9c29ca41ffb7e4409ab00730415d22f4aa9108e0d69ebf2b86434ca39"
+      }
+    },
+    {
+      "label": "v3 UTF-8 group and group name",
+      "user": {
+        "id": "użytkownik-猫",
+        "name": "Żaneta",
+        "email": "zaneta@example.com",
+        "group": "firma-猫",
+        "group_name": "Zażółć Sp. z o.o."
+      },
+      "signed": {
+        "id": "użytkownik-猫",
+        "name": "Żaneta",
+        "email": "zaneta@example.com",
+        "group": "firma-猫",
+        "group_name": "Zażółć Sp. z o.o.",
+        "hash": "ada03940e3e9b68922cf8b94651284d23ebfe9be2522502d52b5c7b5ddc48a54"
+      }
+    },
+    {
+      "label": "v3 keeps the exact group, spaces included",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": " Acme ",
+        "group_name": " Acme Inc "
+      },
+      "signed": {
+        "id": "42",
+        "name": "Ada",
+        "group": " Acme ",
+        "group_name": " Acme Inc ",
+        "hash": "99b94420bdd2a34cb1d8c917becdb157a23efee38598367bf91963ca42bf259c"
+      }
+    }
+  ],
+  "v3_rejected": [
+    {
+      "label": "newline in the id",
+      "user": {
+        "id": "4\n2",
+        "name": "Ada",
+        "group": "acme"
+      }
+    },
+    {
+      "label": "empty group",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": ""
+      }
+    },
+    {
+      "label": "control character in the group",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": "ac\tme"
+      }
+    },
+    {
+      "label": "control character in the group name",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": "acme",
+        "group_name": "Ac\nme"
+      }
+    },
+    {
+      "label": "group longer than 200 bytes",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+    },
+    {
+      "label": "group name longer than 200 bytes",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group": "acme",
+        "group_name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+    },
+    {
+      "label": "group name without a group",
+      "user": {
+        "id": "42",
+        "name": "Ada",
+        "group_name": "Acme"
+      }
+    }
   ]
 }

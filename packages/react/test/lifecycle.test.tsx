@@ -46,6 +46,15 @@ it('preserves equivalent identities, switches users and destroys on logout', asy
   expect(runtime.destroy).toHaveBeenCalledTimes(4);
 });
 
+it('passes the signed group and its name on to identify, and a group change restarts', async () => {
+  const acme = { ...alice, group: 'acme', group_name: 'Acme Inc' };
+  await render(acme);
+  expect(runtime.identify).toHaveBeenLastCalledWith(acme);
+  await render({ ...acme, group: 'globex', group_name: 'Globex' });
+  expect(runtime.identify).toHaveBeenCalledTimes(2);
+  expect(runtime.identify).toHaveBeenLastCalledWith({ ...acme, group: 'globex', group_name: 'Globex' });
+});
+
 it('cannot identify after logout while the import is pending', async () => {
   let finish!: (value: typeof runtime) => void;
   load.mockReturnValue(new Promise(resolve => { finish = resolve; }));

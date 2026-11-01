@@ -18,8 +18,11 @@ Code, need only that URL. No Node, checkout or token copying is involved:
 The remote server has the local adapter's three tools plus `get_screenshot`;
 where a project admin allows it, its `get_issue` also returns the issue's
 `context` (screenshots, element, browser, console and network logs), and a
-connected app can see who an issue can be assigned to and change its status
-and assignee (`list_people`, `set_issue_status`, `assign_issue`). Every issue
+connected app can see who an issue can be assigned to, change its status and
+assignee, and reply to it (`list_people`, `set_issue_status`, `assign_issue`,
+`reply_to_issue`). A token created in Project settings can change issues too when
+its box is ticked (it starts `tuix_write_`), on the hosted server only; this
+adapter accepts only `tuix_read_` tokens. Every issue
 carries `app_url` and `reference` for linking it from a pull request. The same
 server-side redaction applies. Admins see connected apps under Project settings → AI and can
 disconnect them, which ends access immediately. The endpoint must be reachable over public HTTPS at

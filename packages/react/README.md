@@ -16,7 +16,7 @@ export function Feedback({ identity }: { identity: TuixIdentity | null }) {
 ```
 
 Obtain `identity` from your authenticated backend using `@tuix/server` (or the Rails
-or Phoenix signer). It contains `id`, `name`, `hash` and optional verified `email`.
+or Phoenix signer). It contains `id`, `name`, `hash`, optional verified `email` and, for a project that keeps groups apart, the signed `group` and `group_name`.
 Never compute a signature in the browser. Configure the exact application origin
 in Tuix project settings and keep signed identity required.
 
@@ -74,3 +74,7 @@ With Node.js or Next.js, add `@tuix/server` too, to sign identities on the serve
 From the repository root, `npm test -w @tuix/react` covers lifecycle races, Strict
 Mode and SSR. `npm run prepare:js` packs the three packages and checks them installed
 as a consumer would; `npm run test:next` then exercises them in Next.js.
+
+## Version history
+
+- **0.1.1**: passes `group` and `group_name` from the signed identity on to the widget (identify v3, needs a Tuix server with identify v3). Pass the result of `signIdentity` as is; do not add a `group` of your own to the identity.

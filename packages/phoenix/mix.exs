@@ -4,7 +4,7 @@ defmodule TuixPhoenix.MixProject do
   def project do
     [
       app: :tuix_phoenix,
-      version: "0.2.1",
+      version: "0.3.0",
       elixir: "~> 1.15",
       description: "Phoenix integration and Igniter installation for the tuix feedback widget",
       deps: deps(),

@@ -9,7 +9,7 @@ import type { TurnChoice } from './states';
 /** Pieces of a report's thread that the side panel and the anchored chat window share, so the two cannot drift apart. */
 type T = ReturnType<typeof translations>;
 
-export const CloseIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>;
+export const CloseIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>;
 
 /** Replies in the order the server sent them. Text nodes only; mentions are chips. */
 export function ThreadComments({ comments, lang, t }: { comments: NonNullable<Issue['comments']>; lang?: string; t: T }) {

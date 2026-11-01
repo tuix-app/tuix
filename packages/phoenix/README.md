@@ -121,3 +121,12 @@ Version 0.1.3 signs the user's email with the ID when the identity includes one 
 Version 0.2.0 bundles widget 0.2.0: a report thread no longer shows Add comment, screenshots open in a new tab, and Settings gains a version line and calmer spacing, plus everything since 0.1.2 listed in the widget changelog. Deploy the matching Tuix server first.
 
 Version 0.2.1 removes `phx-track-static` from the integration script. The script is not in the host's digest manifest, so `static_changed?/1` always reported a change, and a host that reloads on it (as the Phoenix guides show) reloaded forever. Its content-hashed `/tuix-assets/<hash>/` path already busts caches. It bundles widget 0.3.1 (see the widget changelog): the sidebar closes on a click outside it, Reply & pass for fixers, Close in place of Won't fix, and the regrouped Settings and report filters. Replace the vendored package and rebuild the host release; no installer rerun is needed.
+
+Version 0.3.0 adds groups for projects that keep them apart (**Keep groups apart** in the project settings). `TuixPhoenix.identity/2` now accepts `:group` and `:group_name` next to `:id`, `:name` and `:email`, and signs identify v3 when a group is given: the hash covers the id, the email, the group and its name, so nobody can move into another group or relabel theirs. Put them in your identity adapter, with one id per group:
+
+```elixir
+%{id: "#{workspace.id}:#{user.id}", name: user.name, email: user.email,
+  group: to_string(workspace.id), group_name: workspace.name}
+```
+
+`TuixPhoenix.widget/1` also takes a `config` attribute, `%{project: ..., api: ..., secret: ..., environment: ...}`, which replaces the `:tuix_phoenix` application environment for that render (for an app that serves several projects). Without it nothing changes. Deploy the matching Tuix server first: an older one refuses a v3 hash. Hosts that sign no group are unaffected. Upgrade note: a `:group` or `:group_name` key on the user map is now meaningful. If you pass a whole user record with a `group` field (a role, say), build the identity from `:id`, `:name` and `:email` only, or it signs v3 and needs a Tuix server with identify v3. A `:group_name` without a `:group` raises. It bundles widget 0.3.1. Replace the vendored package and rebuild the host release; no installer rerun is needed.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The `Identity` type gains `group` and `group_name` (identify v3, for projects that keep groups apart). Types only: the runtime already sends every identity field to `/identify`, so no widget release is needed.
+
 ## 0.3.1
 
 - **Click outside to close.** A click on the page closes the sidebar, like Escape and the X, and leaves the focus where the click put it. A comment being written is set aside instead, with its element and text, as Settings does; the launcher brings it back. Comment mode ignores the page, since clicking it chooses the element, and a chat window beside its element stays open. A press inside the panel that ends outside it (a dragged text selection) keeps it open.

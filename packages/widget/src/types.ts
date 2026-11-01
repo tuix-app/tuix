@@ -1,7 +1,7 @@
 import type { LocatorBundle } from './locators';
 import type { OpenFilter } from './preferences';
 import type { State, Turn } from './states';
-export interface Identity { id: string; name: string; email?: string; avatar?: string; traits?: Record<string, unknown>; hash?: string; reviewerSession?: string }
+export interface Identity { id: string; name: string; email?: string; group?: string; group_name?: string; avatar?: string; traits?: Record<string, unknown>; hash?: string; reviewerSession?: string }
 export interface Config {
   project: string; api?: string; environment?: string; release?: string; commit?: string; lang?: 'en' | 'pl';
   position?: 'bottom-right' | 'bottom-left'; showPinsOnLoad?: boolean; launcher?: boolean;

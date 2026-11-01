@@ -10,6 +10,14 @@ describe('Tuix identity protocol', () => {
     it(vector.label, () => expect(signIdentity(vector.user, { secret })).toEqual(vector.signed));
   }
 
+  for (const vector of vectors.v3_cases) {
+    it(vector.label, () => expect(signIdentity(vector.user, { secret })).toEqual(vector.signed));
+  }
+
+  for (const vector of vectors.v3_rejected) {
+    it(`rejects v3: ${vector.label}`, () => expect(() => signIdentity(vector.user, { secret })).toThrow(TypeError));
+  }
+
   it('keeps the source identity unchanged and strips unrelated fields', () => {
     const user = Object.freeze({ id: 42, name: 'Ada', email: ' ADA@example.com ', admin: true, secret });
     const signed = signIdentity(user, { secret });

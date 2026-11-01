@@ -5,7 +5,7 @@ import type { Config } from '@tuix/widget';
 import { loadWidget } from './runtime.js';
 
 export type TuixConfig = Config;
-export interface TuixIdentity { id: string; name: string; email?: string; hash: string }
+export interface TuixIdentity { id: string; name: string; email?: string; group?: string; group_name?: string; hash: string }
 export interface TuixProps {
   /** Keep this object stable (module scope or useMemo) to preserve open feedback across renders. */
   config: TuixConfig;
@@ -20,7 +20,7 @@ let owner: object | undefined;
 
 /** Mount once in the authenticated application shell. Renders no server HTML. */
 export function Tuix({ config, user, onError }: TuixProps): null {
-  const id = user?.id, name = user?.name, email = user?.email, hash = user?.hash;
+  const id = user?.id, name = user?.name, email = user?.email, group = user?.group, groupName = user?.group_name, hash = user?.hash;
   const active = user != null && config.enabled !== false;
   useEffect(() => {
     if (!active) return;
@@ -44,7 +44,10 @@ export function Tuix({ config, user, onError }: TuixProps): null {
       widget = runtime;
       runtime.destroy();
       runtime.init(config);
-      runtime.identify({ id, name, ...(email === undefined ? {} : { email }), hash });
+      runtime.identify({
+        id, name, ...(email === undefined ? {} : { email }),
+        ...(group === undefined ? {} : { group }), ...(groupName === undefined ? {} : { group_name: groupName }), hash,
+      });
     }).catch(() => {
       if (owner === lease) report(new Error('Tuix widget could not be loaded'));
     });
@@ -54,7 +57,7 @@ export function Tuix({ config, user, onError }: TuixProps): null {
       widget?.destroy();
     };
   // Scalar identity dependencies avoid restarting for equivalent server identity objects.
-  }, [config, id, name, email, hash, onError, active]);
+  }, [config, id, name, email, group, groupName, hash, onError, active]);
   return null;
 }
 

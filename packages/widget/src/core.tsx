@@ -138,7 +138,7 @@ function environment(config: Config) {
 }
 function currentRoute(config: Config) { try { return (config.route?.() ?? routeKey(location.href, config.keepQuery)).slice(0, 512); } catch { return routeKey(location.href); } }
 
-function CheckIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>; }
+function CheckIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>; }
 
 /** What the SDK shares with the core. All optional: tests and `launcher: false` hosts mount without a flyout. */
 export interface Hooks {

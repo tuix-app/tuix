@@ -11,9 +11,21 @@ defmodule TuixPhoenix do
   attr(:user, :any, default: nil)
   attr(:nonce, :string, default: nil)
 
-  @doc "Renders current widget identity. Place inside the layout updated by LiveView."
+  attr(:config, :map,
+    default: nil,
+    doc:
+      "Per-render configuration (`%{project, api, secret, environment}`, optionally `delivery`) that replaces the `:tuix_phoenix` application environment for this render."
+  )
+
+  @doc """
+  Renders current widget identity. Place inside the layout updated by LiveView.
+
+  Without `config` the `:tuix_phoenix` application environment is read. With
+  it, that map is used instead, so one app can render several projects (for
+  example the project of the workspace in view). The secret stays on the server.
+  """
   def widget(assigns) do
-    assigns = assign(assigns, :payload, payload(assigns.user, assigns.nonce))
+    assigns = assign(assigns, :payload, payload(assigns.user, assigns.nonce, assigns.config))
 
     ~H"""
     <div id="tuix-phoenix" hidden data-tuix-phoenix={@payload}></div>
@@ -48,7 +60,13 @@ defmodule TuixPhoenix do
   Signs an explicit `%{id: ..., name: ...}` identity (optionally with `:email`)
   using the configured server secret.
 
-  Without an email the hash signs the exact ID. With an email it signs the ID, a
+  With a `:group` (and optionally `:group_name`) the hash is v3: it signs
+  `"v3"`, the ID, the email (empty without one), the group and its name (empty
+  without one), separated by newlines, so a person can neither move into
+  another group nor relabel theirs. The group is 1-200 bytes and the ID may not
+  hold a newline. A project that keeps groups apart needs one ID per group.
+
+  Without a group and without an email the hash signs the exact ID. With an email it signs the ID, a
   newline and the trimmed, lowercased email (identify v2), so Tuix knows the
   email is the host's: only a signed email lets the person open the Tuix
   dashboard from the widget and sign in.
@@ -64,9 +82,12 @@ defmodule TuixPhoenix do
       do: raise(ArgumentError, "tuix project secret must be at least 32 bytes")
 
     email = optional_email(Map.get(user, :email))
+    {group, group_name} = optional_group(id, Map.get(user, :group), Map.get(user, :group_name))
 
-    %{id: id, name: name, hash: sign(secret, id, email)}
+    %{id: id, name: name, hash: sign(secret, id, email, group, group_name)}
     |> then(&if(email, do: Map.put(&1, :email, email), else: &1))
+    |> then(&if(group, do: Map.put(&1, :group, group), else: &1))
+    |> then(&if(group_name, do: Map.put(&1, :group_name, group_name), else: &1))
   end
 
   def identity(_, _),
@@ -76,8 +97,9 @@ defmodule TuixPhoenix do
         "tuix user must be nil or a map with :id and :name; configure a project secret"
       )
 
-  defp payload(user, nonce) do
-    config = Application.get_all_env(:tuix_phoenix)
+  defp payload(user, nonce, override) do
+    config =
+      if override, do: override_config!(override), else: Application.get_all_env(:tuix_phoenix)
 
     if config[:project] && config[:api] && config[:secret] do
       validate_text!(config[:project], :project, 128)
@@ -100,6 +122,25 @@ defmodule TuixPhoenix do
       })
     end
   end
+
+  # A per-render config replaces the environment, so it must be complete: a
+  # missing key raises (naming the key, never a value) instead of rendering nothing.
+  @config_keys [:project, :api, :secret, :environment, :delivery]
+  defp override_config!(override) when is_map(override) do
+    config =
+      for key <- @config_keys,
+          value = Map.get(override, key, Map.get(override, Atom.to_string(key))),
+          value != nil,
+          do: {key, value}
+
+    for key <- [:project, :api, :secret],
+        config[key] == nil,
+        do: raise(ArgumentError, "tuix widget config is missing #{inspect(key)}")
+
+    config
+  end
+
+  defp override_config!(_), do: raise(ArgumentError, "tuix widget config must be a map")
 
   defp valid_api!(value) when is_binary(value) do
     validate_text!(value, :api, 2048)
@@ -129,11 +170,37 @@ defmodule TuixPhoenix do
   end
 
   # v1 signs the ID; v2 (with an email) the ID, a newline and the normalised email.
-  defp sign(secret, id, nil), do: mac(secret, id)
-  defp sign(secret, id, email), do: mac(secret, id <> "\n" <> String.downcase(email))
+  # v3 (with a group) signs "v3", the ID, the email, the group and its name, newline-separated.
+  defp sign(secret, id, nil, nil, _), do: mac(secret, id)
+  defp sign(secret, id, email, nil, _), do: mac(secret, id <> "\n" <> String.downcase(email))
+
+  defp sign(secret, id, email, group, group_name),
+    do:
+      mac(
+        secret,
+        Enum.join(["v3", id, String.downcase(email || ""), group, group_name || ""], "\n")
+      )
 
   defp mac(secret, message),
     do: :crypto.mac(:hmac, :sha256, secret, message) |> Base.encode16(case: :lower)
+
+  defp optional_group(id, group, ""), do: optional_group(id, group, nil)
+  defp optional_group(_id, nil, nil), do: {nil, nil}
+  defp optional_group(_id, nil, _), do: raise(ArgumentError, "tuix group_name needs a group")
+
+  defp optional_group(id, group, group_name) do
+    validate_text!(group, :group, 200)
+    group_name = if group_name == "", do: nil, else: group_name
+    if group_name, do: validate_text!(group_name, :group_name, 200)
+
+    if String.contains?(id, "\n"), do: raise(ArgumentError, "invalid tuix id")
+
+    for {field, value} <- [group: group, group_name: group_name],
+        value != nil and Regex.match?(~r/\p{Cc}/u, value),
+        do: raise(ArgumentError, "invalid tuix #{field}")
+
+    {group, group_name}
+  end
 
   defp optional_email(nil), do: nil
 

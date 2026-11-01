@@ -1,0 +1,18 @@
+Tuix panel for Herdr
+
+This package is under the MIT License (LICENSE), except the files listed
+below. They are modified copies of files shipped with Herdr 0.1.10
+(https://herdr.dev) and remain under the Apache License, Version 2.0
+(LICENSE-APACHE).
+
+- mods/tuix-tabs/main.js: Herdr's `tabs` mod (mods/tabs/main.js).
+  Changed: "tuix" is appended to the enabled panels; a Tuix panel button
+  shows shared("tuix.count"); the window-button art paths point at
+  mods/tuix-tabs/.
+- mods/tuix-tabs/mod.json: Herdr's `tabs` mod.json.
+  Changed: the title is "Tuix tabs".
+- mods/tuix-tabs/win-close.svg, win-max.svg, win-min.svg, win-restore.svg:
+  Herdr's `tabs` mod art, unchanged.
+- layouts/tuix.json: Herdr's `main` layout (layouts/main.json).
+  Changed: the `tabs` block uses the `tuix-tabs` mod; a `tuix` block is
+  appended to the `panel-body` stack.

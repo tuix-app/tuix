@@ -1,6 +1,6 @@
 {
   "name": "@tuix/react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "React and Next.js lifecycle integration for the existing Tuix widget",
   "license": "MIT",

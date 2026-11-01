@@ -23,15 +23,49 @@ variables, client props or request logs. Never sign user IDs or emails taken dir
 from a browser request. Signed emails are treated as verified addresses by Tuix;
 omit email when the host cannot verify it. This helper does not authenticate users.
 
-`signIdentity(user, { secret })` returns `{ id, name, hash, email? }`; null/undefined
+`signIdentity(user, { secret })` returns `{ id, name, hash, email?, group?, group_name? }`; null/undefined
 users return null. IDs can be strings, safe integers or bigint (converted to strings).
 The secret must contain at least 32 UTF-8 bytes. Invalid identities/configuration throw
 `TypeError` without echoing their values. The input is not mutated and extra fields
 are discarded. Limits match the Rails integration: ID/name 200 bytes, email 254 bytes.
 
+## Version history
+
+- **0.2.0**: `group` and `group_name` on the user are now signed (identify v3). Upgrade note
+  below.
+
+## Keeping groups apart
+
+**Upgrade note.** A `group` or `group_name` key on the user is meaningful from 0.2.0. If
+you pass a whole user record that already has a `group` field (a role, say), strip it or
+pick the fields you sign (`id`, `name`, `email`) first, or you now sign v3 with that value.
+v3 needs a Tuix server with identify v3; an older server answers 401 to it, so deploy the
+server first. A `group_name` without a `group` throws.
+
+
+For a project that turned on **Keep groups apart** (Project settings in the Tuix
+dashboard), sign a `group` for each person, and its display name as `group_name`:
+
+```ts
+const identity = signIdentity(user && {
+  id: `${workspace.id}:${user.id}`, // one id per group
+  name: user.name,
+  group: String(workspace.id),
+  group_name: workspace.name,
+}, { secret: process.env.TUIX_SECRET_KEY! });
+```
+
+People of one group see each other's reports and nobody else's; your team sees all
+groups. The id must be unique per group (a person in two groups needs two ids) and
+may not contain a newline. The group is 1-200 bytes, the name at most 200, both
+without control characters. A group needs a group-aware server: with a group the
+hash is v3, which an older Tuix server refuses.
+
 Without an email, HMAC-SHA256 signs the exact ID (v1). With email, it signs the ID,
-a newline and the trimmed, lowercased email (v2). Hashes are lowercase hex. Names
-are display data, not signed claims. Shared test vectors verify the protocol across
+a newline and the trimmed, lowercased email (v2). With a `group`, v3 signs `"v3"`, the ID, the email (empty without one), the
+group and its name (empty without one), each followed by a newline except the last.
+Hashes are lowercase hex. Names
+are display data, not signed claims, except a group's name (v3). Shared test vectors verify the protocol across
 Node, Rails and Phoenix. These hashes are stable identity proofs, not expiring sessions;
 the host must clear browser identity at sign-out.
 

@@ -75,3 +75,9 @@ test("runLine describes each state of a run", () => {
   assert.equal(runLine(run({ state: "pr_open", prUrl: "javascript:alert(1)" }), at).link, null);
   assert.equal(runLine(run({ state: "pr_open", prUrl: null }), at).branch, "b");
 });
+
+test("rowsOf: checkable limits the checkbox per issue (All projects)", () => {
+  const groups = { open: [{ id: "a", projectId: "p1" }, { id: "b", projectId: "p2" }], fixing: [], prOpen: [], inReview: [] };
+  const rows = rowsOf(groups, { canWrite: true, checkable: (i) => i.projectId === "p1" }).filter((r) => r.kind === "issue");
+  assert.deepEqual(rows.map((r) => r.checkbox), [true, false]);
+});

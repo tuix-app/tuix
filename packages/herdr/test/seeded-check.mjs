@@ -19,7 +19,7 @@ try {
 `;
   // A thread with comments (the agent's among them), a cached screenshot, context and a reply draft.
   // locKey is set so render() does not relocate (which would leave the thread) before drawing it.
-  const thread = `    this.locKey = JSON.stringify(location()); this.project = this.projects[0]; this.credential = { label: "Tuix for Herdr" }; this.me = "member:1";
+  const thread = `    this.locKey = JSON.stringify(location()); this.project = this.projects[0]; this.me = "member:1";
     this.people = [{ id: "member:1", name: "Maja", team: true, me: true }, { id: "member:2", name: "Jan", team: true }];
     const issue = { id: "i1", number: 17, title: "Reply box loses draft", severity: "major", type: "bug", status: "in_progress", turn: "team", turn_person: "member:1", author: { name: "Anna" } };
     this.issues = [issue]; this.groups = { open: [], fixing: [], prOpen: [issue], inReview: [] }; this.confirming = "i1"; this.paneW = 340;
@@ -37,7 +37,7 @@ try {
   const runsSeed = `    const mk = (n, title, status) => ({ id: "r" + n, number: n, title, status, reference: "Tuix #" + n, app_url: "https://tuix.app/i/" + n, turn: "team", author: { name: "Anna" } });
     const [a, b, c, d, e] = [mk(21, "Running fix", "in_progress"), mk(22, "Blocked fix", "in_progress"), mk(23, "Stopped fix", "open"), mk(24, "PR fix", "in_progress"), mk(25, "Queued fix", "open")];
     const run = (i, o) => ({ issueId: i.id, number: i.number, branch: "tuix-" + i.number, terminal: "t" + i.number, queuedAt: 1, startedAt: Date.now() - 600000, seenWorking: true, ...o });
-    this.locKey = JSON.stringify(location()); this.project = this.projects[0]; this.credential = { label: "Tuix for Herdr" }; this.me = "member:1"; this.repo = { main: "/code/app", name: "app" }; this.hasOrigin = true;
+    this.locKey = JSON.stringify(location()); this.project = this.projects[0]; this.me = "member:1"; this.repo = { main: "/code/app", name: "app" }; this.hasOrigin = true;
     const f = mk(26, "Stopped, shell open", "in_progress"); this.issues = [a, b, c, d, e, f]; this.paneW = 340; this.state = "list";
     this.runs = [run(a, { state: "running" }), run(b, { state: "blocked" }), run(c, { state: "stopped", terminal: null, error: "fatal: a worktree already exists" }), run(f, { state: "stopped" }),
       run(d, { state: "pr_open", prUrl: "https://github.com/example/app/pull/9", stackedOn: 12 }), run(e, { state: "queued", startedAt: null, terminal: null })];
@@ -45,10 +45,33 @@ try {
     this.runs.push(run({ id: "z1", number: 91 }, { state: "running" }), run({ id: "z2", number: 92 }, { state: "blocked" }), run({ id: "z3", number: 93 }, { state: "running" }));
     this.groups = groupIssues(this.issues, this.runs);
 `;
+  // All projects: issues of two projects (only the matched one can be ticked), your turn in each, an archived project, a PR-open row.
+  const allSeed = `    this.projects = [{ id: "p", name: "Tuix", workspace: "W" }, { id: "q", name: "Admin", workspace: "W" }, { id: "r", name: "Old", workspace: "W", archived: true }];
+    this.locKey = JSON.stringify(location()); this.all = true; this.project = null; this.fixProject = this.projects[0]; this.paneW = 340; this.state = "list"; // fixProject: by name or the stored pick
+    this.repo = { main: "/code/app", name: "app" }; this.hasOrigin = true; this.meBy = { p: "member:1", q: "member:9", r: null }; this.names = { "member:1": "Maja", "member:9": "Jan" };
+    const mk = (n, title, status, pid, pname, person) => ({ id: "a" + n, number: n, title, status, projectId: pid, projectName: pname, turn: "team", turn_person: person, author: { name: "Anna" } });
+    this.issues = [mk(1, "Admin login loops", "open", "q", "Admin", "member:9"), mk(2, "Old report", "open", "r", "Old", null), mk(3, "Checkout total off", "open", "p", "Tuix", "member:1"), mk(4, "Fixed, ship it", "in_progress", "q", "Admin", "member:9")];
+    this.runs = [{ issueId: "a4", number: 4, branch: "tuix-4", terminal: null, state: "pr_open", prUrl: "https://github.com/example/app/pull/4", startedAt: 1, queuedAt: 1 }];
+    this.groups = groupIssues(this.issues, this.runs);
+`;
+  const allPicker = `    this.projects = [{ id: "p", name: "Tuix", workspace: "W" }, { id: "q", name: "Admin", workspace: "W" }];
+    this.all = true; this.state = "project";
+`;
   let status = 0;
   const asList = thread.replace('this.state = "thread"', 'this.state = "list"');
   const failedLoad = thread.replace("loaded: true, failed: false,", "loaded: false, failed: true,").replace("comments: [", "comments: [], x: [");
-  for (const seed of [base, base + thread, base + asList, base + failedLoad, base + runsSeed]) {
+  // The sign-in view: idle with a notice, and waiting for approval with a user code (no client, so state stays signin).
+  const signinIdle = `    this.client = null; this.state = "signin"; this.notice = "Your Tuix session ended. Sign in again.";
+`;
+  const signinWaiting = `    this.client = null; this.state = "signin"; this.connecting = false;
+    this.device = { user_code: "WDJB-MJHT", verification_uri: "https://tuix.app/device", verification_uri_complete: "https://tuix.app/device?user_code=WDJB-MJHT", expiresAt: Date.now() + 600000, interval: 5 };
+`;
+  // Each seed is code spliced into init(); it must end in the state it is meant to show (a stray comment once swallowed the state).
+  const seeds = [[signinIdle, "signin"], [signinWaiting, "signin"], [base, "project"], [base + thread, "thread"], [base + asList, "list"], [base + failedLoad, "thread"], [base + runsSeed, "list"], [base + allSeed, "list"], [base + allPicker, "project"]];
+  for (const [seed, expected] of seeds) {
+    const probe = {};
+    new Function("location", "groupIssues", seed).call(probe, () => ({}), () => ({ open: [], fixing: [], prOpen: [], inReview: [] }));
+    if (probe.state !== expected) throw new Error(`seed ends in state ${probe.state}, expected ${expected}`);
     writeFileSync(file, source.replace(marker, seed + marker));
     const r = spawnSync("herdr-app", ["check", mod], { encoding: "utf8" });
     process.stdout.write(r.stdout + r.stderr);

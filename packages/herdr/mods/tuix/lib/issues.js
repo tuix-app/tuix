@@ -37,11 +37,14 @@ export function turnLabel(issue, { me, names }) {
   return `Waiting for ${known ?? "the team"}`;
 }
 
+// Is the issue waiting for this person? Without an id (a connection that can't list people): the team's turn.
+export function isYourTurn(issue, me) {
+  if (FINISHED.has(issue.status)) return false;
+  return me ? issue.turn_person === me : issue.turn === "team";
+}
+
 export function yourTurnCount(issues, me) {
-  return issues.filter((issue) => {
-    if (FINISHED.has(issue.status)) return false;
-    return me ? issue.turn_person === me : issue.turn === "team";
-  }).length;
+  return issues.filter((issue) => isYourTurn(issue, me)).length;
 }
 
 export function branchName(issue) {

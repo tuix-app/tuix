@@ -53,7 +53,7 @@ function chips(v, t, th) {
 }
 
 function comment(v, t, c) {
-  const agent = isAgent(c, v.credential?.label), team = Boolean(c.author?.team);
+  const agent = isAgent(c, v.panelLabel), team = Boolean(c.author?.team);
   const who = [c.author?.name ?? "Someone", agent ? `via ${c.via}` : team ? "team" : "reporter", relTime(c.inserted_at)].filter(Boolean);
   return v_flex().gap(2).when(agent, (e) => e.border_l(2).border_color(t.done).pl(8))
     .child(h_flex().gap(4).text_size(11).text_color(t.dim).child(div().font_semibold().text_color(t.foreground).child(who[0])).child(div().child(`· ${who.slice(1).join(" · ")}`)))
@@ -83,7 +83,7 @@ function fixRow(v, t, issue) {
 }
 
 function replyBox(v, t, th) {
-  const issue = th.issue, choices = passChoices(issue, v.people, v.me), busy = th.sending;
+  const issue = th.issue, choices = passChoices(issue, v.peopleOf(issue), v.meOf(issue)), busy = th.sending;
   return v_flex().flex_none().border_t(1).border_color(t.border).px(12).py(8).gap(6)
     .child(Textarea.new(v.reply))
     .when(Boolean(th.replyError), (e) => e.child(div().text_size(11).text_color(t.ansi1).child(th.replyError)))
@@ -99,9 +99,9 @@ function replyBox(v, t, th) {
 export function threadView(v, t) {
   const th = v.th;
   if (!th) return div();
-  const issue = th.issue, label = turnLabel(issue, { me: v.me, names: v.names });
+  const issue = th.issue, label = turnLabel(issue, { me: v.meOf(issue), names: v.names });
   const page = pageLine(th.context), more = th.cursor;
-  const canReply = v.canWrite && !v.project?.archived;
+  const archived = v.archivedIssue(issue), canReply = v.canWrite && !archived;
   return v_flex().flex_1().min_h(0)
     .child(h_flex().h(36).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.border)
       .child(div().id("thread-back").cursor_pointer().text_color(t.muted).px(4).on_click((_e, cx) => v.closeThread(cx)).child("←"))
@@ -125,6 +125,6 @@ export function threadView(v, t) {
       .children(th.comments.map((c) => comment(v, t, c)))
       .when(!th.comments.length && th.loaded, (e) => e.child(div().text_size(11).text_color(t.dim).child("No comments yet.")))
       .when(Boolean(more), (e) => e.child(div().text_size(11).text_color(t.dim).child("Newer comments are not shown here. Open the issue in Tuix.")))
-      .when(!canReply, (e) => e.child(div().text_size(11).text_color(t.dim).child(v.project?.archived ? "Archived: read only." : "Replying needs a token that can change issues."))))
+      .when(!canReply, (e) => e.child(div().text_size(11).text_color(t.dim).child(archived ? "Archived: read only." : "Replying needs a connection that can change issues."))))
     .when(canReply, (e) => e.child(replyBox(v, t, th)));
 }

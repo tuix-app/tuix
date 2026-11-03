@@ -23,15 +23,18 @@ export function validUrl(url) {
   return u.pathname === "/";
 }
 
+// `token` is a string or a (possibly async) function returning the current token, called per request.
 export function createClient({ url, token, fetch }) {
   const endpoint = `${new URL(url).origin}/mcp`;
   let nextId = 1;
 
   async function rpc(method, params) {
+    const bearer = typeof token === "function" ? await token() : token;
+    if (!bearer) throw new McpError("unauthorized");
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${bearer}`,
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "mcp-protocol-version": PROTOCOL,

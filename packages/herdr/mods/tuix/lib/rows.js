@@ -10,8 +10,9 @@ export const SECTIONS = [["open", "Open"], ["fixing", "Being fixed"], ["prOpen",
 //   [] (none), ["ready"] (the Ready for review button) or ["cancel", "yes"] (the confirmation; Cancel comes first,
 //   so Yes never sits where the Ready button was).
 // `canWrite` / `archived` come from the view; `ready(issue)` says whether Ready for review is offered;
+// `checkable(issue)` says whether the issue can be ticked for Fix (All projects: only the matched project's).
 // `asking` is the id of the issue whose confirmation is open.
-export function rowsOf(groups, { canWrite = false, archived = false, ready = () => false, asking = null } = {}) {
+export function rowsOf(groups, { canWrite = false, archived = false, ready = () => false, asking = null, checkable = () => true } = {}) {
   const rows = [];
   for (const [id, label] of SECTIONS) {
     const issues = groups[id] ?? [];
@@ -22,7 +23,7 @@ export function rowsOf(groups, { canWrite = false, archived = false, ready = () 
       const offered = id === "prOpen" && ready(issue);
       rows.push({
         kind: "issue", issue, section: id,
-        checkbox: id === "open" && canWrite && !archived,
+        checkbox: id === "open" && canWrite && !archived && checkable(issue),
         actions: !offered ? [] : asking === issue.id ? [...CONFIRM] : ["ready"],
       });
     }

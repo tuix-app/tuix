@@ -4,6 +4,7 @@
 import { agents, terminals, exec, home } from "herdr";
 import { branchName } from "./lib/issues.js";
 import { advance, toStart } from "./lib/runs.js";
+import { reloadFor } from "./lib/all.js";
 import { applyIfCurrent, probe, queueRun, removeRun, startRun, trackRun } from "./lib/launch.js";
 
 const GRACE_MS = 5000; // a just-started terminal may not be listed yet
@@ -17,7 +18,7 @@ const watched = (r, terms) => active(r) || (r.state === "stopped" && Boolean(r.t
 export function queueFixes(v, issues, cx) {
   const now = Date.now();
   for (const issue of issues) {
-    v.runs = queueRun(v.runs, issue, { branch: branchName(issue), repoMain: v.repo?.main ?? null, projectId: v.project?.id ?? null, now });
+    v.runs = queueRun(v.runs, issue, { branch: branchName(issue), repoMain: v.repo?.main ?? null, projectId: issue.projectId ?? v.project?.id ?? null, now });
   }
   for (const issue of issues) v.selected.delete(issue.id); // only what was queued leaves the selection
   v.saveRuns(); v.regroup(); cx.notify();
@@ -34,11 +35,11 @@ export async function pumpRuns(v, cx) {
   v.pumping = true;
   try {
     for (;;) {
-      // Before every start: a restored queue must not start under a read-only token, an archived project,
+      // Before every start: a restored queue must not start under a read-only connection, an archived project,
       // another machine, or after the repo or the sign-in went away.
       const repo = v.repo;
       if (!repo || !v.client || v.fixBlock()) break;
-      const live = new Set(v.issues.map((i) => i.id));
+      const live = new Set(v.issues.filter((i) => !v.archivedIssue(i) && v.inFixProject(i)).map((i) => i.id));
       const run = toStart(v.runs, live, { repoMain: repo.main })[0];
       if (!run) break;
       const issue = v.issues.find((i) => i.id === run.issueId);
@@ -70,7 +71,7 @@ export async function trackRuns(v, cx, read) {
   const runs = v.runs.filter((r) => watched(r, terms) && now - (r.startedAt ?? 0) >= GRACE_MS);
   if (!runs.length) return;
   v.tracking = true;
-  let changed = false;
+  let changed = false; const changedRuns = [];
   try {
     for (const run of runs) {
       let comments = [];
@@ -79,17 +80,17 @@ export async function trackRuns(v, cx, read) {
         // An unreadable issue (deleted, no access, another Tuix) must not hold a slot forever: track without a comment.
         try { comments = await commentsOf(v, run.issueId); } catch (e) { if (e?.code === "unauthorized") { v.fail(e); break; } }
       }
-      const next = await trackRun({ run, agents: ags, terminals: terms, comments, panelLabel: v.credential?.label, exec });
+      const next = await trackRun({ run, agents: ags, terminals: terms, comments, panelLabel: v.panelLabel, exec });
       if (next.state !== run.state || next.seenWorking !== run.seenWorking) {
         const runs = applyIfCurrent(v.runs, run, next);
-        if (runs !== v.runs) { v.runs = runs; changed = true; }
+        if (runs !== v.runs) { v.runs = runs; changed = true; changedRuns.push(run); }
       }
     }
   } finally {
     v.tracking = false;
     if (changed) { v.saveRuns(); v.regroup(); cx.notify(); }
   }
-  if (changed) { await v.load(cx); await pumpRuns(v, cx); }
+  if (changed) { await v.load(cx, v.all ? reloadFor(changedRuns) : null); await pumpRuns(v, cx); }
 }
 
 // Called from render: schedules a track when what Herdr shows about the active runs changed.

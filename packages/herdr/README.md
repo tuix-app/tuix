@@ -13,20 +13,19 @@ herdr-app do layout.switch '{"name":"tuix"}'
 
 ## Sign in
 
-Needs a Tuix server whose MCP has `reply_to_issue` (see https://tuix.app and https://github.com/tuix-app/tuix).
+Needs a Tuix server that supports sign-in from Herdr and whose MCP has `reply_to_issue` (see https://tuix.app and https://github.com/tuix-app/tuix).
 
-1. In Tuix, open Project settings, then AI, and create a token. Choose "Let it change status and assignee, and reply" if you want Reply, Fix and Ready for review; a read-only token only lists and opens issues.
-2. Open the Tuix panel in Herdr. On macOS the token goes into the Keychain with this command, run in a terminal (the panel shows it with your address filled in):
+1. Open the Tuix panel in Herdr, check the address (default `https://tuix.app`) and click **Sign in with Tuix**.
+2. The panel shows a code and opens your browser. Check that the code matches, sign in to Tuix if asked, and approve. The panel connects as soon as you do. **Open browser** opens the page again; **Cancel** stops.
+3. If you decline or the code runs out, the panel says so; click **Sign in with Tuix** again.
 
-   ```sh
-   security add-generic-password -s "Tuix for Herdr" -a <tuix origin> -T "" -U -w
-   ```
+The sign-in is kept in memory only: after Herdr restarts, the panel shows the sign-in view with your address and you approve again (it never opens the browser by itself). The panel refreshes the session in the background and asks you to sign in again when Tuix ends it ("Your Tuix session ended. Sign in again."). It never writes a token to a file, to Herdr's storage or to a log; only the address and the public client id Tuix gave the panel are remembered.
 
-   Run the command first, and copy the token from Tuix only when it asks for a password: the command and the token share the clipboard, so copying the command afterwards would replace the token. Paste the token at the prompt, then click **Connect**. When macOS asks whether the panel may read it, click **Allow**, never **Always Allow**: that would let any Herdr mod read the token. Elsewhere, paste the token into the panel; it is kept in memory only, so paste it again after Herdr restarts.
+Whether Reply, Fix and Ready for review are available depends on what Tuix lets this connection do; otherwise the panel only lists and opens issues.
 
-The panel never writes the token to a file, to Herdr's storage or to a log.
+Choose **All projects** at the top of the project picker to see the issues of every project your sign-in reaches in one list (Fix only for the project matching the current repository, or the one you last picked for it).
 
-To change the address or the token, click **Sign out** in the panel header (on the project picker or the list). It forgets the connection in memory only; the Keychain item and any running agents stay. Run the command again with `-U` to replace a token in the Keychain.
+To change the address or the account, click **Sign out** in the panel header (on the project picker or the list). It forgets the session in memory, asks Tuix to revoke it, and leaves any running agents. The panel appears in your Tuix connected apps as "Herdr"; revoke it there to end the sign-in from the server side.
 
 ## Agents
 

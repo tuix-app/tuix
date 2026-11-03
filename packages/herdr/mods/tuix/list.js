@@ -28,7 +28,7 @@ function runRow(v, t, issue, run) {
 }
 
 function issueRow(v, t, r) {
-  const { issue } = r, run = r.section === "fixing" || r.section === "prOpen" ? v.runs.find((x) => x.issueId === issue.id) : null, label = turnLabel(issue, { me: v.me, names: v.names }), picked = v.selected.has(issue.id);
+  const { issue } = r, run = r.section === "fixing" || r.section === "prOpen" ? v.runs.find((x) => x.issueId === issue.id) : null, label = turnLabel(issue, { me: v.meOf(issue), names: v.names }), picked = v.selected.has(issue.id);
   const who = issue.author?.name ?? "the reporter";
   return v_flex().id(`issue-${issue.id}`).hover((s) => s.bg(t.hover))
     .child(h_flex().px(14).py(6).gap(8).items_start()
@@ -42,7 +42,9 @@ function issueRow(v, t, r) {
           .child(div().flex_1().min_w(0).truncate().child(issue.title ?? ""))
           .when(Boolean(issue.type), (e) => e.child(tag(t, issue.type)))
           .when(Boolean(issue.severity), (e) => e.child(tag(t, issue.severity, issue.severity === "blocking" ? t.ansi1 : null))))
-        .when(Boolean(label), (e) => e.child(div().text_size(11).text_color(label === "Your turn" ? t.accent : t.dim).child(label)))))
+        .when(v.all || Boolean(label), (e) => e.child(h_flex().gap(6).items_center()
+          .when(v.all && Boolean(issue.projectName), (x) => x.child(div().flex_none().text_size(11).text_color(t.muted).child(issue.projectName)))
+          .when(Boolean(label), (x) => x.child(div().min_w(0).text_size(11).text_color(label === "Your turn" ? t.accent : t.dim).child(label)))))))
     .when(Boolean(run), (e) => e.child(runRow(v, t, issue, run)))
     .when(r.actions.length > 0, (e) => e.child(h_flex().px(14).pb(6).pl(40).gap(8).items_center()
       .when(r.actions[0] === "ready", (x) => x.child(small(v, t, `ready-${issue.id}`, "Ready for review", (_e, cx) => v.askReady(issue.id, cx), { accent: true })))
@@ -63,13 +65,13 @@ function row(v, t, r) {
 }
 
 export function listView(v, t) {
-  const rows = rowsOf(v.groups, { canWrite: v.canWrite, archived: Boolean(v.project?.archived), ready: (i) => v.canReady(i), asking: v.confirming });
+  const rows = rowsOf(v.groups, { canWrite: v.canWrite, archived: Boolean(!v.all && v.project?.archived), checkable: (i) => v.canFix(i), ready: (i) => v.canReady(i), asking: v.confirming });
   const count = v.selected.size, why = v.fixBlock();
   return v_flex().flex_1().min_h(0)
     .when(!v.issues.length && v.loading, (e) => e.child(div().p(14).text_color(t.dim).child("Loading…")))
     .when(Boolean(v.issues.length) || !v.loading, (e) => e.child(v_flex().id("tuix-issues").flex_1().min_h(0).overflow_y_scrollbar()
       .children(rows.map((r) => row(v, t, r)))))
-    .when(count > 0 && !v.project?.archived, (e) => e.child(h_flex().flex_none().px(14).py(10).gap(8).items_center().border_t(1).border_color(t.border)
+    .when(count > 0, (e) => e.child(h_flex().flex_none().px(14).py(10).gap(8).items_center().border_t(1).border_color(t.border)
       .child(div().flex_1().min_w(0).text_size(11).text_color(t.dim).child(why ?? ""))
       .child(v.button("tuix-fix", `Fix ${count} selected`, (_e, cx) => v.fix(cx), { primary: true, disabled: Boolean(why) }))));
 }

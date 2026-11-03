@@ -126,3 +126,29 @@ test("collect flags truncation only when pages were left", async () => {
   const exact = { call: async (_t, a) => ({ items: [1], next_cursor: a.cursor ? null : "x" }) };
   assert.equal((await collect(exact, "t", "items", {}, 2)).truncated, false);
 });
+
+test("a token function is called per request", async () => {
+  const f = fakeFetch(200, { result: { structuredContent: {} } });
+  let current = "first";
+  const c = createClient({ url: "https://tuix.app", token: () => current, fetch: f });
+  await c.call("list_projects");
+  assert.equal(f.last.options.headers.authorization, "Bearer first");
+  current = "second";
+  await c.call("list_projects");
+  assert.equal(f.last.options.headers.authorization, "Bearer second");
+});
+
+test("an async token function is awaited", async () => {
+  const f = fakeFetch(200, { result: { structuredContent: {} } });
+  const c = createClient({ url: "https://tuix.app", token: async () => "late", fetch: f });
+  await c.call("list_projects");
+  assert.equal(f.last.options.headers.authorization, "Bearer late");
+});
+
+test("an empty token sends no request and is unauthorized", async () => {
+  for (const token of [() => null, async () => "", ""]) {
+    const f = fakeFetch(200, {});
+    await assert.rejects(createClient({ url: "https://tuix.app", token, fetch: f }).call("x"), { code: "unauthorized" });
+    assert.equal(f.last, undefined);
+  }
+});

@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, TextareaState } from "gpui-base";
-import { spaces, panes, focused, exec, theme, settings, setShared, props, openOverlay, closeOverlay, run } from "herdr";
+import { spaces, panes, focused, exec, knownAgents, machines, theme, settings, setShared, props, openOverlay, closeOverlay, run } from "herdr";
 import { McpError, collect, createClient, validUrl } from "./lib/mcp.js";
 import { CLIENT_NAME, discover, pollOnce, registerClient, revoke, startDevice } from "./lib/oauth.js";
 import { browserUrl, onStartError, pollStep } from "./lib/poll.js";
@@ -8,6 +8,7 @@ import { createSession, signinMessage, withRefresh } from "./lib/session.js";
 import { groupIssues, matchProject, relocation } from "./lib/issues.js";
 import { ALL, fixProjectFor, labelOf, mapLimit, mergeRead, queueReload, targetsFor, yourTurnAll } from "./lib/all.js";
 import { defaultBase, repoOf } from "./lib/git.js";
+import { claudeMissing } from "./lib/launch.js";
 import { signinView } from "./signin.js";
 import { listView } from "./list.js";
 import { shotBox, threadView } from "./thread.js";
@@ -28,11 +29,13 @@ const SHOT_DIALOG = { width: 760, height: 520 };
 const READ_ONLY = "This connection can read only. Reply and Fix are not available.";
 
 // Where the space is: the focused pane's folder, else the space's folder (as the changes mod does).
+// `up`: whether its machine is connected, so the repo is looked up again when it comes back.
 function location() {
   const space = spaces().find((s) => s.active), f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
+  const up = !on || machines().find((m) => m.name === on)?.layout === "ready";
+  return { cwd: pane?.cwd || f?.cwd || space?.folder, on, up };
 }
 
 // Only the URL, the public client id per address, the project choices and the runs are stored. Never a token.
@@ -47,7 +50,7 @@ export default class Tuix extends View {
     this.state = "signin"; // signin | project | list | thread
     this.notice = null; this.connecting = false; this.loading = false; this.loadGen = 0; this.loadingSince = 0; this.locating = false;
     this.url = null; this.session = null; this.client = null; this.canWrite = false; this.device = null; this.authGen = 0; this.panelLabel = PANEL_LABEL;
-    this.projects = []; this.project = null; this.all = false; this.fixProject = null; this.loadedBy = {}; this.peopleBy = {}; this.meBy = {}; this.repo = null; this.hasOrigin = false; this.remote = false; this.locKey = null;
+    this.projects = []; this.project = null; this.all = false; this.fixProject = null; this.loadedBy = {}; this.peopleBy = {}; this.meBy = {}; this.repo = null; this.hasOrigin = false; this.machine = null; this.noClaude = false; this.locKey = null;
     this.issues = []; this.people = []; this.names = {}; this.me = null; this.runs = read("runs", []); this.pumping = false; this.tracking = false; this.trackSig = ""; this.selected = new Set();
     this.groups = groupIssues([], []); this.cut = false; this.cutNames = []; this.again = false; // again: a load asked for while one runs ("all" or a Set of project ids)
     this.selKey = null;
@@ -232,7 +235,8 @@ export default class Tuix extends View {
     cx.spawn(async (cx) => {
       const here = (c, a, o) => exec(c, a, { ...o, on: loc.on });
       const repo = loc.cwd ? await repoOf(loc.cwd, here) : null;
-      const origin = repo && !loc.on ? await defaultBase(repo, here).then(() => true, () => false) : false;
+      const origin = repo ? await defaultBase(repo, here).then(() => true, () => false) : false;
+      const noClaude = repo && origin ? claudeMissing(await Promise.resolve().then(() => knownAgents({ on: loc.on })).catch(() => null)) : false;
       if (this.locKey !== key || !this.client) return;
       this.locating = false;
       const stored = repo ? read("projects", {})[repo.main] : null;
@@ -242,7 +246,7 @@ export default class Tuix extends View {
       // The Fix selection survives a folder change inside the same repo and project.
       const selKey = `${repo?.main ?? ""}|${all ? ALL : project?.id ?? ""}`;
       const keep = relocation({ state: this.state, key: this.selKey }, { key: selKey, hasProject: Boolean(project) || all }) === "keep";
-      this.repo = repo; this.hasOrigin = origin; this.remote = Boolean(loc.on);
+      this.repo = repo; this.hasOrigin = origin; this.machine = loc.on ?? null; this.noClaude = noClaude;
       if (!keep) {
         if (this.state === "list" || this.state === "thread") this.saveDraft();
         this.th = null; this.confirming = null; this.project = null; this.all = false; this.loadedBy = {}; this.issues = []; this.groups = groupIssues([], []);
@@ -514,9 +518,10 @@ export default class Tuix extends View {
 
   fixBlock() {
     if (!this.canWrite) return "Fix needs a connection that can change issues.";
-    if (this.remote) return "Fixes run on this computer only for now.";
+    if (this.machine && machines().find((m) => m.name === this.machine)?.layout !== "ready") return `${this.machine} isn't connected.`;
     if (!this.all && this.project?.archived) return "Archived: read only.";
     if (!this.repo || !this.hasOrigin) return "Fix needs a git repository with an origin remote.";
+    if (this.noClaude) return this.machine ? `Fix needs Claude Code on ${this.machine}.` : "Fix needs Claude Code on this computer.";
     return null;
   }
 

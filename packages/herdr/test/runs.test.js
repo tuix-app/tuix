@@ -137,3 +137,11 @@ test("a run never seen working stops after two minutes", () => {
   assert.equal(startTimeout({ ...run, seenWorking: true }, 1e9).state, "running");
   assert.equal(startTimeout({ ...run, state: "blocked", seenWorking: true }, 1e9).state, "blocked");
 });
+
+test("toStart with a machine starts only that machine's queue; old records count as this computer", () => {
+  const q = (issueId, machine, queuedAt) => ({ issueId, state: "queued", repoMain: "/r", queuedAt, ...(machine === undefined ? {} : { machine }) });
+  const rs = [q("a", "vps", 1), q("b", undefined, 2), q("c", null, 3)];
+  const ids = new Set(["a", "b", "c"]);
+  assert.deepEqual(toStart(rs, ids, { repoMain: "/r", machine: "vps" }).map((r) => r.issueId), ["a"]);
+  assert.deepEqual(toStart(rs, ids, { repoMain: "/r", machine: null }).map((r) => r.issueId), ["b", "c"]);
+});

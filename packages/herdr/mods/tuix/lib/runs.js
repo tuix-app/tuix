@@ -2,7 +2,8 @@
 //
 // Contract: there is at most ONE run record per issue (keyed by issueId). Every function
 // here assumes it. A run is { issueId, number, reference, appUrl, branch, base, stackedOn,
-// worktree, terminal, state, queuedAt, startedAt, seenWorking, prUrl }; times are epoch ms.
+// worktree, terminal, state, queuedAt, startedAt, seenWorking, prUrl, repoMain, machine }; times are epoch ms.
+// `machine` is null (or missing, in records saved before it existed) for this computer.
 
 export const LIMIT = 3;
 
@@ -11,12 +12,13 @@ const ACTIVE = new Set(["running", "blocked"]);
 // Queued runs, oldest first, that fit beside ALL active runs (whatever their project or repo: the limit is
 // on agents running at once). A queued run starts only while fewer than LIMIT are active; runs whose issue
 // is no longer in the list are skipped. With `repoMain`, only that repo's queue is considered (the free
-// slots still count every active run).
-export function toStart(runs, liveIssueIds, { repoMain } = {}) {
+// slots still count every active run); with `machine`, only that machine's (null: this computer), since
+// the same path can be a different clone on another machine.
+export function toStart(runs, liveIssueIds, { repoMain, machine } = {}) {
   const active = runs.filter((r) => ACTIVE.has(r.state)).length;
   const slots = Math.max(0, LIMIT - active);
   return runs
-    .filter((r) => r.state === "queued" && liveIssueIds.has(r.issueId) && (repoMain === undefined || r.repoMain === repoMain))
+    .filter((r) => r.state === "queued" && liveIssueIds.has(r.issueId) && (repoMain === undefined || r.repoMain === repoMain) && (machine === undefined || (r.machine ?? null) === machine))
     .sort((a, b) => a.queuedAt - b.queuedAt)
     .slice(0, slots);
 }

@@ -31,7 +31,7 @@ To change the address or the account, click **Sign out** in the panel header (on
 
 - Fix opens a new Herdr space for each issue in a git worktree under `~/.herdr/worktrees/<repo>/<branch>`, running `claude --permission-mode auto`.
 - Agents need the Tuix connector in Claude Code, allowed to change issues.
-- Fixes run on this computer only for now.
+- In a space on another machine (an SSH machine added to Herdr), the fix runs on that machine: the worktree is under its home and the agent's space opens there. That machine needs `claude` signed in with the Tuix connector, `gh` signed in for the pull request link, and push access to the repository (for example `ForwardAgent yes` for the host). Fix waits while the machine isn't connected.
 - At most 3 agents run at once, in total; the rest wait in the queue.
 - In review is set only by the person's **Ready for review** (then **Yes**). An agent sets it only if the person tells it to in its terminal, after the fix is deployed.
 

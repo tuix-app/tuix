@@ -1,5 +1,7 @@
-// Starting and tracking fix runs. Pure orchestration over an injected exec(cmd, args, { cwd }) and
+// Starting and tracking fix runs. Pure orchestration over an injected exec(cmd, args, { cwd, on }) and
 // clock; no host imports. The agent gets only fixPrompt's text: never the Tuix token.
+// A run belongs to one machine (`machine`, null for this computer): its git and gh commands run there
+// through exec's `on`, and Herdr opens its space there. Only `herdr-app` itself always runs here.
 import { addWorktree, defaultBase, prUrl, remoteIsGithub, worktreePath } from "./git.js";
 import { fixPrompt } from "./prompt.js";
 import { advance, closingComment, stackable, startTimeout } from "./runs.js";
@@ -7,11 +9,11 @@ import { advance, closingComment, stackable, startTimeout } from "./runs.js";
 export const AGENT_ARGV = ["claude", "--permission-mode", "auto"];
 
 // A queued run for an issue; it replaces any earlier record of the same issue.
-export function queueRun(runs, issue, { branch, repoMain, projectId = null, now }) {
+export function queueRun(runs, issue, { branch, repoMain, machine = null, projectId = null, now }) {
   const run = {
     issueId: issue.id, number: issue.number, title: issue.title ?? "", reference: issue.reference, appUrl: issue.app_url,
     branch, base: null, stackedOn: null, worktree: null, terminal: null, state: "queued",
-    queuedAt: now, startedAt: null, seenWorking: false, prUrl: null, error: null, repoMain, projectId,
+    queuedAt: now, startedAt: null, seenWorking: false, prUrl: null, error: null, repoMain, machine, projectId,
   };
   return [...runs.filter((r) => r.issueId !== issue.id), run];
 }
@@ -19,8 +21,25 @@ export function queueRun(runs, issue, { branch, repoMain, projectId = null, now 
 export const removeRun = (runs, issueId) => runs.filter((r) => r.issueId !== issueId);
 
 // The arguments of `herdr-app do space.new`. The space stays unnamed; Herdr's spaces mod nests it under the repo's space by git worktree linkage, not by name.
-export const spaceNewArgs = ({ worktree, task }) =>
-  ["do", "space.new", JSON.stringify({ folder: worktree, argv: AGENT_ARGV, task })];
+// With `machine`, the space (and the agent's terminal) opens on that machine; without, on this computer.
+export const spaceNewArgs = ({ worktree, task, machine = null }) =>
+  ["do", "space.new", JSON.stringify({ folder: worktree, argv: AGENT_ARGV, task, ...(machine ? { machine } : {}) })];
+
+// An exec that runs on the run's machine (unchanged for this computer).
+export const execOn = (exec, machine) => (machine ? (cmd, args, opts) => exec(cmd, args, { ...opts, on: machine }) : exec);
+
+// Remote terminal addresses carry a `<machine>/` prefix in agents() and terminals(); add it if Herdr
+// returned the address local to that machine.
+export const qualify = (terminal, machine) => (machine && terminal && !terminal.startsWith(`${machine}/`) ? `${machine}/${terminal}` : terminal);
+
+// The home folder on another machine (worktrees go under it there). `exec` already runs on that machine.
+export async function remoteHome(exec, machine) {
+  let r = null;
+  try { r = await exec("printenv", ["HOME"], {}); } catch { /* unreachable: reported below */ }
+  const home = r?.code === 0 ? String(r.stdout ?? "").trim() : "";
+  if (!home.startsWith("/")) throw new Error(`Couldn't find the home folder on ${machine}.`);
+  return home;
+}
 
 // stdout is {"space","tab","terminal"} or {"error"} (exit 1).
 export function parseSpaceNew({ code, stdout, stderr }) {
@@ -45,14 +64,25 @@ async function worktreeFor({ repo, branch, base, home, exec }) {
   return addWorktree({ repo, branch, base, home, exec });
 }
 
+// Is Claude Code known NOT to be installed on the machine? `known` is knownAgents()'s list; an agent
+// Herdr doesn't list (or a failed check, null) proves nothing, so only an explicit "not installed" counts.
+export function claudeMissing(known) {
+  const isClaude = (a) => [a?.id, a?.name, String(a?.run?.[0] ?? "").split("/").pop()].some((x) => String(x ?? "").toLowerCase() === "claude");
+  const entry = (known ?? []).find(isClaude);
+  return Boolean(entry) && entry.installed === false;
+}
+
 // Starts one queued run. Never throws: a failure leaves the run stopped with the reason in `error`.
+// `home` is this computer's; a run on another machine asks that machine for its own.
 export async function startRun({ run, issue, runs, repo, home, exec, now }) {
+  const machine = run.machine ?? null, there = execOn(exec, machine);
   try {
-    const base = await defaultBase(repo, exec);
-    const worktree = await worktreeFor({ repo, branch: run.branch, base, home, exec });
+    const base = await defaultBase(repo, there);
+    const homeDir = machine ? await remoteHome(there, machine) : home;
+    const worktree = await worktreeFor({ repo, branch: run.branch, base, home: homeDir, exec: there });
     const task = fixPrompt({ issue, branch: run.branch, stackable: stackable(runs, repo.main) });
-    const space = parseSpaceNew(await exec("herdr-app", spaceNewArgs({ worktree, task }), {}));
-    return { ...run, base, worktree, terminal: space.terminal, state: "running", startedAt: now(), seenWorking: false, error: null };
+    const space = parseSpaceNew(await exec("herdr-app", spaceNewArgs({ worktree, task, machine }), {}));
+    return { ...run, base, worktree, terminal: qualify(space.terminal, machine), state: "running", startedAt: now(), seenWorking: false, error: null };
   } catch (e) {
     return { ...run, state: "stopped", error: String(e?.message ?? e) };
   }
@@ -80,9 +110,10 @@ export async function trackRun({ run, agents, terminals, comments, panelLabel, e
   const closing = closingComment(comments, run, panelLabel);
   const next = startTimeout(advance(run, { ...probe(run, agents, terminals), closing }), now());
   if (next.state !== "pr_open" || run.state === "pr_open") return next;
-  // The run's own worktree is the place to ask, whichever repo the panel shows now.
-  const github = run.worktree ? await remoteIsGithub({ top: run.worktree }, exec) : false;
-  return { ...next, stackedOn: stackedOn(closing), prUrl: github ? await prUrl(run.worktree, run.branch, exec) : null };
+  // The run's own worktree, on its own machine, is the place to ask, whichever repo the panel shows now.
+  const there = execOn(exec, run.machine ?? null);
+  const github = run.worktree ? await remoteIsGithub({ top: run.worktree }, there) : false;
+  return { ...next, stackedOn: stackedOn(closing), prUrl: github ? await prUrl(run.worktree, run.branch, there) : null };
 }
 
 // Replaces the record of `snapshot` with `next` only if that record is still the same run (same

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyIfCurrent, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
+import { applyIfCurrent, claudeMissing, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, qualify, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
 
 const repo = { top: "/code/app", main: "/code/app", name: "app" };
 const issue = { id: "i1", number: 7, title: "Broken", reference: "Tuix #7", app_url: "https://tuix.app/i/7" };
@@ -202,4 +202,73 @@ test("startRun tells the agent only about pull requests open in its own reposito
 
 test("queueRun keeps the project the run belongs to", () => {
   assert.equal(queueRun([], issue, { branch: "b", repoMain: "/r", projectId: "p9", now: 1 })[0].projectId, "p9");
+});
+
+// A fake for a run on another machine: answers printenv HOME there and records each call's `on`.
+function remoteFake({ home = "/home/r\n", homeCode = 0, terminal = "t9" } = {}) {
+  const f = fake({ spaceOut: JSON.stringify({ space: "vps/s2", tab: "vps/t2", terminal }) });
+  const inner = f.exec;
+  f.exec = async (cmd, args, opts) => (cmd === "printenv" ? (f.calls.push([cmd, ...args]), f.optsSeen.push(opts), { code: homeCode, stdout: home, stderr: "" }) : inner(cmd, args, opts));
+  return f;
+}
+const remoteQueued = () => queueRun([], issue, { branch: "tuix-7-broken", repoMain: repo.main, machine: "vps", now: 100 })[0];
+
+test("queueRun keeps the machine; this computer is null", () => {
+  assert.equal(remoteQueued().machine, "vps");
+  assert.equal(queued().machine, null);
+});
+
+test("space.new names the machine only for another machine", () => {
+  assert.equal(JSON.parse(spaceNewArgs({ worktree: "/w", task: "t" })[2]).machine, undefined);
+  assert.equal(JSON.parse(spaceNewArgs({ worktree: "/w", task: "t", machine: "vps" })[2]).machine, "vps");
+});
+
+test("qualify adds the machine prefix once", () => {
+  assert.equal(qualify("t9", "vps"), "vps/t9");
+  assert.equal(qualify("vps/t9", "vps"), "vps/t9");
+  assert.equal(qualify("t9", null), "t9");
+});
+
+test("startRun on another machine runs git there, under its home, and opens the space there", async () => {
+  const f = remoteFake();
+  const run = await startRun({ run: remoteQueued(), issue, runs: [remoteQueued()], repo, home: "/home/u", exec: f.exec, now: () => 500 });
+  assert.equal(run.state, "running");
+  assert.equal(run.worktree, "/home/r/.herdr/worktrees/app/tuix-7-broken");
+  assert.equal(run.terminal, "vps/t9");
+  f.calls.forEach((c, i) => assert.equal(f.optsSeen[i]?.on, c[0] === "herdr-app" ? undefined : "vps", c.join(" ")));
+  const space = JSON.parse(f.calls.find((c) => c[0] === "herdr-app")[3]);
+  assert.equal(space.machine, "vps");
+  assert.equal(space.folder, run.worktree);
+});
+
+test("startRun on another machine stops with a reason when its home can't be read", async () => {
+  const f = remoteFake({ homeCode: 1, home: "" });
+  const run = await startRun({ run: remoteQueued(), issue, runs: [], repo, home: "/home/u", exec: f.exec, now: () => 500 });
+  assert.equal(run.state, "stopped");
+  assert.match(run.error, /home folder on vps/);
+  assert.ok(!f.calls.some((c) => c[0] === "herdr-app"));
+});
+
+test("startRun on this computer passes no machine", async () => {
+  const f = fake();
+  await start(f);
+  f.optsSeen.forEach((o) => assert.equal(o?.on, undefined));
+});
+
+test("trackRun asks the run's machine for the pull request", async () => {
+  const seen = [];
+  const exec = async (cmd, args, opts) => { seen.push([cmd, opts?.on]); return cmd === "git" ? ok("https://github.com/o/r.git\n") : ok("https://github.com/o/r/pull/3\n"); };
+  const run = { ...remoteQueued(), state: "running", terminal: "vps/t9", worktree: "/home/r/w", startedAt: 0, seenWorking: true };
+  const comments = [{ via: "Claude", body: "PR open", inserted_at: new Date(1).toISOString() }];
+  const next = await trackRun({ run, agents: [{ address: "vps/t9", status: "idle" }], terminals: [{ address: "vps/t9" }], comments, panelLabel: "Herdr", exec, now: () => 2 });
+  assert.equal(next.state, "pr_open");
+  assert.equal(next.prUrl, "https://github.com/o/r/pull/3");
+  assert.deepEqual(seen.map((s) => s[1]), ["vps", "vps"]);
+});
+
+test("claudeMissing counts only an explicit not-installed Claude Code", () => {
+  assert.equal(claudeMissing([{ id: "claude", run: ["claude"], installed: false }]), true);
+  assert.equal(claudeMissing([{ name: "Claude", run: ["/usr/local/bin/claude"], installed: true }]), false);
+  assert.equal(claudeMissing([{ id: "codex", run: ["codex"], installed: false }]), false);
+  assert.equal(claudeMissing(null), false);
 });

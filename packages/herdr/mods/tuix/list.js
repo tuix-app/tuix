@@ -4,6 +4,7 @@ import { terminals } from "herdr";
 import { v_flex, h_flex } from "gpui-base";
 import { turnLabel } from "./lib/issues.js";
 import { rowsOf, runLine } from "./lib/rows.js";
+import { listedOf } from "./lib/launch.js";
 
 const tag = (t, text, color) => div().px(5).py(1).flex_none().rounded(4).border_1().border_color(t.border).text_size(10).text_color(color ?? t.muted).child(text);
 
@@ -14,7 +15,7 @@ function small(v, t, id, label, action, { accent = false } = {}) {
 
 // The run under a row: status icon, elapsed time, stack, link or branch, and Remove on a stopped or PR-open run (the record only).
 function runRow(v, t, issue, run) {
-  const l = runLine(run, Date.now(), { focusable: terminals().some((x) => x.address === run.terminal) }), color = l.tone === "alert" ? t.ansi1 : t.dim;
+  const l = runLine(run, Date.now(), { focusable: Boolean(listedOf(terminals(), run)) }), color = l.tone === "alert" ? t.ansi1 : t.dim;
   return h_flex().px(14).pb(6).pl(40).gap(8).items_center().flex_wrap()
     .child(h_flex().id(`run-${issue.id}`).gap(6).items_center().min_w(0)
       .when(l.focus, (e) => e.cursor_pointer().on_click(() => v.focusRun(run)))

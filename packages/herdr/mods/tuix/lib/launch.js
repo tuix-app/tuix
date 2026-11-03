@@ -94,13 +94,27 @@ export function stackedOn(comment) {
   return m ? Number(m[1]) : null;
 }
 
+// The entry of agents() or terminals() that is the run's terminal. Remote addresses are compared with
+// their `<machine>/` prefix whichever form Herdr gives (prefixed, or bare with the entry's `machine`), so a
+// bare address on this computer never matches a run on another machine.
+export function listedOf(list, run) {
+  if (!run?.terminal) return null;
+  const machine = run.machine ?? null;
+  return (list ?? []).find((x) => {
+    if (!x?.address) return false;
+    if (x.address === run.terminal) return true;
+    const on = x.machine ?? null;
+    return Boolean(machine) && on === machine && qualify(x.address, machine) === run.terminal;
+  }) ?? null;
+}
+
 // What the host shows about a run's agent and terminal, given agents() and terminals().
 // `shellAlive`: the terminal exists (Herdr keeps the shell open after the agent exits).
 // `terminalAlive`: the agent's terminal is usable; a run that has worked and is no longer listed
 // among the agents has exited, however alive its shell is.
 export function probe(run, agents, terminals) {
-  const listed = agents.find((a) => a.address === run.terminal);
-  const shellAlive = terminals.some((t) => t.address === run.terminal);
+  const listed = listedOf(agents, run);
+  const shellAlive = Boolean(listedOf(terminals, run));
   return { agentStatus: listed?.status ?? null, shellAlive, terminalAlive: shellAlive && !(run.seenWorking && !listed) };
 }
 

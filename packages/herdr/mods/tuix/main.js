@@ -1,6 +1,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, TextareaState } from "gpui-base";
-import { spaces, panes, focused, exec, knownAgents, machines, theme, settings, setShared, props, openOverlay, closeOverlay, run } from "herdr";
+import * as herdr from "herdr";
+import { spaces, panes, focused, exec, theme, settings, setShared, props, openOverlay, closeOverlay, run } from "herdr";
 import { McpError, collect, createClient, validUrl } from "./lib/mcp.js";
 import { CLIENT_NAME, discover, pollOnce, registerClient, revoke, startDevice } from "./lib/oauth.js";
 import { browserUrl, onStartError, pollStep } from "./lib/poll.js";
@@ -9,6 +10,11 @@ import { groupIssues, matchProject, relocation } from "./lib/issues.js";
 import { ALL, fixProjectFor, labelOf, mapLimit, mergeRead, queueReload, targetsFor, yourTurnAll } from "./lib/all.js";
 import { defaultBase, repoOf } from "./lib/git.js";
 import { claudeMissing } from "./lib/launch.js";
+
+// Read off the module, not imported by name, so a Herdr without them still loads the panel:
+// no machine list means a remote space's machine counts as connected; no agent list proves nothing.
+const machineUp = (name) => { const list = herdr.machines?.(); return !list || list.find((m) => m.name === name)?.layout === "ready"; };
+const knownAgentsOn = (on) => Promise.resolve().then(() => herdr.knownAgents?.({ on }) ?? null);
 import { signinView } from "./signin.js";
 import { listView } from "./list.js";
 import { shotBox, threadView } from "./thread.js";
@@ -34,7 +40,7 @@ function location() {
   const space = spaces().find((s) => s.active), f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  const up = !on || machines().find((m) => m.name === on)?.layout === "ready";
+  const up = !on || machineUp(on);
   return { cwd: pane?.cwd || f?.cwd || space?.folder, on, up };
 }
 
@@ -236,7 +242,7 @@ export default class Tuix extends View {
       const here = (c, a, o) => exec(c, a, { ...o, on: loc.on });
       const repo = loc.cwd ? await repoOf(loc.cwd, here) : null;
       const origin = repo ? await defaultBase(repo, here).then(() => true, () => false) : false;
-      const noClaude = repo && origin ? claudeMissing(await Promise.resolve().then(() => knownAgents({ on: loc.on })).catch(() => null)) : false;
+      const noClaude = repo && origin ? claudeMissing(await knownAgentsOn(loc.on).catch(() => null)) : false;
       if (this.locKey !== key || !this.client) return;
       this.locating = false;
       const stored = repo ? read("projects", {})[repo.main] : null;
@@ -518,7 +524,7 @@ export default class Tuix extends View {
 
   fixBlock() {
     if (!this.canWrite) return "Fix needs a connection that can change issues.";
-    if (this.machine && machines().find((m) => m.name === this.machine)?.layout !== "ready") return `${this.machine} isn't connected.`;
+    if (this.machine && !machineUp(this.machine)) return `${this.machine} isn't connected.`;
     if (!this.all && this.project?.archived) return "Archived: read only.";
     if (!this.repo || !this.hasOrigin) return "Fix needs a git repository with an origin remote.";
     if (this.noClaude) return this.machine ? `Fix needs Claude Code on ${this.machine}.` : "Fix needs Claude Code on this computer.";

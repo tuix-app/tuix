@@ -1,21 +1,23 @@
 // The view side of fix runs: queue, start (worktree + a new Herdr space with a Claude Code agent) and track.
 // Every function takes the View `v`. Nothing here calls cx.notify() synchronously from a render:
 // trackSoon only schedules a task, and the task notifies when it is done.
-import { agents, terminals, exec, home, machines } from "herdr";
+import * as herdr from "herdr";
+import { agents, terminals, exec, home } from "herdr";
 import { branchName } from "./lib/issues.js";
 import { advance, toStart } from "./lib/runs.js";
 import { reloadFor } from "./lib/all.js";
-import { applyIfCurrent, probe, queueRun, removeRun, startRun, trackRun } from "./lib/launch.js";
+import { applyIfCurrent, listedOf, probe, queueRun, removeRun, startRun, trackRun } from "./lib/launch.js";
 
 const GRACE_MS = 5000; // a just-started terminal may not be listed yet
 const PAGES = 20;
 
 const active = (r) => r.state === "running" || r.state === "blocked";
 // Active runs, and stopped ones whose shell is still open (they may resume or have closed with a comment).
-const watched = (r, terms) => active(r) || (r.state === "stopped" && Boolean(r.terminal) && terms.some((t) => t.address === r.terminal));
+const watched = (r, terms) => active(r) || (r.state === "stopped" && Boolean(r.terminal) && Boolean(listedOf(terms, r)));
 // A run on a machine that isn't connected is left as it was: its terminal is missing from terminals()
 // only because the machine is away, not because the agent stopped.
-const connected = () => new Set(machines().filter((m) => m.name && m.layout === "ready").map((m) => m.name));
+// `machines` is read off the module, so a Herdr without it still loads the panel (and treats no machine as connected).
+const connected = () => new Set((herdr.machines?.() ?? []).filter((m) => m.name && m.layout === "ready").map((m) => m.name));
 const reachable = (r, ready) => !r.machine || ready.has(r.machine);
 
 // Queues the issues (replacing any earlier run of the same issue), then starts what fits.

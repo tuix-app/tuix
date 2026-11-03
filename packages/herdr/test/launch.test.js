@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyIfCurrent, claudeMissing, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, qualify, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
+import { applyIfCurrent, claudeMissing, listedOf, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, qualify, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
 
 const repo = { top: "/code/app", main: "/code/app", name: "app" };
 const issue = { id: "i1", number: 7, title: "Broken", reference: "Tuix #7", app_url: "https://tuix.app/i/7" };
@@ -271,4 +271,19 @@ test("claudeMissing counts only an explicit not-installed Claude Code", () => {
   assert.equal(claudeMissing([{ name: "Claude", run: ["/usr/local/bin/claude"], installed: true }]), false);
   assert.equal(claudeMissing([{ id: "codex", run: ["codex"], installed: false }]), false);
   assert.equal(claudeMissing(null), false);
+});
+
+test("listedOf finds a remote terminal listed prefixed, or bare with its machine, never a local one", () => {
+  const run = { terminal: "vps/t9", machine: "vps" };
+  assert.equal(listedOf([{ address: "vps/t9" }], run)?.address, "vps/t9");
+  assert.equal(listedOf([{ address: "t9", machine: "vps" }], run)?.address, "t9");
+  assert.equal(listedOf([{ address: "t9" }], run), null);
+  assert.equal(listedOf([{ address: "t9", machine: "box" }], run), null);
+  assert.equal(listedOf([{ address: "t9" }], { terminal: "t9", machine: null })?.address, "t9");
+});
+
+test("probe sees a remote agent listed bare with its machine", () => {
+  const run = { terminal: "vps/t9", machine: "vps", seenWorking: false };
+  const p = probe(run, [{ address: "t9", machine: "vps", status: "working" }], [{ address: "t9", machine: "vps" }]);
+  assert.deepEqual(p, { agentStatus: "working", shellAlive: true, terminalAlive: true });
 });

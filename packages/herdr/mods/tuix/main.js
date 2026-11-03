@@ -10,6 +10,7 @@ import { groupIssues, matchProject, relocation } from "./lib/issues.js";
 import { ALL, fixProjectFor, labelOf, mapLimit, mergeRead, queueReload, targetsFor, yourTurnAll } from "./lib/all.js";
 import { defaultBase, repoOf } from "./lib/git.js";
 import { claudeMissing } from "./lib/launch.js";
+import { CHECK_EVERY, applyUpdate, checkDue, cleanUp, hashOf, latestHash, updateAvailable } from "./lib/update.js";
 
 // Read off the module, not imported by name, so a Herdr without them still loads the panel:
 // no machine list means a remote space's machine counts as connected; no agent list proves nothing.
@@ -60,6 +61,8 @@ export default class Tuix extends View {
     this.issues = []; this.people = []; this.names = {}; this.me = null; this.runs = read("runs", []); this.pumping = false; this.tracking = false; this.trackSig = ""; this.selected = new Set();
     this.groups = groupIssues([], []); this.cut = false; this.cutNames = []; this.again = false; // again: a load asked for while one runs ("all" or a Set of project ids)
     this.selKey = null;
+    // Updates: `installed` is this copy's version hash (null: installed from source, never updated; undefined: not read yet).
+    this.upd = { installed: undefined, latest: read("updateLatest", null), checking: false, busy: false, error: null };
     this.th = null; this.confirming = null; this.drafts = {}; this.paneW = 0;
     this.reply = TextareaState.new({ placeholder: "Reply…" });
     this.reply.set_auto_grow(2, 8);
@@ -70,6 +73,42 @@ export default class Tuix extends View {
     // A saved address only fills the field: the browser opens when the person clicks Sign in with Tuix.
     // The timer is the only polling; agent status comes live from agents().
     cx.timer.every(60000, (cx) => this.refresh(cx));
+    cx.spawn(async (cx) => {
+      const home = herdr.appHome?.();
+      const text = home ? await Promise.resolve().then(() => herdr.readTextFile?.(`${home}/mods/tuix/version.json`)).catch(() => null) : null;
+      this.upd.installed = hashOf(text);
+      if (this.upd.installed) { await cleanUp(exec, home); this.checkUpdate(cx); }
+      cx.notify();
+    });
+  }
+
+  // At most once a day (an hour after a failed check): asks the public repository for its version.
+  checkUpdate(cx) {
+    const u = this.upd, now = Date.now();
+    if (u.checking || u.busy || !checkDue({ installed: u.installed, checkedAt: read("updateCheckedAt", 0), now })) return;
+    u.checking = true;
+    cx.spawn(async (cx) => {
+      const latest = await latestHash(exec);
+      u.checking = false;
+      write("updateCheckedAt", latest ? now : now - CHECK_EVERY + 3600000);
+      if (latest && latest !== u.latest) { u.latest = latest; write("updateLatest", latest); cx.notify(); }
+    });
+  }
+
+  // Replaces the panel's files with the public version; Herdr then reloads the panel (sign-in again).
+  update(cx) {
+    const u = this.upd;
+    if (u.busy) return;
+    u.busy = true; u.error = null; cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        const hash = await applyUpdate({ exec, appHome: herdr.appHome() });
+        u.installed = hash; u.latest = hash; write("updateLatest", hash);
+      } catch (e) {
+        u.error = String(e?.message ?? e);
+      }
+      u.busy = false; cx.notify();
+    });
   }
 
   mono() { return settings().font_family ?? "JetBrains Mono"; }
@@ -356,6 +395,7 @@ export default class Tuix extends View {
   loadBusy() { return this.loading && Date.now() - this.loadingSince < LOAD_STALE_MS; }
 
   refresh(cx) {
+    this.checkUpdate(cx);
     if (this.loadBusy() || this.connecting) return;
     if (this.state === "signin") {
       // A session we hold but couldn't use yet (offline, busy): one try per tick.
@@ -585,6 +625,10 @@ export default class Tuix extends View {
         .when(this.state === "project" && (Boolean(this.project) || this.all), (e) => e.child(this.button("tuix-cancel", "Cancel", (_e, cx) => { this.state = "list"; cx.notify(); })))
         .when(this.loading, (e) => e.child(div().text_size(11).text_color(t.dim).child("Loading…")))
         .when(Boolean(this.client) && (this.state === "project" || this.state === "list"), (e) => e.child(this.button("tuix-signout", "Sign out", (_e, cx) => this.signOut(cx))))))
+      .when(!thread && (updateAvailable(this.upd) || this.upd.busy || Boolean(this.upd.error)), (e) => e.child(h_flex().px(14).py(6).gap(8).items_center().border_b(1).border_color(t.border)
+        .child(div().flex_1().text_size(11).text_color(this.upd.error ? t.ansi1 : t.dim)
+          .child(this.upd.error ? `Update failed: ${this.upd.error}` : this.upd.busy ? "Updating the panel…" : "A new version of the panel is out. You sign in again after updating."))
+        .child(this.button("tuix-update", this.upd.busy ? "Updating…" : this.upd.error ? "Try again" : "Update", (_e, cx) => this.update(cx), { primary: true, disabled: this.upd.busy }))))
       .when(Boolean(this.client) && !this.canWrite, (e) => e.child(note(READ_ONLY)))
       .when(this.state === "list" && this.all && this.canWrite, (e) => e.child(note("Fix works in the matched project's repository.")))
       .when(this.state === "list" && this.cut, (e) => e.child(note(this.all ? `List cut off in ${this.cutNames.join(", ")}.` : `List cut off — showing the first ${this.issues.length}.`, t.blocked)))

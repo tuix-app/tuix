@@ -21,8 +21,8 @@ test("tuix-tabs: Tuix button, own svg paths", () => {
 });
 
 test("tokens and the device code are never stored by the panel", () => {
-  const allowedWrites = new Set(["auth", "projects", "fixPick", "runs", "clients"]), allowedShared = new Set(["tuix.count"]);
-  for (const file of ["main.js", "signin.js", "list.js", "thread.js", "shots.js", "launch.js", "lib/launch.js", "lib/session.js", "lib/oauth.js"]) {
+  const allowedWrites = new Set(["auth", "projects", "fixPick", "runs", "clients", "updateCheckedAt", "updateLatest"]), allowedShared = new Set(["tuix.count"]);
+  for (const file of ["main.js", "signin.js", "list.js", "thread.js", "shots.js", "launch.js", "lib/launch.js", "lib/session.js", "lib/oauth.js", "lib/update.js"]) {
     const source = read(`mods/tuix/${file}`);
     for (const m of source.matchAll(/\bwrite\(\s*"([^"]*)"/g)) assert.ok(allowedWrites.has(m[1]), `${file} writes ${m[1]}`);
     for (const m of source.matchAll(/\bsetShared\(\s*"([^"]*)"/g)) assert.ok(allowedShared.has(m[1]), `${file} shares ${m[1]}`);

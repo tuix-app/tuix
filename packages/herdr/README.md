@@ -11,6 +11,10 @@ herdr-app do layout.switch '{"name":"tuix"}'
 
 `install.sh` copies the `tuix` and `tuix-tabs` mods and the `tuix` layout into Herdr and checks both mods. The `tuix` layout is Herdr's own with a **Tuix** button in the tab bar; it shows the number of issues waiting for you.
 
+## Updates
+
+A panel installed from https://github.com/tuix-app/tuix (or through herdr.dev) checks once a day whether a new version is out. When one is, it shows **Update** at the top: one click downloads the new version, has Herdr check it, and replaces the panel's files; Herdr then reloads the panel and you sign in again. If anything fails on the way, the panel stays as it was and says why. Running agents are not touched. A copy installed with `install.sh` from a checkout of the source never offers updates: run `install.sh` again instead.
+
 ## Sign in
 
 Needs a Tuix server that supports sign-in from Herdr and whose MCP has `reply_to_issue` (see https://tuix.app and https://github.com/tuix-app/tuix).

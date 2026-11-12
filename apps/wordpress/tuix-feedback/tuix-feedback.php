@@ -3,12 +3,13 @@
  * Plugin Name:       Tuix Feedback
  * Plugin URI:        https://tuix.app
  * Description:       Element-anchored feedback for your WordPress site. Signed-in team members point at anything on a page and leave a comment; you triage it in Tuix.
- * Version:           0.2.0
+ * Version:           0.3.0
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            Tuix
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Update URI:        https://tuix.app/downloads/tuix-feedback.json
  * Text Domain:       tuix-feedback
  *
  * @package Tuix
@@ -16,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'TUIX_FEEDBACK_VERSION', '0.2.0' );
+define( 'TUIX_FEEDBACK_VERSION', '0.3.0' );
 define( 'TUIX_FEEDBACK_FILE', __FILE__ );
 
 require_once __DIR__ . '/includes/class-tuix-feedback-config.php';
@@ -24,6 +25,10 @@ require_once __DIR__ . '/includes/class-tuix-feedback-runtime.php';
 require_once __DIR__ . '/includes/class-tuix-feedback-widget.php';
 require_once __DIR__ . '/includes/class-tuix-feedback-admin.php';
 require_once __DIR__ . '/includes/class-tuix-feedback-legacy.php';
+require_once __DIR__ . '/includes/class-tuix-feedback-updater.php';
+
+// Updates come from tuix.app, never wordpress.org (see the Update URI header).
+Tuix_Feedback_Updater::register();
 
 add_action(
 	'plugins_loaded',

@@ -110,3 +110,47 @@ it('treats malformed persisted locator bundles as orphaned rather than throwing'
     expect(resolve(value as never).orphaned).toBe(true);
   }
 });
+
+describe('component names', () => {
+  const names = (el: Element) => locate(el).components;
+  it('lists names nearest first, including the element itself', () => {
+    document.body.innerHTML = '<div data-tuix-component="Page"><section data-tuix-component="Checkout"><button data-tuix-component="CheckoutButton"><span id="x">Pay</span></button></section></div>';
+    expect(names(document.querySelector('#x')!)).toEqual(['CheckoutButton', 'Checkout', 'Page']);
+    expect(names(document.querySelector('button')!)).toEqual(['CheckoutButton', 'Checkout', 'Page']);
+    expect(names(document.querySelector('section')!)).toEqual(['Checkout', 'Page']);
+  });
+  it('skips invalid names without counting them or stopping the walk', () => {
+    const long = 'A'.repeat(101);
+    document.body.innerHTML = `<div data-tuix-component="Outer"><div data-tuix-component=""><div data-tuix-component="1Bad"><div data-tuix-component="has space"><div data-tuix-component="${long}"><div data-tuix-component="a<b"><i id="x"></i></div></div></div></div></div></div>`;
+    expect(names(document.querySelector('#x')!)).toEqual(['Outer']);
+    document.body.innerHTML = `<div data-tuix-component="${'A'.repeat(100)}"><div data-tuix-component="ui/Button.primary:x-y_z"><i id="x"></i></div></div>`;
+    expect(names(document.querySelector('#x')!)).toEqual(['ui/Button.primary:x-y_z', 'A'.repeat(100)]);
+  });
+  it('keeps at most 8 names', () => {
+    let html = '<i id="x"></i>';
+    for (let i = 12; i >= 1; i--) html = `<div data-tuix-component="C${i}">${html}</div>`;
+    document.body.innerHTML = html;
+    expect(names(document.querySelector('#x')!)).toEqual(['C12', 'C11', 'C10', 'C9', 'C8', 'C7', 'C6', 'C5']);
+  });
+  it('leaves the key out when no element carries a name', () => {
+    document.body.innerHTML = '<div><button>Pay</button></div>';
+    expect('components' in locate(document.querySelector('button')!)).toBe(false);
+  });
+  it('is collected inside a masked subtree while masked text is not', () => {
+    document.body.innerHTML = '<section data-tuix-mask data-tuix-component="CardForm"><button data-tuix-component="PayButton">Secret 4242</button></section>';
+    const locator = locate(document.querySelector('button')!);
+    expect(locator.components).toEqual(['PayButton', 'CardForm']);
+    expect(locator.text).toBeUndefined();
+    expect(JSON.stringify(locator)).not.toMatch(/Secret|4242/);
+  });
+  it('does not change the css path or fingerprint', () => {
+    document.body.innerHTML = '<main><div><button>Save</button></div></main>';
+    const before = locate(document.querySelector('button')!);
+    document.querySelector('div')!.setAttribute('data-tuix-component', 'Toolbar');
+    const after = locate(document.querySelector('button')!);
+    expect(after.fingerprint).toBe(before.fingerprint);
+    expect(after.css).toBe(before.css);
+    expect(after.components).toEqual(['Toolbar']);
+    expect(resolve(before).method).toBe(resolve(after).method);
+  });
+});

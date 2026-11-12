@@ -14,9 +14,7 @@ const versions = {
   mcp: JSON.parse(await read('packages/mcp/package.json')).version,
   phoenix: (await read('packages/phoenix/mix.exs')).match(/version: "([^"]+)"/)[1],
   rails: (await read('packages/rails/lib/tuix_rails/version.rb')).match(/VERSION = "([^"]+)"/)[1],
-  wordpress: (await read('apps/wordpress/tuix-feedback/tuix-feedback.php')).match(/ \* Version:\s+(\S+)/)[1],
 };
-const placeholder = /^Contributors:.*PLACEHOLDER/m.test(await read('apps/wordpress/tuix-feedback/readme.txt'));
 
 async function check(name, overrides = {}, privateRepo = true) {
   const dir = await mkdtemp(path.join(tmpdir(), 'tuix-release-'));
@@ -42,7 +40,7 @@ for (const name of Object.keys(versions)) {
   });
 
   test(`${name}: publishing needs the matching version, main and the repository the metadata names`, async () => {
-    if (name !== 'wordpress' || !placeholder) assert.equal((await check(name, { PUBLISH: 'true' }, false)).status, 0);
+    assert.equal((await check(name, { PUBLISH: 'true' }, false)).status, 0);
     for (const override of [
       { RELEASE_VERSION: '999.999.999' }, { RELEASE_VERSION: '' }, { GITHUB_REF: 'refs/heads/feature' },
       { GITHUB_REPOSITORY: 'other/tuix' }, { PUBLISH: 'yes' }, { RELEASE_PACKAGE: 'shopify' },
@@ -73,10 +71,4 @@ test('only the logins in .github/release-actors may publish', async () => {
 test('the release actors file of the public repository names its owner', async () => {
   const text = await read('public-repo/.github/release-actors').catch(() => read('.github/release-actors'));
   assert.ok(text.split('\n').some(line => line.trim() && !line.startsWith('#')), 'no login in release-actors');
-});
-
-test('the WordPress plugin is not published with the Contributors placeholder', { skip: !placeholder }, async () => {
-  const rejected = await check('wordpress', { PUBLISH: 'true' }, false);
-  assert.notEqual(rejected.status, 0);
-  assert.match(rejected.stderr, /Contributors placeholder/);
 });

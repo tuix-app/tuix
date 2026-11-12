@@ -1,9 +1,11 @@
-/** Locator data deliberately excludes form values and masked text. */
+/** Locator data deliberately excludes form values and masked text. Component names are developer-authored attribute values, not page text, so masked subtrees still report them. */
 export interface LocatorBundle {
   section?: { id: string; path: string; fingerprint: string };
   testid?: string;
   aria?: { role: string; name: string };
   text?: { tag: string; text: string };
+  /** `data-tuix-component` names from the element outward, nearest first, at most 8. */
+  components?: string[];
   css: string;
   fingerprint: string;
   frames?: LocatorBundle[];
@@ -11,6 +13,7 @@ export interface LocatorBundle {
 }
 export interface Resolution { element: Element | null; method: string; orphaned: boolean }
 const generated = /^(?:css-|sc-|_[a-z\d]{5})|(?:[a-z]+\d+[a-z\d]*|\d+[a-z]+[a-z\d]*){1,}/i;
+const componentName = /^[A-Za-z_][A-Za-z0-9_.:/-]{0,99}$/;
 const safeTag = /^[a-z][a-z\d-]*$/i;
 const roles: Record<string, string> = { button: 'button', select: 'combobox', textarea: 'textbox', img: 'img', h1: 'heading', h2: 'heading', h3: 'heading' };
 const quote = (value: string) => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\n\r\f]/g, ' ') + '"';
@@ -84,6 +87,14 @@ function cssPath(element: Element, stop?: Element): string {
   if (stop) return ''; // Never produce an unanchored path for a deeply nested target.
   return path.join(' > ');
 }
+function componentsOf(element: Element): string[] | undefined {
+  const names: string[] = [];
+  for (let current: Element | null = element; current && names.length < 8; current = current.parentElement) {
+    const name = current.getAttribute('data-tuix-component');
+    if (name && componentName.test(name)) names.push(name);
+  }
+  return names.length ? names : undefined;
+}
 function sectionLocator(element: Element): LocatorBundle['section'] {
   const section = element.closest('[id^="shopify-section-"]');
   if (!section || masked(section) || !/^shopify-section-[a-zA-Z0-9_-]{1,200}$/.test(section.id)) return;
@@ -102,6 +113,8 @@ export function locate(element: Element): LocatorBundle {
     css: cssPath(element), fingerprint: fingerprint(element),
     rect: { x: box.x + view.scrollX, y: box.y + view.scrollY, w: box.width, h: box.height, vw: view.innerWidth, vh: view.innerHeight, sx: view.scrollX, sy: view.scrollY }
   };
+  const components = componentsOf(element);
+  if (components) result.components = components;
   try {
     if (view.frameElement) {
       const frame = locate(view.frameElement);

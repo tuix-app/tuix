@@ -1,7 +1,7 @@
 /**
  * Refuses an ambiguous release before a release workflow builds or publishes it.
  *
- * Environment: RELEASE_PACKAGE (widget, react, server, mcp, phoenix, rails or wordpress),
+ * Environment: RELEASE_PACKAGE (widget, react, server, mcp, phoenix or rails),
  * RELEASE_VERSION (the exact version committed in the package), PUBLISH (true or
  * false), and GitHub's GITHUB_REF, GITHUB_REPOSITORY and GITHUB_EVENT_PATH.
  * RELEASE_REPOSITORY names the public source repository when it is not the one the
@@ -33,17 +33,6 @@ const packages = {
     async version() { return (await read('packages/rails/lib/tuix_rails/version.rb')).match(/^\s*VERSION = "([^"]+)"$/m)?.[1]; },
     async names(repository) {
       return (await read('packages/rails/tuix_rails.gemspec')).includes(`"https://github.com/${repository}/tree/main/packages/rails"`);
-    },
-  },
-  wordpress: {
-    async version() { return (await read('apps/wordpress/tuix-feedback/tuix-feedback.php')).match(/^ \* Version:\s+(\S+)$/m)?.[1]; },
-    async names(repository) { return (await read('apps/wordpress/tuix-feedback/readme.txt')).includes(`https://github.com/${repository}`); },
-    async publishable() {
-      const readme = await read('apps/wordpress/tuix-feedback/readme.txt');
-      if (/^Contributors:.*PLACEHOLDER/m.test(readme)) {
-        return 'readme.txt still has the Contributors placeholder. Put the wordpress.org username there first.';
-      }
-      return null;
     },
   },
 };

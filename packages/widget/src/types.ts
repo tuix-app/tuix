@@ -38,6 +38,11 @@ export interface Issue {
   /** The reply composer offers people to mention; missing from servers before mentions. */
   can_mention?: boolean;
   /**
+   * The saved design (Figma) link of the report's nearest component, in a thread only and only for team members
+   * (design links): absent for everyone else and from servers before design links. Display only; `figmaHref` checks the URL.
+   */
+  design_link?: { component: string; url: string; source: 'manual' | 'agent' };
+  /**
    * For the hover card, on list entries (people-and-statuses §6): the newest reply as plain text (null when there is none)
    * and whether the caller has unread updates on the report. Missing from servers before cards: the card then shows less.
    */

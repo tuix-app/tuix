@@ -148,7 +148,7 @@ jobs:
             docker run --rm -v "$PWD/apps/wordpress/tuix-feedback:/plugin:ro" -w /plugin "$image" \
               sh -c 'for f in $(find . -name "*.php"); do php -l "$f" >/dev/null || exit 1; done'
           done
-      # Plugin Check is the tool the wordpress.org review runs.
+      # Plugin Check is WordPress's own lint for plugins.
       - name: Plugin Check
         run: bash scripts/wordpress-plugin-check.sh
         timeout-minutes: 10

@@ -1,7 +1,7 @@
 PATH
   remote: ..
   specs:
-    tuix_rails (0.1.0)
+    tuix_rails (0.2.0)
       actionview (>= 7.2, < 9)
       railties (>= 7.2, < 9)
 

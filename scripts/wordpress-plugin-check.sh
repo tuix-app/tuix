@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Runs Plugin Check, the tool the wordpress.org plugin review uses, against
+# Runs Plugin Check, WordPress's own plugin lint, against
 # apps/wordpress/tuix-feedback in throwaway Docker containers on their own network,
-# so it needs no free ports. Every error and warning fails the run.
+# so it needs no free ports. Every error and warning fails the run, except the one
+# expected finding named below.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 plugin="$root/apps/wordpress/tuix-feedback"
@@ -54,7 +55,12 @@ echo 'Checking tuix-feedback…'
 results=$(cli plugin check tuix-feedback --format=csv --fields=file,line,type,code,message --include-experimental 2>&1 || true)
 printf '%s\n' "$results"
 # Records look like: file,line,TYPE,code,"message".
-unexpected=$(printf '%s\n' "$results" | awk -F, '$3 == "ERROR" || $3 == "WARNING" { count++ } END { print count + 0 }')
+# Expected finding: plugin_updater_detected. The plugin is distributed from tuix.app on purpose,
+# not from wordpress.org, so its Update URI header and updater (includes/class-tuix-feedback-updater.php)
+# are the feature; Plugin Check flags them because that is not allowed in directory plugins.
+expected_codes='plugin_updater_detected'
+unexpected=$(printf '%s\n' "$results" | awk -F, -v ok="$expected_codes" 'BEGIN { split(ok, allowed, "|"); for (i in allowed) skip[allowed[i]] = 1 }
+  ($3 == "ERROR" || $3 == "WARNING") && !($4 in skip) { count++ } END { print count + 0 }')
 if ! printf '%s\n' "$results" | grep -q -e 'Checks complete' -e '^file,line' -e 'No errors found'; then
   echo 'Plugin Check did not report. See the output above.' >&2
   exit 1
@@ -63,4 +69,4 @@ if [ "$unexpected" -ne 0 ]; then
   echo "Plugin Check: $unexpected finding(s) to fix." >&2
   exit 1
 fi
-echo 'Plugin Check: no findings.'
+echo 'Plugin Check: no findings besides the expected one.'

@@ -1,7 +1,7 @@
 import type { Ref } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { statusLabel, type translations } from './i18n';
-import { ThreadComments, ReplyForm, VerifyTools, CloseIcon } from './thread';
+import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon } from './thread';
 import type { Placement } from './chat-placement';
 import type { Mention, EscapeRef } from './mentions';
 import type { Api } from './api';
@@ -54,6 +54,7 @@ export function ChatWindow(p: ChatWindowProps) {
       {p.error && <p class="error" role="alert">{p.error} {!thread && <button type="button" onClick={p.onRetry}>{t.retry}</button>}</p>}
       {p.loading && !thread && <p role="status">{t.loading}</p>}
       {thread && <>
+        <DesignRow link={thread.design_link} t={t}/>
         {earlier && <button type="button" class="text-button" data-action="show-earlier" disabled={p.loading || p.busy} onClick={hidden > 0 ? p.onExpand : p.onFull}>{t.showEarlier}</button>}
         {!earlier && thread.body && <p class="chat-report"><span class="muted">{thread.author.name}</span><br/>{thread.body}</p>}
         <ThreadComments comments={shown} lang={p.lang} t={t}/>

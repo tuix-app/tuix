@@ -82,6 +82,24 @@ Use trusted server assigns, not URL parameters or browser-provided IDs. Set the 
 
 LiveView patches update the identity element. The bootstrap destroys the previous widget before initializing the new identity. Removing the component or returning `nil` clears identity; full navigation and browser back/forward restoration are also handled. Failed loader requests retry on the next navigation, without a mutation retry loop. Widget features still load lazily on activation.
 
+## Component names
+
+`tuix_component/0` writes the `data-tuix-component` attribute the widget reads, so a report says which component it is about. Import it once, in the `html_helpers` of your web module (the installer does not edit it):
+
+```elixir
+import TuixPhoenix.Component, only: [tuix_component: 0, tuix_component: 1]
+```
+
+and put it on the root tag of a function component as a dynamic attribute list:
+
+```heex
+<button class="btn" {tuix_component()}>...</button>
+```
+
+In `MyAppWeb.CoreComponents` this renders `data-tuix-component="MyAppWeb.CoreComponents.button"`: the module and the function. In a `.heex` file loaded with `embed_templates` the function is the template's name (`card.html.heex` gives `MyAppWeb.Cards.card`), and in the `render/1` of a LiveView or LiveComponent the name is the module alone (`MyAppWeb.OrderLive`). Pass a name to choose your own: `{tuix_component("Checkout.Button")}`.
+
+The name is worked out when the module compiles, and the attribute is a literal in the template (LiveView 1.1.23 and later keep it in the static part; earlier versions send it with the first render and not in later diffs, except in a `:for` or `for` comprehension, which resends it with each row whenever the comprehension changes). A name the widget would ignore (it must start with a letter or underscore, continue with letters, digits and `_ . : / -`, and have at most 100 characters) raises a compile error that asks for an explicit name. An explicit name that is not a literal, such as `{tuix_component(@name)}`, is checked when it renders: an invalid one renders no attribute and never raises.
+
 ## Content security policy
 
 The integration does not replace the host's CSP. Allow scripts and fonts from `'self'` **and the configured Tuix API origin**, API HTTP/WebSocket connections to that origin (including the manifest fetch), and the storage origin shown in tuix project settings for screenshot uploads/reads. Allow `blob:` and `data:` image previews. Tuix serves the public manifest and runtime assets with `Access-Control-Allow-Origin: *`; they do not require browser credentials.
@@ -130,3 +148,5 @@ Version 0.3.0 adds groups for projects that keep them apart (**Keep groups apart
 ```
 
 `TuixPhoenix.widget/1` also takes a `config` attribute, `%{project: ..., api: ..., secret: ..., environment: ...}`, which replaces the `:tuix_phoenix` application environment for that render (for an app that serves several projects). Without it nothing changes. Deploy the matching Tuix server first: an older one refuses a v3 hash. Hosts that sign no group are unaffected. Upgrade note: a `:group` or `:group_name` key on the user map is now meaningful. If you pass a whole user record with a `group` field (a role, say), build the identity from `:id`, `:name` and `:email` only, or it signs v3 and needs a Tuix server with identify v3. A `:group_name` without a `:group` raises. It bundles widget 0.3.1. Replace the vendored package and rebuild the host release; no installer rerun is needed.
+
+Version 0.4.0 adds `TuixPhoenix.Component` (see Component names): `tuix_component/0` and `tuix_component/1` write the `data-tuix-component` attribute, so a report says which component it is about. It bundles widget 0.3.2, which records those names and shows a team member the component's design link (see the widget changelog). Nothing changes until you import the helper. Replace the vendored package and rebuild the host release; no installer rerun is needed.

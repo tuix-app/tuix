@@ -59,6 +59,63 @@ Pass the current document nonce via `config.nonce` when styles require one. Tuix
 Project settings → Installation → Content Security Policy lists the exact sources,
 including the screenshot style hash and the storage origin for uploads.
 
+## Component names
+
+Every report can carry the names of the components around the reported element, if their
+root elements have a `data-tuix-component="Name"` attribute (see "Component names" in the
+`@tuix/widget` README). `@tuix/react/babel` is a Babel plugin that adds it at build time to
+the root host element of each component: function and arrow components whose name starts
+with a capital letter (also inside `memo` and `forwardRef`) and classes with a `render()`
+method. The name is the function, variable or class name. Fragments, other components and
+non-JSX returns are left alone, because the child component stamps itself; so are elements
+that already have the attribute. The attribute comes first, so one you write later on the
+element, or in a `{...props}` spread, wins. The output is the same on the server and in the
+browser, and nothing else in your code changes. Files under `node_modules` are skipped.
+There are no options. To leave one component out, write `data-tuix-component={undefined}`
+on its root element. The plugin stamps every lowercase tag, so leave out roots that are not
+DOM elements, such as react-three-fiber's `<mesh>` or `<primitive>`.
+
+With Vite 8 and `@vitejs/plugin-react` 6, which no longer runs Babel itself, add
+`@rolldown/plugin-babel` (`npm install -D @rolldown/plugin-babel @babel/core`) and list it
+before `react()`:
+
+```js
+// vite.config.js
+import babel from '@rolldown/plugin-babel';
+import react from '@vitejs/plugin-react';
+
+export default {
+  plugins: [babel({ plugins: ['@tuix/react/babel'] }), react()],
+};
+```
+
+With `@vitejs/plugin-react` 5 or earlier, which has a `babel` option:
+
+```js
+plugins: [react({ babel: { plugins: ['@tuix/react/babel'] } })],
+```
+
+With any other Babel setup:
+
+```js
+// babel.config.js
+module.exports = { plugins: ['@tuix/react/babel'] };
+```
+
+With the React Compiler, list `@tuix/react/babel` before `babel-plugin-react-compiler`; the
+plugin finds nothing to stamp in code the compiler has already rewritten.
+
+Install `@babel/core` as usual (7 or 8; it is an optional peer dependency and only the
+build needs it). Babel 7 loads the plugin with `require`, which needs Node.js 20.19 or
+22.12 or later.
+
+Next.js 16 picks up a `babel.config.js` that uses the preset `next/babel`
+(`{ presets: ['next/babel'], plugins: ['@tuix/react/babel'] }`) and, with Turbopack (its
+default), keeps SWC for everything else. With `--webpack`, a Babel configuration turns SWC off
+entirely and `next/font` then fails to build; do not add one there. Toolchains
+that do not run Babel are not covered: `@vitejs/plugin-react-swc` and esbuild-only setups.
+There, add `data-tuix-component` by hand on the components that matter.
+
 ## Install
 
 In a React 19 application, install the adapter with the widget, its peer dependency:
@@ -77,4 +134,5 @@ as a consumer would; `npm run test:next` then exercises them in Next.js.
 
 ## Version history
 
+- **0.2.0**: adds the Babel plugin `@tuix/react/babel`, which adds `data-tuix-component` to components' root elements at build time.
 - **0.1.1**: passes `group` and `group_name` from the signed identity on to the widget (identify v3, needs a Tuix server with identify v3). Pass the result of `signIdentity` as is; do not add a `group` of your own to the identity.

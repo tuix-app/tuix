@@ -1,7 +1,9 @@
 # Widget changelog
 
-## Unreleased
+## 0.3.2
 
+- **Design link for the team.** A report on a component with a saved design (Figma) link shows a quiet **Design** row in its thread, in the side panel and the chat window: **Open in Figma** (a new tab) and the component name. Only team members get it: the server sends `design_link` on the thread of a signed session linked to a member of the project, and leaves the key out for everyone else, people from your app included. The widget only opens an `https://www.figma.com/` or `https://figma.com/` link and shows nothing for a missing key, so it works against servers before design links, and servers with them work with this widget's predecessors (they ignore the key). Display only; links are saved in Tuix. Polish: "Projekt", "Otwórz w Figmie".
+- **Component names.** A report records the `data-tuix-component` names on the chosen element and its ancestors (nearest first, at most 8; valid names only: a letter or underscore, then letters, digits and `_ . : / -`, 100 characters at most) as `components` in its locators, so people and AI apps can connect the report to the component in code and design. Collected inside `data-tuix-mask` elements too. Not used to find the element again, so existing reports and fingerprints are unaffected. An older server stores the field and does not show it.
 - The `Identity` type gains `group` and `group_name` (identify v3, for projects that keep groups apart). Types only: the runtime already sends every identity field to `/identify`, so no widget release is needed.
 
 ## 0.3.1

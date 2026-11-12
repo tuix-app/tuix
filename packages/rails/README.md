@@ -89,6 +89,19 @@ shared full-page cache. Browser back/forward cache follows the host's existing
 session policy; the bridge destroys the widget on `pagehide` and re-reads the
 current page on `pageshow`. See the [Turbo lifecycle documentation](https://turbo.hotwired.dev/handbook/building).
 
+## Component names
+
+`tuix_component` writes the `data-tuix-component` attribute the widget reads, so a report says which view or partial it is about. Put it on the root element of a partial or layout, in either ERB form:
+
+```erb
+<%= tag.form class: "f", **tuix_component do %> ... <% end %>
+<form class="f" <%= tag.attributes(tuix_component) %>> ... </form>
+```
+
+It returns `{ data: { tuix_component: "orders/_form" } }`. Without an argument the name is the virtual path of the template being rendered (`orders/_form`, `layouts/application`); it is right inside nested partials and collections, and back in the parent after a partial returns. Pass a name to choose your own: `tuix_component("Checkout.Button")`. In a ViewComponent call `helpers.tuix_component(self.class.name)`, since the helper cannot see a component's own template. A block you write in one template and render inside a layout partial (`render layout: "box" do ... end`) runs while that partial is current, so give elements in it an explicit name.
+
+A name the widget would ignore (it must start with a letter or underscore, continue with letters, digits and `_ . : / -`, and have at most 100 characters), or no name at all (an inline template has no virtual path), gives `{}`: no attribute is rendered and nothing raises.
+
 ## Content security policy
 
 Helpers use Rails' `content_security_policy_nonce` by default; an explicit
@@ -124,7 +137,7 @@ npm run test:browser -w @tuix/rails
 CI covers Rails 7.2/Ruby 3.2, Rails 8.0/Ruby 3.3 and Rails 8.1/Ruby 3.4.
 Integration tests boot a real Rails application, render helpers, fetch the asset
 through middleware, check identity signing/escaping, and exercise the generator.
-The package command builds `output/releases/tuix_rails-0.1.0.gem`, verifies its
+The package command builds `output/releases/tuix_rails-0.2.0.gem`, verifies its
 contents and reruns integration tests against a temporary gem installation before copying
 the artifact into place. It never publishes. CI uploads the same local artifact, and the
 release workflow publishes that artifact.
@@ -143,3 +156,8 @@ its remote run is separate from these local results.
 
 Before rolling out to your users, try report creation, screenshots and notifications
 against a real Tuix project using the host's authentication, origin and CSP.
+
+## Version history
+
+- **0.2.0**: adds the view helper `tuix_component` (see Component names), which writes the `data-tuix-component` attribute, so a report says which view or partial it is about. Nothing changes until you call it.
+- **0.1.0**: the first release.

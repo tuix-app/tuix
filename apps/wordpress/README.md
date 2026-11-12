@@ -1,14 +1,15 @@
 # Tuix Feedback, the WordPress plugin
 
-`tuix-feedback/` is the plugin Tuix Feedback (wordpress.org slug `tuix-feedback`), under
+`tuix-feedback/` is the plugin Tuix Feedback (folder and slug `tuix-feedback`), under
 the GNU General Public License, version 2 or later (`tuix-feedback/LICENSE`). Sites
-install it from the wordpress.org plugin directory, through Plugins → Add New Plugin.
+download the zip from tuix.app and upload it in WordPress, through Plugins → Add New Plugin → Upload Plugin.
+The plugin is not in the wordpress.org directory. It updates itself from tuix.app (below, "Updates");
+only sites on 0.2.1 or earlier upload a zip again, once.
 `python3 scripts/package-wordpress.py <target.zip>` packages it as a reproducible zip.
-Tuix servers also serve that zip at `/downloads/tuix-feedback.zip` (the earlier
-`/downloads/tuix-wordpress.zip` redirects there), for sites that cannot reach
-wordpress.org; Project settings → Installation → WordPress plugin gives both ways with
-setup steps. Customer-facing documentation is `tuix-feedback/readme.txt`, in the
-wordpress.org readme format.
+Tuix servers serve that zip at `/downloads/tuix-feedback.zip` (the earlier
+`/downloads/tuix-wordpress.zip` redirects there), the only install route; Project settings →
+Installation → WordPress plugin links it with setup steps. Customer-facing documentation is
+`tuix-feedback/readme.txt`, in the WordPress readme format.
 
 How it works:
 
@@ -27,16 +28,30 @@ How it works:
   very first lookup is synchronous (5 s timeout) and a failure is remembered for a minute.
 - Values can be pinned in wp-config.php (`TUIX_API_URL`, `TUIX_PROJECT_KEY`,
   `TUIX_SECRET_KEY`, `TUIX_ENVIRONMENT`); pinned fields are read-only in the form.
+- Updates (`includes/class-tuix-feedback-updater.php`): the header `Update URI:
+  https://tuix.app/downloads/tuix-feedback.json` makes WordPress take this plugin's updates from tuix.app, not wordpress.org (core still
+  lists it in its own request to api.wordpress.org), and apply the filter `update_plugins_tuix.app` during its update checks (about twice
+  a day), so the plugin appears on the Updates screen and takes auto-updates like any other. Two limits: the
+  filter is registered by the plugin, so updates show only while it is active; and core runs
+  this step only after api.wordpress.org answered, so a site that blocks wordpress.org or
+  tuix.app gets none.
+  The updater fetches that file (5 s timeout, no redirects), accepts only a plain version and a
+  `package` that is https on `tuix.app`, and on any other answer changes nothing. The server
+  builds the file from `release.json`, which `package-wordpress.py` writes beside the zip
+  (versions, requirements and the current version's changelog lines from `readme.txt`).
+  `plugins_api` fills "View version details" from the same file. The update check shows
+  tuix.app the server's IP address and WordPress's user agent, nothing else; keep the
+  readme's External services in step.
 - Settings → Tuix → Check connection performs a real signed identify against Tuix and
   explains origin, key and signature problems.
 
 The "External services" section of `tuix-feedback/readme.txt` lists what the plugin and
-the widget send to Tuix and when. Keep it in step with the code: wordpress.org requires it.
+the widget send to Tuix and when. Keep it in step with the code.
 
 ## The earlier plugin Tuix
 
 Until version 0.1.1 the plugin was called Tuix and lived in the folder `tuix/`
-(`tuix/tuix.php`). wordpress.org takes the slug from the name and refuses one shorter than
+(`tuix/tuix.php`). The slug comes from the name, and the wordpress.org directory, which was the plan then, refused one shorter than
 five characters, so it became Tuix Feedback in 0.2.0. WordPress sees the two as different
 plugins. Tuix Feedback keeps the names that sites' own code and configuration use: the
 filters `tuix_should_load` and `tuix_identity`, the wp-config.php constants `TUIX_*`, and
@@ -75,5 +90,5 @@ Both need Docker. From the repository root:
   (`npm run build -w @tuix/widget`), then `node scripts/wordpress-smoke.mjs`. It uses
   host networking and fixed ports 8089, 3307, 4390 and 4391, so on macOS enable host
   networking in Docker Desktop.
-- Plugin Check, the tool the wordpress.org review uses: `bash scripts/wordpress-plugin-check.sh`.
+- Plugin Check, WordPress's own lint for plugins: `bash scripts/wordpress-plugin-check.sh`.
   Any error or warning fails it, except the ones it lists as known.

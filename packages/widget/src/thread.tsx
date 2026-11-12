@@ -16,6 +16,16 @@ export function ThreadComments({ comments, lang, t }: { comments: NonNullable<Is
   return <>{comments.map(comment => <article class="comment" key={comment.id}><div class="issue-meta"><strong>{comment.author.name}</strong>{comment.pending && <span role="status">{t.sending}</span>}{comment.team && <span class="status" data-status="team">{t.team}</span>}<time>{new Date(comment.inserted_at).toLocaleString(lang)}</time></div><p><CommentText comment={comment}/></p></article>)}</>;
 }
 
+/** The only links the Design row opens: the server validates them too, but the widget may talk to any server version. */
+export const figmaHref = (url: unknown): string | null => typeof url === 'string' && /^https:\/\/(www\.)?figma\.com\//.test(url) ? url : null;
+
+/** A quiet "Design" row with the component name and a link to its Figma node; nothing without a valid `design_link`. Display only. */
+export function DesignRow({ link, t }: { link: Issue['design_link']; t: T }) {
+  const href = figmaHref(link?.url);
+  if (!href) return null;
+  return <p class="design-row muted"><span>{t.design}</span><a href={href} target="_blank" rel="noopener noreferrer">{t.openInFigma}</a>{typeof link?.component === 'string' && link.component && <code>{link.component}</code>}</p>;
+}
+
 interface ReplyProps {
   api: Pick<Api, 'request'>; thread: Pick<Issue, 'id' | 'can_mention' | 'fixer' | 'can_be_fixer' | 'reporter'>; t: T; buffer: TextBuffer; busy: boolean;
   picks: Mention[]; onPick: (mention: Mention) => void; escape: EscapeRef; onSubmit: (turn?: TurnChoice) => void;

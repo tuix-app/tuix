@@ -2,7 +2,7 @@ import { PageReports, pageLink } from './page-reports';
 import { VERSION } from './version';
 import { EvidencePreview } from './evidence-preview';
 import { mentionIds, type Mention, type EscapeRef } from './mentions';
-import { ThreadComments, ReplyForm, VerifyTools, CloseIcon } from './thread';
+import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon } from './thread';
 import { ChatWindow } from './chat-window';
 import { createTextBuffer, ReportText, type TextBuffer } from './text-buffer';
 import { placeChat, CHAT_W, CHAT_MAX_H, CHAT_MIN_WIDTH } from './chat-placement';
@@ -1157,6 +1157,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           {panelThread && <><button onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
             <p class="muted">#{panelThread.number} · {panelThread.author.name} · {panelThread.env_name}</p>
             <p class="report-kind">{t[panelThread.type as 'bug'] ?? panelThread.type}{panelThread.severity ? ` · ${t[panelThread.severity as 'major'] ?? panelThread.severity}` : ''}</p>
+            <DesignRow link={panelThread.design_link} t={t}/>
             <p class="thread-body">{panelThread.body}</p>
             {(panelThread.original_screenshot ?? panelThread.attachments)?.map(item => <figure class="evidence" key={item.id}>
               <figcaption>{t.originalEvidence}</figcaption>

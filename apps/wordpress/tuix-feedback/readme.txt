@@ -4,7 +4,7 @@ Tags: feedback, review, qa, annotations, bug reporting
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,11 +28,12 @@ The plugin's PHP is not minified. The widget it loads from Tuix is built and min
 
 == External services ==
 
-This plugin connects your site to Tuix, the feedback service at https://tuix.app (or the Tuix address you enter in Settings → Tuix). Without it the plugin does nothing. It sends nothing until you enter a project key and a signing key, and nothing for visitors or for users outside the roles you choose.
+This plugin connects your site to Tuix, the feedback service at https://tuix.app (or the Tuix address you enter in Settings → Tuix). Without it the plugin does nothing. Apart from the update check described below, which runs while the plugin is active, it sends nothing until you enter a project key and a signing key, and nothing for visitors or for users outside the roles you choose.
 
 What your WordPress server sends to Tuix:
 
 * The current widget's address and integrity hash, read from the public file /widget/channels/stable.json. Your server fetches it the first time the widget is shown to a team member and then at most every five minutes, in the background. The request carries no personal data, only the usual request details, such as your server's IP address and WordPress's user agent, which includes your site's address.
+* The current plugin version, read from the public file https://tuix.app/downloads/tuix-feedback.json, always at tuix.app whatever address you entered. Your server asks for it whenever WordPress checks for plugin updates: in the background about twice a day, and when someone opens the Plugins or Updates screen or the plugin's version details. The request carries no personal data, only the usual request details: your server's IP address and WordPress's standard user agent, which includes your site's address and WordPress version. When you update the plugin, your server downloads tuix-feedback.zip from tuix.app.
 * When an administrator clicks Check connection: that administrator's WordPress user ID, display name and email, signed with your signing key, together with the project key, the environment and your site's address. Tuix answers whether they match.
 
 What the browser of a signed-in team member, in a role you chose, sends to Tuix:
@@ -49,7 +50,7 @@ Tuix terms of service: https://tuix.app/terms. Tuix privacy policy: https://tuix
 You need a Tuix project and a Tuix admin account. Tuix → Project settings → Installation → WordPress plugin shows these steps with your project's values filled in.
 
 1. **Allow your site in Tuix.** In Tuix → Project settings, add the site's exact address, such as https://www.example.com, to Allowed origins and save. Add both the www and bare domain if the site answers on both. Use a separate Tuix environment (uat) for a staging site.
-2. **Install the plugin.** In WordPress open Plugins → Add New Plugin, search for Tuix Feedback, then Install Now and Activate. A site that cannot reach wordpress.org can download tuix-feedback.zip from Tuix → Project settings → Installation → WordPress plugin and add it with Upload Plugin.
+2. **Install the plugin.** Download tuix-feedback.zip from https://tuix.app/downloads/tuix-feedback.zip (also in Tuix → Project settings → Installation → WordPress plugin). In WordPress open Plugins → Add New Plugin → Upload Plugin, choose the file, then Install Now and Activate. Later versions arrive in WordPress's Updates screen (Dashboard → Updates, or Plugins), and you can turn on automatic updates for the plugin there. Updates show only while the plugin is active. If you installed version 0.2.1 or earlier, upload this version once the same way; WordPress offers to replace the installed version, and your settings stay.
 3. **Connect it.** In WordPress open Settings → Tuix and enter:
    * Tuix address: where your Tuix runs, for example https://tuix.app
    * Public project key: Tuix → Project settings → Installation → Public project key (starts with pk_)
@@ -104,8 +105,14 @@ Tuix Feedback replaces it. Install and activate Tuix Feedback; while Tuix is act
 
 == Changelog ==
 
+= 0.3.0 =
+* Updates now arrive through WordPress's Updates screen from tuix.app, and automatic updates work as for any plugin. Sites on 0.2.1 or earlier upload this version once; later versions arrive by themselves.
+
+= 0.2.1 =
+* The installation instructions now describe the download from tuix.app.
+
 = 0.2.0 =
-* Renamed Tuix Feedback, in the folder tuix-feedback, for the wordpress.org plugin directory. Replaces the plugin Tuix and copies its settings, once, into its own.
+* Renamed Tuix Feedback, in the folder tuix-feedback. Replaces the plugin Tuix and copies its settings, once, into its own.
 * Lists in External services what the plugin sends to Tuix.
 
 = 0.1.1 =

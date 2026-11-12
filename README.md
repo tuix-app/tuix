@@ -14,7 +14,7 @@ to do that. Tuix itself is a hosted service; its server is not here.
 | `packages/herdr` | | A Herdr panel for your Tuix issues, which starts coding agents to fix them |
 | `packages/phoenix` | [`tuix_phoenix`](https://hex.pm/packages/tuix_phoenix) (Hex) | Phoenix integration with an Igniter installer |
 | `packages/rails` | [`tuix_rails`](https://rubygems.org/gems/tuix_rails) (RubyGems) | Rails integration with a generator |
-| `apps/wordpress` | Tuix Feedback (wordpress.org) | The WordPress plugin |
+| `apps/wordpress` | Tuix Feedback, downloaded from tuix.app | The WordPress plugin |
 | `examples/nextjs` | | A Next.js App Router example |
 | `packages/test-fixtures` | | Signing test vectors shared by the Node, Phoenix and Rails tests |
 
@@ -25,7 +25,7 @@ tuix shows them with your project's values filled in.
 
 Everything here is under the MIT License (`LICENSE`), except the WordPress plugin in
 `apps/wordpress`, which is under the GNU General Public License, version 2 or later
-(`apps/wordpress/tuix-feedback/LICENSE`), as wordpress.org requires. In `packages/herdr`, the copies of Herdr's `tabs` mod and `main`
+(`apps/wordpress/tuix-feedback/LICENSE`), as WordPress plugins are. In `packages/herdr`, the copies of Herdr's `tabs` mod and `main`
 layout remain under the Apache License, Version 2.0 (`packages/herdr/LICENSE-APACHE`, with the
 changes in `packages/herdr/NOTICE`). The widget bundles Preact,
 the Phoenix JavaScript client, modern-screenshot and the Karla font; their licenses are

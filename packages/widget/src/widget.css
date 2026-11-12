@@ -70,6 +70,7 @@
 .tuix-app .page-report-group .status{flex-shrink:0}
 
 /* Thread */
+.tuix-app .design-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:8px 0}.tuix-app .design-row a{font-weight:600}.tuix-app .design-row code{overflow-wrap:anywhere}
 .tuix-app .thread-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;padding:12px 16px;border-radius:14px;background:var(--tx-bg)}
 .tuix-app .comment{margin:12px 0;padding:12px 16px;border-radius:14px;background:var(--tx-bg)}
 .tuix-app .comment:has(.status[data-status=team]){background:var(--tx-raised)}

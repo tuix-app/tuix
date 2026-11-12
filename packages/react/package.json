@@ -1,20 +1,24 @@
 {
   "name": "@tuix/react",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "React and Next.js lifecycle integration for the existing Tuix widget",
   "license": "MIT",
   "homepage": "https://tuix.app",
   "bugs": { "url": "https://github.com/tuix-app/tuix/issues" },
   "files": ["dist", "README.md", "LICENSE"],
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "peerDependencies": { "@tuix/widget": "^0.2.3 || ^0.3.0", "react": "^19.0.0" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./babel": { "types": "./dist/babel.d.ts", "default": "./dist/babel.js" }
+  },
+  "peerDependencies": { "@babel/core": "^7.0.0 || ^8.0.0", "@tuix/widget": "^0.2.3 || ^0.3.0", "react": "^19.0.0" },
+  "peerDependenciesMeta": { "@babel/core": { "optional": true } },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "devDependencies": { "@types/react": "19.3.0", "@types/react-dom": "19.3.0", "react": "19.3.0", "react-dom": "19.3.0", "jsdom": "^26.1.0", "typescript": "^5.9.0", "vitest": "5.0.5", "vite": "^8.3.5" },
+  "devDependencies": { "@babel/core": "8.1.2", "@types/react": "19.3.0", "@types/react-dom": "19.3.0", "react": "19.3.0", "react-dom": "19.3.0", "jsdom": "^26.1.0", "typescript": "^5.9.0", "vitest": "5.0.5", "vite": "^8.3.5" },
   "repository": { "type": "git", "url": "git+https://github.com/tuix-app/tuix.git", "directory": "packages/react" },
   "publishConfig": { "access": "public" }
 }

@@ -43,6 +43,17 @@ try {
     assert.match(user.hash, /^[a-f0-9]{64}$/);
     assert.equal(renderToString(createElement(Tuix, {config: {project: 'test'}, user})), '');
   `], { cwd: consumer, stdio: 'inherit' });
+  // The Babel plugin loads by its package name, from the packed tarball, and the client entry does not know it.
+  assert(!/babel/i.test(readFileSync(join(consumer, 'node_modules/@tuix/react/dist/index.js'), 'utf8')), 'The client entry must not reference the Babel plugin');
+  execFileSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import { transformAsync, transformSync } from '@babel/core';
+    const options = { filename: 'Button.jsx', configFile: false, babelrc: false, parserOpts: { plugins: ['jsx'] }, plugins: ['@tuix/react/babel'] };
+    const source = 'export const Button = () => <button>Pay</button>;';
+    const expected = 'export const Button = () => <button data-tuix-component="Button">Pay</button>;';
+    assert.equal((await transformAsync(source, options)).code, expected);
+    assert.equal(transformSync(source, options).code, expected);
+  `], { cwd: consumer, stdio: 'inherit' });
   // npx @tuix/mcp runs the package's one bin: a Node script that, without its two
   // environment variables, refuses to start with a generic message.
   const mcp = JSON.parse(readFileSync(join(consumer, 'node_modules/@tuix/mcp/package.json'), 'utf8'));
@@ -65,6 +76,6 @@ try {
   }, bundle: true, platform: 'browser', write: false, logLevel: 'silent' }), /Could not resolve "@tuix\/server"/);
   for (const artifact of artifacts) renameSync(join(stage, artifact.file), join(output, artifact.file));
   writeFileSync(join(output, 'manifest.json'), JSON.stringify({ published: false,
-    checked: ['packed Node signing', 'packed React SSR', 'use client preservation', 'Node-only browser resolution', 'packed MCP command'], artifacts }, null, 2) + '\n');
+    checked: ['packed Node signing', 'packed React SSR', 'packed Babel plugin', 'use client preservation', 'Node-only browser resolution', 'packed MCP command'], artifacts }, null, 2) + '\n');
   console.log(`Verified local npm tarballs: ${output}`);
 } finally { rmSync(stage, { recursive: true, force: true }); }

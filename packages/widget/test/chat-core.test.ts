@@ -729,3 +729,26 @@ it('scrolls to the newest reply when it arrives in a thread longer than the wind
   expect(list.querySelectorAll('.comment')).toHaveLength(7);
   expect(top).toBe(0);
 });
+
+it('shows a design link in the chat window and the side panel only when the thread carries a valid one', async () => {
+  const figma = 'https://www.figma.com/design/AbC123/Checkout?node-id=12-34';
+  const withLink = (item: Report) => ({ ...item, design_link: { component: 'SaveButton', url: figma, source: 'manual' } });
+  const { root } = await page([report(7)], { 7: [100, 200, 40, 20] }, { thread: withLink });
+  dots(root)[0].click(); await wait(200);
+  const link = win(root)!.querySelector<HTMLAnchorElement>('.design-row a')!;
+  expect(link.getAttribute('href')).toBe(figma);
+  expect(link.rel).toBe('noopener noreferrer');
+  expect(win(root)!.querySelector('.design-row code')?.textContent).toBe('SaveButton');
+  button(win(root)!, 'Open full thread').click(); await wait(200);
+  expect(root.querySelector('.panel .design-row a')?.getAttribute('href')).toBe(figma);
+});
+
+it('shows no design row when the thread has no design_link or a bad URL', async () => {
+  for (const thread of [(item: Report) => item, (item: Report) => ({ ...item, design_link: { component: 'A', url: 'javascript:alert(1)', source: 'manual' } })]) {
+    const { root } = await page([report(7)], { 7: [100, 200, 40, 20] }, { thread });
+    dots(root)[0].click(); await wait(200);
+    expect(win(root)!.querySelector('.comment')).not.toBeNull();
+    expect(win(root)!.querySelector('.design-row')).toBeNull();
+    core?.destroy(); document.body.replaceChildren();
+  }
+});

@@ -198,6 +198,81 @@ function restorePanes(clone: Element, before: WeakMap<Element, string>) {
     }
   }
 }
+/** A clear pixel: a stand-in with nothing to show keeps its box and its own background. */
+const clear = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+const SIDES = ['top', 'right', 'bottom', 'left'];
+/** What places and frames a <video>, read off its computed style onto the still that stands in for it. */
+const VIDEO_STYLE = ['display', 'position', 'float', 'clear', 'z-index', 'box-sizing', 'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+  'object-fit', 'object-position', 'transform', 'transform-origin', 'opacity', 'visibility', 'vertical-align', 'flex-grow', 'flex-shrink', 'flex-basis',
+  'align-self', 'justify-self', 'order', 'grid-row-start', 'grid-row-end', 'grid-column-start', 'grid-column-end', 'aspect-ratio', 'background-color',
+  'box-shadow', 'clip-path', 'filter', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-right-radius', 'border-bottom-left-radius',
+  ...SIDES.flatMap(side => [side, `margin-${side}`, `padding-${side}`, `border-${side}-width`, `border-${side}-style`, `border-${side}-color`])];
+/** The frame a playing or paused video shows now, or null: nothing decoded yet, or pixels the page may not read. */
+function videoFrame(video: HTMLVideoElement, scale: number) {
+  if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
+  const box = video.getBoundingClientRect();
+  const fit = Math.min(1, Math.max(box.width * scale / video.videoWidth, box.height * scale / video.videoHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(video.videoWidth * fit)); canvas.height = Math.max(1, Math.round(video.videoHeight * fit));
+  try {
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', .9);
+  } catch { return null; }
+}
+/**
+ * A still image in a video's place. modern-screenshot would load every <video> on the page
+ * a second time and seek it, one after another and with no time limit, so a page with a few
+ * videos used up the whole capture. The live element already holds the frame on screen: it
+ * is drawn for a video inside the region; any other shows its poster or keeps an empty box.
+ */
+export function videoStandIn(video: HTMLVideoElement, region: Region | null, scale: number) {
+  const image = document.createElement('img');
+  image.alt = ''; image.decoding = 'sync';
+  const computed = video.ownerDocument.defaultView?.getComputedStyle(video);
+  if (computed) for (const name of VIDEO_STYLE) {
+    const value = computed.getPropertyValue(name);
+    if (value) image.style.setProperty(name, value);
+  }
+  const box = video.getBoundingClientRect(), top = box.top + scrollY, left = box.left + scrollX;
+  const shown = !!region && video.ownerDocument === document && box.width > 0 && box.height > 0
+    && top < region.y + region.height && top + box.height > region.y && left < region.x + region.width && left + box.width > region.x;
+  const frame = shown ? videoFrame(video, scale) : null;
+  image.src = frame ?? (video.poster || clear);
+  // A playing video the page may not read (another origin without CORS) is a dark box, as a player without a picture.
+  if (shown && !frame && !video.poster && video.readyState >= 2) image.style.setProperty('background-color', '#000');
+  return image;
+}
+/**
+ * Puts the stand-ins where their videos are. The copy holds one child for each child the
+ * filter kept, in order, so walking both lists finds the place. Videos reached through a
+ * shadow root or a slot have no such list and go last.
+ */
+export function placeVideos<T extends Node>(original: Node, cloned: Node, videos: T[], kept: WeakSet<Node>, standIn: (video: T) => Node) {
+  const placed: Node[] = [];
+  const add = (video: T, before: Node | null) => { const node = standIn(video); cloned.insertBefore(node, before); placed.push(node); };
+  if ((original as Element).shadowRoot || videos.some(video => video.parentNode !== original)) {
+    for (const video of videos) add(video, null);
+    return placed;
+  }
+  const pending = new Set<Node>(videos);
+  let cursor = cloned.firstChild;
+  for (const child of original.childNodes) {
+    if (pending.has(child)) add(child as unknown as T, cursor);
+    else if (kept.has(child)) cursor = cursor?.nextSibling ?? null;
+  }
+  return placed;
+}
+/** As modern-screenshot's restoreScrollPosition shifts the children it copied in a scrolled element. */
+function shiftForScroll(parent: Node, child: HTMLElement) {
+  const { scrollTop, scrollLeft } = parent as HTMLElement;
+  if (!scrollTop && !scrollLeft) return;
+  const matrix = new DOMMatrix(child.style.transform === 'none' ? '' : child.style.transform), { a, b, c, d } = matrix;
+  matrix.a = 1; matrix.b = 0; matrix.c = 0; matrix.d = 1;
+  matrix.translateSelf(-scrollLeft, -scrollTop);
+  matrix.a = a; matrix.b = b; matrix.c = c; matrix.d = d;
+  child.style.transform = matrix.toString();
+}
+const isVideo = (node: Node): node is HTMLVideoElement => (node as Element).tagName === 'VIDEO';
 type Mode = 'full' | 'fast';
 async function attempt(target: Element, accent: string, mode: Mode, deadline: number, region: Region): Promise<Blob | null> {
   const root = document.documentElement;
@@ -213,6 +288,10 @@ async function attempt(target: Element, accent: string, mode: Mode, deadline: nu
   const before = new WeakMap<Element, string>();
   let lastYield = performance.now();
   let context: Context<HTMLElement> | undefined;
+  // The library copies depth-first: the filter sees a node as its copy starts and
+  // onCloneEachNode fires as it ends, so a stack pairs each copy with its original.
+  const copying: Node[] = [root], copied = new WeakSet<Node>(), videos = new Map<Node, HTMLVideoElement[]>();
+  let paired = true;
   const work = (async () => {
     context = await createContext(root, {
       width: region.width, height: region.height, backgroundColor: pageBackground(), scale,
@@ -232,11 +311,35 @@ async function attempt(target: Element, accent: string, mode: Mode, deadline: nu
       fetchFn: async url => mode === 'fast' || offscreen(url) ? blank : false,
       filter(node) {
         if (performance.now() > deadline) throw new Error('Screenshot timeout');
-        if (node.nodeType !== 1) return !node.parentElement?.closest(privateSelector);
         const element = node as Element;
-        return !element.closest('tuix-widget') && !element.parentElement?.closest(privateSelector);
+        if (node.nodeType === 1 ? element.closest('tuix-widget') || element.parentElement?.closest(privateSelector) : node.parentElement?.closest(privateSelector)) return false;
+        const parent = copying[copying.length - 1];
+        if (isVideo(node)) {
+          // Left out of the library's copy; its stand-in goes in once the parent's copy is whole.
+          if (parent) videos.set(parent, [...videos.get(parent) ?? [], node]);
+          return false;
+        }
+        copied.add(node);
+        // Text is copied without a callback. A frame the page can read is copied as its
+        // document's root, which reports first.
+        if (node.nodeType !== 3) copying.push(node);
+        if (element.tagName === 'IFRAME') {
+          try {
+            const inner = (element as HTMLIFrameElement).contentDocument?.documentElement;
+            if (inner) copying.push(inner);
+          } catch { /* Another origin: copied as an empty frame. */ }
+        }
+        return true;
       },
       async onCloneEachNode(cloned) {
+        const original = copying.pop(), pending = original && videos.get(original);
+        if (original?.nodeType === 1 && cloned.nodeType === 1 && cloned.nodeName !== original.nodeName && !/^(CANVAS|IFRAME)$/.test(original.nodeName)) paired = false;
+        if (original && pending && paired) {
+          for (const image of placeVideos(original, cloned, pending, copied, video => videoStandIn(video, region, scale)) as HTMLElement[]) {
+            if (image.style.transform && image.style.transform !== 'none') before.set(image, image.style.transform);
+            shiftForScroll(original, image);
+          }
+        }
         const transform = (cloned as HTMLElement).style?.transform;
         if (transform) before.set(cloned as Element, transform);
         // The renderer otherwise chains microtasks for the entire document.

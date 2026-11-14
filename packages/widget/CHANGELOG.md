@@ -1,5 +1,9 @@
 # Widget changelog
 
+## 0.3.3
+
+- **Screenshots on pages with videos.** A page with several `<video>` elements often ended with "Screenshot unavailable": the capture loaded every video on the page a second time and waited for each in turn, without a limit, so it ran out of its 8 seconds (a home page with 22 short clips needed 13). The widget now draws the frame a video is showing straight from the page, for the videos in the captured view only; one outside it keeps its box, one that has not loaded shows its poster, and one whose pixels the page may not read (another origin without CORS) shows its poster or a dark box. No video is requested again.
+
 ## 0.3.2
 
 - **Design link for the team.** A report on a component with a saved design (Figma) link shows a quiet **Design** row in its thread, in the side panel and the chat window: **Open in Figma** (a new tab) and the component name. Only team members get it: the server sends `design_link` on the thread of a signed session linked to a member of the project, and leaves the key out for everyone else, people from your app included. The widget only opens an `https://www.figma.com/` or `https://figma.com/` link and shows nothing for a missing key, so it works against servers before design links, and servers with them work with this widget's predecessors (they ignore the key). Display only; links are saved in Tuix. Polish: "Projekt", "Otwórz w Figmie".

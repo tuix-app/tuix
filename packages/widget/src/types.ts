@@ -18,6 +18,8 @@ export interface Issue {
   id: string; number: number; title: string; status: string; state?: State | null; type: string; severity?: string | null; env_name: string;
   url?: string; route_key?: string; locators: LocatorBundle; author: { id?: string; name: string }; comment_count: number;
   inserted_at: string; updated_at: string; body?: string; own?: boolean;
+  /** When the current review round began (the report entered `in_review`); on list entries and threads from servers that send it. */
+  verification_started_at?: string | null;
   /** The start of `body` (280 characters at most) on list rows, for the markers' hover cards; missing from older servers. */
   excerpt?: string;
   comments_older?: string | null;
@@ -64,6 +66,8 @@ export interface Core {
   open(filter?: OpenFilter): void; comment?(): void; close(): void; destroy(): void; reportError?(): void;
   /** Hides a visible composer, keeping it in memory; false when there is nothing to keep. */
   suspend?(): boolean;
+  /** Opens the panel on one report's thread, as clicking its pin does (the verify prompt's Check it). */
+  openIssue?(id: string): void;
   /** The settings flyout opened or closed: updates render into it while open. */
   settings?(open: boolean): void;
 }

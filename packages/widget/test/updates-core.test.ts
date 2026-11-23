@@ -299,3 +299,13 @@ it('says so in the flyout when feedback cannot load', async () => {
   expect(slot.querySelector('[role=alert]')!.textContent).toBe('Could not load feedback. Please retry.');
   expect(slot.querySelector('.updates')).toBeNull();
 });
+
+it('labels review reminders and falls back to the report status for a kind it does not know', async () => {
+  const slot = document.createElement('div');
+  const reminder = (id: string, kind: string, stateKind: string) => ({ id, issue_id: 'r' + id, kind, state_kind: stateKind, inserted_at: '2026-09-23T10:00:00Z', issue: { number: 30, title: 'Reminded ' + id, status: 'awaiting_verification', state: 'in_review', url: location.origin + '/' } });
+  const unread = [reminder('1', 'awaiting_verification', 'verify_reminder'), reminder('2', 'awaiting_verification', 'verify_last_call'), reminder('3', 'awaiting_verification', 'verify_nudge'), reminder('4', 'mystery', 'verify_future')];
+  const { root } = fixture({ unread, hooks: { updates: slot } });
+  root.append(slot);
+  core!.settings!(true); await vi.advanceTimersByTimeAsync(200);
+  expect([...slot.querySelectorAll('.update-item')].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Still waiting for you to verify', 'Closes soon unless you check it', 'Asked you to check the fix', 'In review']);
+});

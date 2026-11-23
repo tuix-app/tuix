@@ -11,6 +11,10 @@ export { locate, resolve, routeKey } from './locators';
 export type { Config, Identity } from './types';
 export type { OpenFilter } from './preferences';
 export type { LocatorBundle, Resolution } from './locators';
+/** The verify prompt as the SDK holds it: a stub that loads the card's code the first time there is something to verify. */
+interface Prompt { sync(toVerify: number): void; suppress(): void; destroy(): void }
+/** Projects whose prompt has had its say on this page load; a remount (`config`, `identify`) does not bring the card back. */
+const quiet = new Set<string>();
 let config: Config | undefined, identity: Identity | undefined, host: HTMLElement | undefined;
 let root: ShadowRoot | undefined, launcher: HTMLButtonElement | undefined, core: Core | undefined;
 let returnFocus: HTMLElement | undefined;
@@ -30,6 +34,9 @@ let activationStarted: number | undefined;
 let mode: 'reports' | 'comment' = 'reports';
 let openFilter: OpenFilter | undefined;
 let settings: ReturnType<typeof mountSettings> | undefined;
+/** The "does it work now?" card beside the launcher, and the report Check it should open once the core is in. */
+let prompt: Prompt | undefined;
+let pendingIssue: string | undefined;
 /** One API client per identity: the summary and the core share its token. */
 let client: Api | undefined;
 let flyoutOpen = false;
@@ -51,7 +58,7 @@ function refreshSummary() {
     // The same Environment filter as the Reports list the capsule opens (a local session's preference).
     const environments = api().environment === 'local' ? readPreferences(config.project).environment : '';
     // An earlier Environment's counts never land after a newer one's.
-    void api().request<Summary>('/me/summary' + (environments ? '?' + new URLSearchParams({ environments }) : '')).then(value => { if (current === generation && request === summaries) target.summary(value); }).catch(() => { /* The capsule keeps its last counts. */ });
+    void api().request<Summary>('/me/summary' + (environments ? '?' + new URLSearchParams({ environments }) : '')).then(value => { if (current === generation && request === summaries) { target.summary(value); prompt?.sync(Math.floor(Number(value?.to_verify)) || 0); } }).catch(() => { /* The capsule keeps its last counts. */ });
   } catch { /* An invalid API origin keeps the capsule hidden. */ }
 }
 function whenIdle(action: () => void): () => void {
@@ -66,6 +73,7 @@ function whenIdle(action: () => void): () => void {
 function remove() {
   const retiredCore = core, retiredHost = host, retiredClient = client;
   cancelIdle?.(); cancelIdle = undefined;
+  prompt?.destroy(); prompt = undefined; pendingIssue = undefined;
   settings?.destroy(); settings = undefined;
   generation++; core = undefined; host = undefined; root = undefined; launcher = undefined; loading = undefined; opened = false; activationStarted = undefined;
   client = undefined; flyoutOpen = false; openFilter = undefined;
@@ -76,6 +84,26 @@ function remove() {
     try { if (retiredHost?.parentNode) retiredHost.parentNode.removeChild(retiredHost); } catch { /* Host DOM may itself be unavailable. */ }
   }
 }
+function lazyPrompt(shadow: ShadowRoot, button: HTMLButtonElement, options: Config): Prompt {
+  const project = options.project, current = generation;
+  let real: Prompt | undefined, loadingCard = false, last = 0, gone = false;
+  return {
+    sync(count) {
+      last = count;
+      if (gone || quiet.has(project)) return;
+      if (real) { real.sync(count); return; }
+      if (!(count > 0) || loadingCard) return;
+      loadingCard = true;
+      void import('./verify-prompt').then(module => {
+        if (gone || current !== generation || quiet.has(project)) return;
+        real = module.mountVerifyPrompt(shadow, button, options, { api: api(), isOpen: () => opened || flyoutOpen, onCheck: id => void checkIssue(id) });
+        real.sync(last);
+      }).catch(() => { /* The capsule still counts. */ });
+    },
+    suppress() { quiet.add(project); real?.suppress(); },
+    destroy() { gone = true; real?.destroy(); real = undefined; },
+  };
+}
 function mountLauncher() {
   if (!config || !identity || host || typeof document === 'undefined' || (window as Window & { Shopify?: { designMode?: boolean } }).Shopify?.designMode) return;
   try {
@@ -83,7 +111,7 @@ function mountLauncher() {
     host.style.cssText = 'all:initial!important;position:fixed!important;inset:0!important;z-index:2147483646!important;pointer-events:none!important;';
     root = host.attachShadow({ mode: 'closed' }); isolateKeys(root);
     const style = document.createElement('style'); if (config.nonce) style.nonce = config.nonce;
-    style.textContent = ':host{all:initial}[hidden]{display:none!important}' + tokenCss + "#tuix-launcher{all:initial;box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:44px;height:44px;border-radius:50%;background:var(--tx-peach);color:var(--tx-on-peach);cursor:pointer;pointer-events:auto;display:grid;place-items:center;font:600 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:0;box-shadow:0 12px 28px -10px rgba(0,0,0,.55);transition:opacity .16s var(--tx-ease)}#tuix-launcher:hover{opacity:.88}#tuix-launcher:focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}#tuix-launcher:disabled{cursor:wait}#tuix-launcher[aria-expanded=true]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}#tuix-launcher[data-mode=comment]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}@media(prefers-reduced-motion:reduce){#tuix-launcher{transition:none}#tuix-launcher[data-mode=comment]{animation:none}}";
+    style.textContent = ':host{all:initial}[hidden]{display:none!important}' + tokenCss + "#tuix-launcher{all:initial;box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:44px;height:44px;border-radius:50%;background:var(--tx-peach);color:var(--tx-on-peach);cursor:pointer;pointer-events:auto;display:grid;place-items:center;font:600 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:0;box-shadow:0 12px 28px -10px rgba(0,0,0,.55);transition:opacity .16s var(--tx-ease)}#tuix-launcher:hover{opacity:.88}#tuix-launcher:focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}#tuix-launcher:disabled{cursor:wait}#tuix-launcher[aria-expanded=true]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}#tuix-launcher[data-mode=comment]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}@media(prefers-reduced-motion:reduce){#tuix-launcher{transition:none}#tuix-launcher[data-mode=comment]{animation:none}}";
     launcher = document.createElement('button'); launcher.id = 'tuix-launcher'; launcher.type = 'button'; launcher.setAttribute('aria-label', 'Open tuix feedback');
     launcher.style[config.position === 'bottom-left' ? 'left' : 'right'] = '16px';
     launcher.hidden = config.launcher === false;
@@ -97,10 +125,15 @@ function mountLauncher() {
     }, {
       beforeOpen: closeForSettings,
       // Settings loads the core without opening the side panel, so updates render in the flyout.
-      onVisible: open => { flyoutOpen = open; if (core) core.settings?.(open); else if (open) void loadCore(false); },
+      onVisible: open => { flyoutOpen = open; if (open) prompt?.suppress(); if (core) core.settings?.(open); else if (open) void loadCore(false); },
       onFilter: filter => void openFromLoader(undefined, 'reports', filter),
       onEnvironment: refreshSummary,
     });
+    if (config.launcher !== false && config.enabled !== false) {
+      prompt = lazyPrompt(root, launcher, config);
+      // A deep link or an opening panel already has the person's attention.
+      if (config.showPinsOnLoad || linkedIssue()) prompt.suppress();
+    }
     if (config.showPinsOnLoad || linkedIssue()) void tuix.open();
     else if (markersPinned(config.project)) void loadCore(false);
     // A returning browser learns its summary once the page is idle; an untouched one stays idle.
@@ -116,7 +149,7 @@ function loadCore(interactive: boolean): Promise<void> | undefined {
   loading = import('./core').then(module => {
     if (current !== generation) return;
     core = module.mount(shadow, button, options, user, (active, clickedAway) => {
-      opened = active;
+      opened = active; if (active) prompt?.suppress();
       // A composer hidden behind Settings is not closed: focus stays with the flyout and the counts cannot have changed.
       const closed = !active && !suspending;
       // A click on the page put the focus where it wanted it.
@@ -130,9 +163,10 @@ function loadCore(interactive: boolean): Promise<void> | undefined {
       updates: options.launcher !== false ? settings?.slot : undefined,
       openSettings: () => { closeForSettings(); settings?.open(); },
       changed: refreshSummary,
+      engaged: () => prompt?.suppress(),
     });
     if (flyoutOpen) core.settings?.(true);
-    if (opened) { if (mode === 'comment') (core.comment ?? core.open)(); else core.open(openFilter); }
+    if (opened) { if (pendingIssue) { const id = pendingIssue; pendingIssue = undefined; core.openIssue?.(id); } else if (mode === 'comment') (core.comment ?? core.open)(); else core.open(openFilter); }
     openFilter = undefined;
   }).catch(() => {
     if (current !== generation || !interactive) return;
@@ -148,7 +182,7 @@ const commands = {
   identify(user: Identity | null) { remove(); identity = user ? { ...user } : undefined; mountLauncher(); },
   async open(started?: number, intent: 'reports' | 'comment' = 'reports', filter?: OpenFilter) {
     mountLauncher(); if (!root || !launcher || !config || !identity) return;
-    settings?.close();
+    settings?.close(); prompt?.suppress();
     if (!opened) {
       returnFocus = (root.activeElement ? launcher : document.activeElement) as HTMLElement;
       const now = performance.now();
@@ -163,6 +197,19 @@ const commands = {
   close() { opened = false; core?.close(); settings?.close(); },
   destroy() { remove(); config = undefined; identity = undefined; },
 };
+
+/** Check it on the verify prompt: opens the panel on that report's thread, as its pin does. */
+async function checkIssue(id: string) {
+  try {
+    mountLauncher(); if (!root || !launcher || !config || !identity) return;
+    settings?.close();
+    if (!opened) { returnFocus = launcher; activationStarted = performance.now(); }
+    opened = true; mode = 'reports'; openFilter = undefined;
+    if (core) { core.openIssue ? core.openIssue(id) : core.open(); return; }
+    pendingIssue = id;
+    await loadCore(true);
+  } catch { reportFailure(); }
+}
 
 /** @internal Preserve the script loader's monotonic activation time (and a queued report filter) across lazy loading. */
 export async function openFromLoader(started: unknown, intent: 'reports' | 'comment' = 'reports', filter?: unknown) {

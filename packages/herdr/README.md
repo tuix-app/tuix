@@ -36,8 +36,19 @@ To change the address or the account, click **Sign out** in the panel header (on
 - Fix opens a new Herdr space for each issue in a git worktree under `~/.herdr/worktrees/<repo>/<branch>`, running `claude --permission-mode auto`.
 - Agents need the Tuix connector in Claude Code, allowed to change issues.
 - In a space on another machine (an SSH machine added to Herdr), the fix runs on that machine: the worktree is under its home and the agent's space opens there. That machine needs `claude` signed in with the Tuix connector, `gh` signed in for the pull request link, and push access to the repository (for example `ForwardAgent yes` for the host). Fix waits while the machine isn't connected.
-- At most 3 agents run at once, in total; the rest wait in the queue.
-- In review is set only by the person's **Ready for review** (then **Yes**). An agent sets it only if the person tells it to in its terminal, after the fix is deployed.
+- At most 3 agents fix at once, in total; the rest wait in the queue. An agent that stays with its pull request (see After a fix) no longer counts once the pull request is open.
+- In review is set by the person's **Ready for review** (then **Yes**). An agent sets it only after the fix is deployed, and only when the repository's **After a fix** setting tells it to (see below) or when you tell it to in its terminal.
+
+## After a fix
+
+Under the project header the panel shows a line such as `After a fix: nothing more` with **Change**. It opens the setting for the repository of the space you are in (only where Fix is available):
+
+- **Merge the pull request when its checks pass.** The agent stays with its pull request: it watches the checks, fixes what its change broke, brings in the base branch and resolves conflicts, and merges with `gh pr merge` when every check has passed and GitHub says it can be merged. It never merges while a check fails or is pending, never uses `--admin`, never gets around a required review or branch protection, and never force-pushes another branch. A stacked pull request is merged after the one under it; if that one isn't merged, the agent stops and tells you. If it needs a review or can't get it green, it stops and tells you.
+- **Then set In review once the fix is deployed.** Needs the first option. The agent waits for the deploy (it checks at most every five minutes), then sets the issue to In review, which asks the reporter to check. You can describe how to tell that the deploy happened (up to 500 characters); left empty, the agent looks for the deploy of the merge commit itself. If the deploy fails or the agent can't tell, it stops and tells you instead. Without a merged pull request (a remote that isn't GitHub, `gh` not signed in) it stops after its reply and leaves the status alone.
+
+Both are off by default: the agent then does what it always did. The setting is per repository and applies to fixes started afterwards; agents already running keep what they were told. The agent needs `gh` signed in with permission to merge in that repository. These agents keep running after the pull request is open, so they use Claude while they wait. They show on the issue's row: `merging when checks pass` while working, `needs you` when the agent waits for a permission, and `agent idle · check its terminal` when it has stopped, which is where it says whether it finished or needs a decision. Click the line to go to its terminal. They don't count towards the 3 agents at once.
+
+Reports are written by people using your app, and the agent reads them. With merging on, the only things between a report and merged code are the repository's checks and its branch protection: turn it on where the repository requires a review, or where you accept that an agent's change is merged without anyone reading it.
 
 ## Recipe
 

@@ -13,8 +13,11 @@ async function loaded(dom) {
   dom.window.document.querySelector('script').dispatchEvent(new dom.window.Event('load'));
   await flush();
 }
-function fixture() {
+async function fixture() {
   const dom = new JSDOM('<head></head><body><div id="tuix-phoenix"></div></body>', { url: 'https://host.example.test', runScripts: 'outside-only' });
+  // jsdom fires its own load and pageshow after the document is parsed; wait for them so the
+  // script under test does not take that pageshow for a navigation and retry.
+  await new Promise(resolve => dom.window.addEventListener('pageshow', resolve, { once: true }));
   const observers = [];
   const Observer = dom.window.MutationObserver;
   dom.window.MutationObserver = class extends Observer {
@@ -34,7 +37,7 @@ function fixture() {
 }
 
 test('login, LiveView identity patch, logout and removal destroy stale identity with one loader', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   try {
     run();
     assert.equal(dom.window.__tuixPhoenix, undefined);
@@ -63,7 +66,7 @@ test('login, LiveView identity patch, logout and removal destroy stale identity 
 });
 
 test('failed asset loads do not loop; a later navigation permits retry', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   try {
     element.setAttribute('data-tuix-phoenix', payload('alice'));
     run();
@@ -79,7 +82,7 @@ test('failed asset loads do not loop; a later navigation permits retry', async (
 });
 
 test('pagehide clears identity and pageshow restores the current identity', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   try {
     element.setAttribute('data-tuix-phoenix', payload('alice'));
     run();
@@ -96,7 +99,7 @@ test('pagehide clears identity and pageshow restores the current identity', asyn
 
 test('malformed identity and external loader configuration remain inactive', async () => {
   for (const encoded of ['{', 'null', '{}', payload('alice').replace('/tuix-assets/', 'https://other.test/tuix-assets/')]) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     try {
       element.setAttribute('data-tuix-phoenix', encoded);
       run();
@@ -107,7 +110,7 @@ test('malformed identity and external loader configuration remain inactive', asy
 });
 
 test('hosted dispatch is credential-free CORS, SRI and nonce protected; selected manifest survives identity and navigation', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   const requests = [];
   dom.window.fetch = async (...args) => { requests.push(args); return { ok: true, json: async () => manifest }; };
   try {
@@ -148,7 +151,7 @@ test('hosted rejects missing SRI, malformed manifests and arbitrary or same-orig
     ...[undefined, '', 'sha256-abc', 'sha384-abc', integrity + ' '].map(integrity => ({ ...manifest, loader: { ...manifest.loader, integrity } }))
   ];
   for (const response of invalid) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     dom.window.fetch = async () => ({ ok: true, json: async () => response });
     try {
       element.setAttribute('data-tuix-phoenix', payload('alice', 'hosted'));
@@ -165,7 +168,7 @@ test('unsafe API origins, anonymous and unsigned identities never fetch', async 
     p => { p.user = null; }, p => { delete p.user.hash; },
     ...['http://remote.test', 'https://user:pass@tuix.test', 'https://tuix.test/path', 'https://tuix.test?x=1', 'https://tuix.test#x'].map(api => p => { p.options.api = api; })
   ]) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     let fetched = false;
     dom.window.fetch = async () => { fetched = true; throw Error('unexpected'); };
     try {
@@ -179,7 +182,7 @@ test('unsafe API origins, anonymous and unsigned identities never fetch', async 
 });
 
 test('logout invalidates in-flight manifest even if transport ignores abort', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   let complete, signal;
   dom.window.fetch = (_, options) => { signal = options.signal; return new Promise(resolve => { complete = resolve; }); };
   try {
@@ -195,7 +198,7 @@ test('logout invalidates in-flight manifest even if transport ignores abort', as
 
 test('identity change during loader flight initializes only latest user; logout during loader does not initialize', async () => {
   for (const next of ['bob', null]) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     dom.window.fetch = async () => ({ ok: true, json: async () => manifest });
     try {
       element.setAttribute('data-tuix-phoenix', payload('alice', 'hosted'));
@@ -209,7 +212,7 @@ test('identity change during loader flight initializes only latest user; logout 
 });
 
 test('manifest failures wait for navigation before retry; loader retry keeps selected runtime', async () => {
-  const { dom, element, calls, run } = fixture();
+  const { dom, element, calls, run } = await fixture();
   let requests = 0;
   dom.window.fetch = async () => { requests++; return { ok: requests > 1, json: async () => manifest }; };
   try {
@@ -229,7 +232,7 @@ test('manifest failures wait for navigation before retry; loader retry keeps sel
 
 test('bounded manifest and loader timeouts leave host usable and permit navigation retry', async () => {
   for (const stage of ['manifest', 'loader']) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     const timers = new Map();
     const originalTimeout = dom.window.setTimeout.bind(dom.window);
     dom.window.setTimeout = (fn, ms) => {
@@ -262,7 +265,7 @@ test('bounded manifest and loader timeouts leave host usable and permit navigati
 
 test('a selected runtime cannot switch API origins or delivery mode mid-page', async () => {
   for (const change of [p => { p.options.api = 'https://different.test'; }, p => { p.delivery = 'bundled'; }]) {
-    const { dom, element, calls, run } = fixture();
+    const { dom, element, calls, run } = await fixture();
     let requests = 0;
     dom.window.fetch = async () => { requests++; return { ok: true, json: async () => manifest }; };
     try {

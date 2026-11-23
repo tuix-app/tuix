@@ -11,10 +11,13 @@ const payload = id => JSON.stringify({ delivery: 'hosted', user: { id, name: id,
   options: { project: 'test', api: 'https://tuix.example.test', nonce: 'test-nonce' } });
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
-function fixture(t, fetcher) {
+async function fixture(t, fetcher) {
   const dom = new JSDOM('<head></head><body><div id="tuix-rails"></div></body>', {
     url: 'https://host.example.test', runScripts: 'outside-only'
   });
+  // jsdom fires its own load and pageshow after the document is parsed; wait for them so the
+  // script under test does not take that pageshow for a navigation and retry.
+  await new Promise(resolve => dom.window.addEventListener('pageshow', resolve, { once: true }));
   const { window } = dom;
   const calls = [], requests = [], observers = [];
   const Observer = window.MutationObserver;
@@ -42,7 +45,7 @@ function fixture(t, fetcher) {
 }
 
 test('anonymous pages stay idle; signed identities reuse one SRI loader and logout clears the widget', async t => {
-  const f = fixture(t);
+  const f = await fixture(t);
   f.run();
   await flush();
   assert.equal(f.requests.length, 0);
@@ -66,7 +69,7 @@ test('anonymous pages stay idle; signed identities reuse one SRI loader and logo
 });
 
 test('Turbo cache strips identity and widget, previews stay idle, fresh renders identify again', async t => {
-  const f = fixture(t);
+  const f = await fixture(t);
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
   await f.loaded();
@@ -90,7 +93,7 @@ test('Turbo cache strips identity and widget, previews stay idle, fresh renders 
 
 test('logout while manifest is pending aborts and prevents stale initialization', async t => {
   let resolve;
-  const f = fixture(t, () => new Promise(done => { resolve = done; }));
+  const f = await fixture(t, () => new Promise(done => { resolve = done; }));
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
   await flush();
@@ -105,7 +108,7 @@ test('logout while manifest is pending aborts and prevents stale initialization'
 
 test('untrusted manifest cannot select a script; navigation retries after failure', async t => {
   let valid = false;
-  const f = fixture(t, async () => ({ ok: true, json: async () => valid ? manifest :
+  const f = await fixture(t, async () => ({ ok: true, json: async () => valid ? manifest :
     { ...manifest, loader: { url: 'https://attacker.example/evil.js', integrity } } }));
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
@@ -119,7 +122,7 @@ test('untrusted manifest cannot select a script; navigation retries after failur
 });
 
 test('late loader completion after logout cannot initialize; a later login can reuse it', async t => {
-  const f = fixture(t);
+  const f = await fixture(t);
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
   await flush();
@@ -139,7 +142,7 @@ test('manifest protocol, version, directory and integrity must agree before load
     { ...manifest, directory: 'untrusted' },
     { ...manifest, loader: { url: path, integrity: 'sha384-invalid' } },
   ]) {
-    const f = fixture(t, async () => ({ ok: true, json: async () => invalid }));
+    const f = await fixture(t, async () => ({ ok: true, json: async () => invalid }));
     f.element.setAttribute('data-tuix-rails', payload('alice'));
     f.run();
     await flush();
@@ -149,7 +152,7 @@ test('manifest protocol, version, directory and integrity must agree before load
 });
 
 test('a document cannot silently reuse a runtime from a different API origin', async t => {
-  const f = fixture(t);
+  const f = await fixture(t);
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
   await f.loaded();
@@ -163,7 +166,7 @@ test('a document cannot silently reuse a runtime from a different API origin', a
 });
 
 test('script failure stays quiet until navigation and can then recover', async t => {
-  const f = fixture(t);
+  const f = await fixture(t);
   f.element.setAttribute('data-tuix-rails', payload('alice'));
   f.run();
   await flush();

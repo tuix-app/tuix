@@ -116,3 +116,25 @@ it('discards review capture when a cross-environment report becomes unavailable 
   expect(root.textContent).toContain('This report is no longer available in this environment.');
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fixture');
 });
+
+it('opens a report straight on its review state for the verify prompt (Check it), before or after the list has loaded', async () => {
+  vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
+  mock.request.mockImplementation(async (path: string) => {
+    if (path === '/config') return { telemetry: false, capture: { screenshot: false, console: false, network: false } };
+    if (path.startsWith('/issues?')) return { issues: [issue] };
+    if (path === '/issues/issue') return issue;
+    return { notifications: [] };
+  });
+  const host = document.createElement('div'); document.body.append(host);
+  const root = host.attachShadow({ mode: 'closed' });
+  const launcher = document.createElement('button'); document.body.append(launcher);
+  core = mount(root, launcher, { project: 'fixture' }, { id: 'reviewer', name: 'Reviewer' }, () => {});
+  core.openIssue!('issue'); await vi.advanceTimersByTimeAsync(300);
+  expect(mock.request).toHaveBeenCalledWith('/issues/issue');
+  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+  // Once the list has loaded (the core is ready), Check it goes straight to the thread.
+  core.close(); await vi.advanceTimersByTimeAsync(100); mock.request.mockClear();
+  core.openIssue!('issue'); await vi.advanceTimersByTimeAsync(300);
+  expect(mock.request).toHaveBeenCalledWith('/issues/issue');
+  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+});

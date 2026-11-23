@@ -50,7 +50,7 @@ export async function pumpRuns(v, cx) {
       const run = toStart(v.runs, live, { repoMain: repo.main, machine: v.machine ?? null })[0];
       if (!run) break;
       const issue = v.issues.find((i) => i.id === run.issueId);
-      const next = await startRun({ run, issue, runs: v.runs, repo, home: home(), exec, now: Date.now });
+      const next = await startRun({ run, issue, runs: v.runs, repo, home: home(), exec, now: Date.now, rules: v.rules() });
       v.runs = applyIfCurrent(v.runs, run, next);
       v.saveRuns(); v.regroup(); cx.notify();
     }

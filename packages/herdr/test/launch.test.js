@@ -287,3 +287,20 @@ test("probe sees a remote agent listed bare with its machine", () => {
   const p = probe(run, [{ address: "t9", machine: "vps", status: "working" }], [{ address: "t9", machine: "vps" }]);
   assert.deepEqual(p, { agentStatus: "working", shellAlive: true, terminalAlive: true });
 });
+
+test("startRun records how far the agent goes and tells it so; queueRun records nothing", async () => {
+  assert.equal(queued().auto, null);
+  const taskOf = (f) => JSON.parse(f.calls.find((c) => c[0] === "herdr-app")[3]).task;
+  const go = (rules) => { const f = fake(); return startRun({ run: queued(), issue, runs: [queued()], repo, home: "/home/u", exec: f.exec, now: () => 500, rules }).then((run) => ({ run, task: taskOf(f) })); };
+  const off = await go(undefined), allOff = await go({ merge: false, review: false, deploy: "" });
+  assert.equal(off.run.auto, null);
+  assert.equal(allOff.run.auto, null);
+  assert.equal(allOff.task, off.task);
+  const merge = await go({ merge: true, review: false, deploy: "" });
+  assert.equal(merge.run.auto, "merge");
+  assert.match(merge.task, /\n5\. If you opened a pull request/);
+  assert.doesNotMatch(merge.task, /\n6\. /);
+  const review = await go({ merge: true, review: true, deploy: "Deploy is green" });
+  assert.equal(review.run.auto, "review");
+  assert.match(review.task, /How I tell that it is deployed: Deploy is green\./);
+});

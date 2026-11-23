@@ -12,7 +12,7 @@ it('reads legacy statuses from older servers in the new vocabulary', () => {
 });
 it('names every new notification kind in both languages', () => {
   const en = translations('en').updateKinds, pl = translations('pl').updateKinds;
-  for (const kind of ['member_reply', 'end_user_reply', 'in_progress', 'in_review', 'done', 'closed', 'reopened', 'auto_closed', 'assigned', 'unassigned', 'mentioned', 'turn_returned']) {
+  for (const kind of ['member_reply', 'end_user_reply', 'in_progress', 'in_review', 'done', 'closed', 'reopened', 'auto_closed', 'assigned', 'unassigned', 'mentioned', 'turn_returned', 'verify_reminder', 'verify_last_call', 'verify_nudge']) {
     expect(en[kind], kind).toBeTruthy();
     expect(pl[kind], kind).toBeTruthy();
     expect(pl[kind]).not.toBe(en[kind]);

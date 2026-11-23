@@ -76,6 +76,35 @@ test("runLine describes each state of a run", () => {
   assert.equal(runLine(run({ state: "pr_open", prUrl: null }), at).branch, "b");
 });
 
+test("runLine: a PR-open run whose agent keeps going shows what it does", () => {
+  const at = 10 * 60000, pr = (o) => ({ state: "pr_open", startedAt: 0, branch: "b", terminal: "t1", prUrl: "https://github.com/example/app/pull/9", stackedOn: 5, ...o });
+  const merge = runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus: "working" });
+  assert.deepEqual([merge.icon, merge.tone, merge.text, merge.focus], ["spinner", null, "merging when checks pass", true]);
+  assert.deepEqual([merge.link, merge.branch, merge.remove, merge.stacked], ["https://github.com/example/app/pull/9", "b", false, 5]); // no Remove while the agent acts
+  assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).text, "merging, then In review once deployed");
+  assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).focus, false);
+  const blocked = runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus: "blocked" });
+  assert.deepEqual([blocked.icon, blocked.tone, blocked.text, blocked.focus, blocked.remove, blocked.stacked], ["dot", "alert", "needs you", true, false, 5]);
+  // Idle or done with its terminal still there: the row points at the terminal, and Remove is back.
+  for (const agentStatus of ["idle", "done"]) {
+    const idle = runLine(pr({ auto: "review" }), at, { focusable: true, agentStatus });
+    assert.deepEqual([idle.icon, idle.tone, idle.text, idle.focus, idle.remove], [null, "dim", "agent idle · check its terminal", true, true]);
+    assert.deepEqual(runLine(pr({ auto: "review" }), at, { focusable: false, agentStatus }), runLine(pr({}), at, {}));
+  }
+  // Not listed (its terminal is gone): the plain PR-open line.
+  for (const agentStatus of [null, undefined]) assert.deepEqual(runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus }), runLine(pr({}), at, { focusable: true }));
+});
+
+test("runLine: a PR-open run without auto is the same whatever the agent does", () => {
+  const at = 10 * 60000, run = { state: "pr_open", startedAt: 0, branch: "b", terminal: "t1", prUrl: null };
+  const plain = runLine(run, at, { focusable: true });
+  for (const agentStatus of ["working", "blocked", "idle", null]) {
+    assert.deepEqual(runLine(run, at, { focusable: true, agentStatus }), plain);
+    assert.deepEqual(runLine({ ...run, auto: null }, at, { focusable: true, agentStatus }), plain);
+  }
+  assert.deepEqual([plain.icon, plain.text, plain.focus], [null, "", false]);
+});
+
 test("rowsOf: checkable limits the checkbox per issue (All projects)", () => {
   const groups = { open: [{ id: "a", projectId: "p1" }, { id: "b", projectId: "p2" }], fixing: [], prOpen: [], inReview: [] };
   const rows = rowsOf(groups, { canWrite: true, checkable: (i) => i.projectId === "p1" }).filter((r) => r.kind === "issue");

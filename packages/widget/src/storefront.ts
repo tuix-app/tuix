@@ -1,5 +1,6 @@
 import { Api, ApiError } from './api';
 import { tuix } from './index';
+import { followShopifyBar } from './storefront-lift';
 import type { Config } from './types';
 
 export interface StorefrontBoot {
@@ -54,6 +55,7 @@ export async function activateStorefront(boot: StorefrontBoot, recover?: (reason
       return storefrontRoute(template, handle);
     } });
     tuix.identify({ id: result.user.id, name: result.user.name, reviewerSession: session });
+    try { followShopifyBar(); } catch { /* Placement only; review works without it. */ }
     return true;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401 && boot.invitation && boot.session) {

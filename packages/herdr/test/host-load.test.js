@@ -33,7 +33,7 @@ const { default: Tuix } = await import("../mods/tuix/main.js");
 
 test("the app-side files load against Herdr's API", async () => {
   assert.equal(typeof Tuix, "function");
-  for (const f of ["launch.js", "list.js", "thread.js", "signin.js", "shots.js"]) await import(`../mods/tuix/${f}`);
+  for (const f of ["launch.js", "list.js", "thread.js", "signin.js", "shots.js", "rules.js"]) await import(`../mods/tuix/${f}`);
 });
 
 // A view with just what fixBlock reads.
@@ -52,4 +52,34 @@ test("Fix on another machine: allowed when connected, disabled with the reason w
 test("a Herdr without machines() still allows Fix on another machine", () => {
   globalThis.__herdr = {};
   assert.equal(view({ machine: "vps" }).fixBlock(), null);
+});
+
+test("the After a fix setting is all off without a repository, and for one never set", () => {
+  globalThis.__herdr = {};
+  const off = { merge: false, review: false, deploy: "" };
+  assert.deepEqual(view({ repo: null }).rules(), off);
+  assert.deepEqual(view({ repo: { main: "/never-set" } }).rules(), off);
+  // closeRules is safe when closed, and when open without a repository.
+  view({ repo: null }).closeRules();
+  view({ repo: null, rulesOpen: true, deployInput: { value: () => "x" } }).closeRules();
+  view({ repo: null }).setRules({ merge: true }, { notify() {} });
+});
+
+test("the After a fix setting is kept per repository, and closing saves the text for the repository it was typed in", () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => { store.set(k, String(v)); } };
+  try {
+    let notified = 0; const cx = { notify() { notified++; } };
+    const a = view({ repo: { main: "/a" }, rulesOpen: false, deployInput: { value: () => "  the Deploy run\nis green " } });
+    a.setRules({ merge: true, review: true }, cx);
+    view({ repo: { main: "/b" } }).setRules({ merge: true }, cx);
+    assert.equal(notified, 2);
+    assert.deepEqual(a.rules(), { merge: true, review: true, deploy: "" });
+    assert.deepEqual(view({ repo: { main: "/b" } }).rules(), { merge: true, review: false, deploy: "" });
+    assert.deepEqual(view({ repo: { main: "/c" } }).rules(), { merge: false, review: false, deploy: "" });
+    a.rulesOpen = true; a.closeRules();
+    assert.equal(a.rulesOpen, false);
+    assert.deepEqual(a.rules(), { merge: true, review: true, deploy: "the Deploy run is green" });
+    assert.deepEqual(JSON.parse(store.get("rules"))["/b"], { merge: true, review: false, deploy: "" });
+  } finally { delete globalThis.localStorage; }
 });

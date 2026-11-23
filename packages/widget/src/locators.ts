@@ -181,3 +181,6 @@ export function routeKey(input: string, keepQuery: string[] = []): string {
   for (const key of [...keepQuery].sort()) for (const value of url.searchParams.getAll(key)) query.append(key, value);
   return path + (query.size ? '?' + query.toString() : '');
 }
+
+/** The route key reports are filed under: the host's `route()` or the page address, 512 characters at most. */
+export function currentRoute(config: { route?: () => string; keepQuery?: string[] }) { try { return (config.route?.() ?? routeKey(location.href, config.keepQuery)).slice(0, 512); } catch { return routeKey(location.href); } }

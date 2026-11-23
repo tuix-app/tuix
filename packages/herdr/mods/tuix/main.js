@@ -17,6 +17,8 @@ import { CHECK_EVERY, applyUpdate, checkDue, cleanUp, hashOf, latestHash, update
 const machineUp = (name) => { const list = herdr.machines?.(); return !list || list.find((m) => m.name === name)?.layout === "ready"; };
 const knownAgentsOn = (on) => Promise.resolve().then(() => herdr.knownAgents?.({ on }) ?? null);
 import { signinView } from "./signin.js";
+import { rulesView } from "./rules.js";
+import { normalize, rulesFor, summary } from "./lib/rules.js";
 import { listView } from "./list.js";
 import { shotBox, threadView } from "./thread.js";
 import { cacheShot, pruneShots } from "./shots.js";
@@ -66,6 +68,10 @@ export default class Tuix extends View {
     this.th = null; this.confirming = null; this.drafts = {}; this.paneW = 0;
     this.reply = TextareaState.new({ placeholder: "Reply…" });
     this.reply.set_auto_grow(2, 8);
+    // The After a fix setting: shown in place of the list while rulesOpen; deployInput is its free text.
+    this.rulesOpen = false;
+    this.deployInput = TextareaState.new({ placeholder: "How do you see that a deploy finished?" });
+    this.deployInput.set_auto_grow(2, 6);
 
     const auth = read("auth", null);
     this.urlInput = InputState.new({ placeholder: DEFAULT_URL, value: auth?.url ?? DEFAULT_URL });
@@ -124,7 +130,7 @@ export default class Tuix extends View {
   fail(e) {
     if (e instanceof McpError && e.code === "unauthorized") {
       // Unauthorized reaches here only after the one refresh-and-retry failed: the session is over.
-      this.saveDraft();
+      this.saveDraft(); this.closeRules();
       this.dropSession();
       this.client = null; this.state = "signin"; this.locKey = null; this.locating = false;
       this.th = null; this.confirming = null;
@@ -152,7 +158,7 @@ export default class Tuix extends View {
   // Back to sign-in to change the address or the account. Drops only what is in memory (the session, which is
   // revoked when the server allows it); the runs (and their agents) stay. The address stays in the field.
   signOut(cx) {
-    this.saveDraft();
+    this.saveDraft(); this.closeRules();
     this.authGen++; this.dropSession();
     this.loadGen++; this.loading = false; this.again = false; // loads in flight must not write onto the sign-in view
     this.client = null; this.canWrite = false; this.device = null; this.connecting = false;
@@ -291,6 +297,7 @@ export default class Tuix extends View {
       // The Fix selection survives a folder change inside the same repo and project.
       const selKey = `${repo?.main ?? ""}|${all ? ALL : project?.id ?? ""}`;
       const keep = relocation({ state: this.state, key: this.selKey }, { key: selKey, hasProject: Boolean(project) || all }) === "keep";
+      if (!keep) this.closeRules(); // before this.repo changes: the deploy text belongs to the repo it was typed for
       this.repo = repo; this.hasOrigin = origin; this.machine = loc.on ?? null; this.noClaude = noClaude;
       if (!keep) {
         if (this.state === "list" || this.state === "thread") this.saveDraft();
@@ -311,6 +318,7 @@ export default class Tuix extends View {
 
   // `project` is a project, or ALL for the All projects view (remembered per repo like a project).
   pick(project, cx) {
+    this.closeRules();
     const all = project === ALL;
     if (this.repo) {
       write("projects", { ...read("projects", {}), [this.repo.main]: all ? ALL : project.id });
@@ -325,6 +333,31 @@ export default class Tuix extends View {
   }
 
   saveRuns() { write("runs", this.runs); }
+
+  // The rules of the shown repository (all off without one); read when an agent starts and when the setting is drawn.
+  rules() { return rulesFor(read("rules", {}), this.repo?.main); }
+
+  // Merges `patch` into this repository's rules, normalised, and keeps them. Only fixes started afterwards use them.
+  setRules(patch, cx) {
+    const main = this.repo?.main;
+    if (typeof main !== "string") return;
+    const stored = read("rules", {}), next = normalize({ ...rulesFor(stored, main), ...patch });
+    write("rules", { ...(stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {}), [main]: next });
+    cx?.notify();
+  }
+
+  openRules(cx) {
+    this.deployInput.set_value(this.rules().deploy);
+    this.rulesOpen = true; cx.notify();
+  }
+
+  // Saves the deploy text and closes the setting. Safe to call when it isn't open or there is no repository.
+  closeRules(cx) {
+    if (!this.rulesOpen) return;
+    this.rulesOpen = false;
+    if (this.repo) this.setRules({ deploy: this.deployInput.value() });
+    cx?.notify();
+  }
 
   regroup() { this.groups = groupIssues(this.issues, this.runs); }
 
@@ -416,6 +449,7 @@ export default class Tuix extends View {
   }
 
   openThread(issue, cx) {
+    this.closeRules();
     this.th = { id: issue.id, issue, comments: [], cursor: null, context: null, loading: true, gen: 0, loaded: false, failed: false, shots: {}, sel: 0, open: new Set(), passOpen: false, replyError: null, sending: false };
     this.confirming = null; this.reply.set_value(this.drafts[issue.id] ?? "");
     this.state = "thread"; cx.notify();
@@ -615,7 +649,7 @@ export default class Tuix extends View {
     const note = (text, color) => div().px(14).py(4).text_size(11).text_color(color ?? t.dim).child(text);
     const thread = this.state === "thread" && this.th;
     const title = this.state === "list" && (this.project || this.all)
-      ? h_flex().id("tuix-project").gap(6).items_center().cursor_pointer().on_click((_e, cx) => { this.state = "project"; cx.notify(); })
+      ? h_flex().id("tuix-project").gap(6).items_center().cursor_pointer().on_click((_e, cx) => { this.closeRules(); this.state = "project"; cx.notify(); })
         .child(div().font_semibold().truncate().child(this.all ? "All projects" : labelOf(this.project, this.projects))).child(div().text_color(t.dim).child("▾"))
         .when(Boolean(this.project?.archived), (e) => e.child(div().text_size(11).text_color(t.dim).child("Archived: read only")))
       : div().font_semibold().child(this.state === "project" ? "Choose a project" : "Tuix");
@@ -631,9 +665,12 @@ export default class Tuix extends View {
         .child(this.button("tuix-update", this.upd.busy ? "Updating…" : this.upd.error ? "Try again" : "Update", (_e, cx) => this.update(cx), { primary: true, disabled: this.upd.busy }))))
       .when(Boolean(this.client) && !this.canWrite, (e) => e.child(note(READ_ONLY)))
       .when(this.state === "list" && this.all && this.canWrite, (e) => e.child(note("Fix works in the matched project's repository.")))
+      .when(this.state === "list" && !this.rulesOpen && !this.fixBlock() && (!this.all || Boolean(this.fixProject)), (e) => e.child(h_flex().px(14).py(4).gap(8).items_center()
+        .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(summary(this.rules())))
+        .child(div().id("tuix-rules").flex_none().text_size(11).text_color(t.accent).cursor_pointer().on_click((_e, cx) => this.openRules(cx)).child("Change"))))
       .when(this.state === "list" && this.cut, (e) => e.child(note(this.all ? `List cut off in ${this.cutNames.join(", ")}.` : `List cut off — showing the first ${this.issues.length}.`, t.blocked)))
       .when(this.state !== "signin" && Boolean(this.notice), (e) => e.child(note(this.notice, t.ansi1)))
       .child(this.state === "signin" ? signinView(this, t) : this.state === "project" ? this.projectView(t)
-        : thread ? threadView(this, t) : listView(this, t));
+        : thread ? threadView(this, t) : this.rulesOpen ? rulesView(this, t) : listView(this, t));
   }
 }

@@ -4,6 +4,8 @@
 // here assumes it. A run is { issueId, number, reference, appUrl, branch, base, stackedOn,
 // worktree, terminal, state, queuedAt, startedAt, seenWorking, prUrl, repoMain, machine }; times are epoch ms.
 // `machine` is null (or missing, in records saved before it existed) for this computer.
+// `auto` is what the agent was told to do after the fix: null (or missing, in older records) for nothing more,
+// "merge" (watch the pull request and merge it) or "review" (merge, then set In review once deployed).
 
 export const LIMIT = 3;
 

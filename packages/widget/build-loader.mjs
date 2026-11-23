@@ -12,16 +12,22 @@ const shopifyLoader = await readFile('dist/shopify.js');
 const shopifySize = gzipSync(shopifyLoader).length;
 if (shopifySize >= 2048) throw new Error(`Shopify loader exceeds 2 KiB gzip: ${shopifySize}`);
 const shopify = { loader: 'shopify.js', integrity: 'sha384-' + createHash('sha384').update(shopifyLoader).digest('base64'), gzipBytes: shopifySize };
-let coreBytes = 0, screenshotBytes = 0;
+let coreBytes = 0, screenshotBytes = 0, promptBytes = 0;
 for (const file of await readdir('dist')) {
   if (!file.endsWith('.js') || ['tuix.js', 'shopify.js'].includes(file)) continue;
   const bytes = gzipSync(await readFile('dist/' + file)).length;
-  if (file.startsWith('screenshot-')) screenshotBytes += bytes; else coreBytes += bytes;
+  if (file.startsWith('screenshot-')) screenshotBytes += bytes;
+  else if (file.startsWith('verify-prompt-')) promptBytes += bytes;
+  else coreBytes += bytes;
 }
 // Editing-event isolation took the former 60 KiB boundary to 61 KiB, and closing the
 // sidebar on a click outside it to 62 KiB. Keep a bounded budget without trimming
 // input protection for size.
-if (coreBytes >= 62 * 1024 || screenshotBytes >= 25 * 1024) throw new Error(`Widget budget exceeded: core=${coreBytes}, screenshot=${screenshotBytes}`);
+// Phoenix 1.8.17 and Vite 8.3.8 (Rolldown 1.2.19) emit about 320 bytes more for the same
+// source, which took the boundary to 63 KiB.
+// The verify prompt's card loads only for a reporter with a fix to check, so it has
+// its own budget instead of taking from the core every visitor downloads.
+if (coreBytes >= 63 * 1024 || screenshotBytes >= 25 * 1024 || promptBytes >= 4 * 1024) throw new Error(`Widget budget exceeded: core=${coreBytes}, screenshot=${screenshotBytes}, prompt=${promptBytes}`);
 const loader = await readFile('dist/tuix.js');
 const size = gzipSync(loader).length;
 if (size >= 2048) throw new Error(`Loader exceeds 2 KiB gzip: ${size}`);

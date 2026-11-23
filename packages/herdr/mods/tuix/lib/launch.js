@@ -4,6 +4,7 @@
 // through exec's `on`, and Herdr opens its space there. Only `herdr-app` itself always runs here.
 import { addWorktree, defaultBase, prUrl, remoteIsGithub, worktreePath } from "./git.js";
 import { fixPrompt } from "./prompt.js";
+import { autoOf } from "./rules.js";
 import { advance, closingComment, stackable, startTimeout } from "./runs.js";
 
 export const AGENT_ARGV = ["claude", "--permission-mode", "auto"];
@@ -13,7 +14,7 @@ export function queueRun(runs, issue, { branch, repoMain, machine = null, projec
   const run = {
     issueId: issue.id, number: issue.number, title: issue.title ?? "", reference: issue.reference, appUrl: issue.app_url,
     branch, base: null, stackedOn: null, worktree: null, terminal: null, state: "queued",
-    queuedAt: now, startedAt: null, seenWorking: false, prUrl: null, error: null, repoMain, machine, projectId,
+    queuedAt: now, startedAt: null, seenWorking: false, prUrl: null, error: null, repoMain, machine, projectId, auto: null,
   };
   return [...runs.filter((r) => r.issueId !== issue.id), run];
 }
@@ -74,15 +75,16 @@ export function claudeMissing(known) {
 
 // Starts one queued run. Never throws: a failure leaves the run stopped with the reason in `error`.
 // `home` is this computer's; a run on another machine asks that machine for its own.
-export async function startRun({ run, issue, runs, repo, home, exec, now }) {
+// `rules` (see rules.js) say what the agent does after the fix; the record keeps how far (`auto`) for the row.
+export async function startRun({ run, issue, runs, repo, home, exec, now, rules }) {
   const machine = run.machine ?? null, there = execOn(exec, machine);
   try {
     const base = await defaultBase(repo, there);
     const homeDir = machine ? await remoteHome(there, machine) : home;
     const worktree = await worktreeFor({ repo, branch: run.branch, base, home: homeDir, exec: there });
-    const task = fixPrompt({ issue, branch: run.branch, stackable: stackable(runs, repo.main) });
+    const task = fixPrompt({ issue, branch: run.branch, stackable: stackable(runs, repo.main), rules });
     const space = parseSpaceNew(await exec("herdr-app", spaceNewArgs({ worktree, task, machine }), {}));
-    return { ...run, base, worktree, terminal: qualify(space.terminal, machine), state: "running", startedAt: now(), seenWorking: false, error: null };
+    return { ...run, base, worktree, terminal: qualify(space.terminal, machine), state: "running", startedAt: now(), seenWorking: false, error: null, auto: autoOf(rules) };
   } catch (e) {
     return { ...run, state: "stopped", error: String(e?.message ?? e) };
   }

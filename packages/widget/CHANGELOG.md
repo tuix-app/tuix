@@ -1,5 +1,13 @@
 # Widget changelog
 
+## 0.3.5
+
+- **A nudge to check fixes.** When you are on a page where one of your own reports is waiting in **To verify**, a small card beside the launcher asks "Fixed — does it work now?" with the report's number and title. **Check it** opens the report with its screenshot, the developer's note and Done / Still broken; **Later** hides it for 24 hours (a new review round asks again). It shows one report at a time, never steals focus, and only after the summary has said there is something to verify. Needs a server that sends `verification_started_at` on list entries; against an older server the card still works but a new review round of a dismissed report stays hidden until the day is over. Polish: "Naprawione — czy już działa?", "Sprawdź", "Później".
+
+## 0.3.4
+
+- **Shopify storefronts: clear of Shopify's bottom bar.** Staff signed in to Shopify see a bar along the bottom of their storefront (theme preview, admin bar), which covered the launcher. On a Shopify storefront the widget now measures that bar and moves everything it anchors to the bottom edge (launcher, badges, panel, Settings) up by its height, follows the bar when it appears late, resizes or is hidden, and stays where it was when there is none. Placement comes from the CSS variable `--tuix-lift` on the page's root element, 0 by default, so other sites are unchanged.
+
 ## 0.3.3
 
 - **Screenshots on pages with videos.** A page with several `<video>` elements often ended with "Screenshot unavailable": the capture loaded every video on the page a second time and waited for each in turn, without a limit, so it ran out of its 8 seconds (a home page with 22 short clips needed 13). The widget now draws the frame a video is showing straight from the page, for the videos in the captured view only; one outside it keeps its box, one that has not loaded shows its poster, and one whose pixels the page may not read (another origin without CORS) shows its poster or a dark box. No video is requested again.

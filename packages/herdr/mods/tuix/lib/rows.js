@@ -43,7 +43,9 @@ const isHttps = (url) => /^https:\/\/[^\s]+$/.test(String(url ?? ""));
 // What a run's row says. `icon`: "spinner" | "dot" | null; `tone`: "alert" | "dim" | null;
 // `focus`: a click goes to the agent's terminal (`focusable`: the terminal still exists); `remove`: the Remove action is offered;
 // `link`: an https pull request link (opened only on click), else `branch` is shown.
-export function runLine(run, now, { focusable = false } = {}) {
+// A PR-open run whose agent keeps going (`auto`) shows what the agent is doing while its terminal is there. Remove is
+// not offered while it works or waits for the person: removing the record would not stop the agent.
+export function runLine(run, now, { focusable = false, agentStatus = null } = {}) {
   const since = run.startedAt != null ? elapsed(now - run.startedAt) : null;
   const reach = focusable && Boolean(run.terminal);
   const base = { icon: null, tone: "dim", text: "", focus: false, remove: false, link: null, branch: null, stacked: run.stackedOn ?? null };
@@ -52,7 +54,15 @@ export function runLine(run, now, { focusable = false } = {}) {
     case "running": return { ...base, icon: "spinner", tone: null, text: `working · ${since}`, focus: reach };
     case "blocked": return { ...base, icon: "dot", tone: "alert", text: `needs you · ${since}`, focus: reach };
     case "stopped": return { ...base, tone: "alert", remove: true, focus: reach, text: run.error ? `Couldn't start: ${run.error}` : "stopped, needs you" };
-    case "pr_open": return { ...base, remove: true, link: isHttps(run.prUrl) ? run.prUrl : null, branch: run.branch };
+    case "pr_open": {
+      const pr = { ...base, remove: true, link: isHttps(run.prUrl) ? run.prUrl : null, branch: run.branch };
+      if (run.auto && agentStatus === "blocked") return { ...pr, remove: false, icon: "dot", tone: "alert", text: "needs you", focus: reach };
+      if (run.auto && agentStatus === "working") return { ...pr, remove: false, icon: "spinner", tone: null, text: run.auto === "review" ? "merging, then In review once deployed" : "merging when checks pass", focus: reach };
+      // Idle or done with the issue still in progress: it merged and has nothing more to do, or it stopped to ask.
+      // The row can't tell which, so it points at the terminal.
+      if (run.auto && reach && (agentStatus === "idle" || agentStatus === "done")) return { ...pr, text: "agent idle · check its terminal", focus: true };
+      return pr;
+    }
     default: return base;
   }
 }

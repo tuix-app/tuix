@@ -14,7 +14,7 @@ import { linkedIssue } from './deeplink';
 import { deploymentReporter } from './deployment';
 import { liveUpdates } from './live';
 import { startCapture } from './capture';
-import { locate, resolve, createResolver, routeKey, ignored, type LocatorBundle, type Resolution } from './locators';
+import { locate, resolve, createResolver, currentRoute, ignored, type LocatorBundle, type Resolution } from './locators';
 import { frameBatch } from './frame-batch';
 import { locatorTelemetry, runtimeTelemetry } from './telemetry';
 import { sourceLocation, editorLink, readEditor, saveEditor, defaultEditor, type SourceLocation } from './source';
@@ -136,7 +136,6 @@ function environment(config: Config) {
   const clientHints = hints ? { brands: hints.brands.slice(0, 10), mobile: hints.mobile, platform: hints.platform } : undefined;
   return { clientHints, viewport: { width: innerWidth, height: innerHeight }, dpr: devicePixelRatio, title: document.title.slice(0, 200), ua: navigator.userAgent.slice(0, 500), lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, online: navigator.onLine, release: config.release, context };
 }
-function currentRoute(config: Config) { try { return (config.route?.() ?? routeKey(location.href, config.keepQuery)).slice(0, 512); } catch { return routeKey(location.href); } }
 
 function CheckIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>; }
 
@@ -150,6 +149,8 @@ export interface Hooks {
   openSettings?: () => void;
   /** Reports may have changed (live update): the SDK refreshes its summary. */
   changed?: () => void;
+  /** A chat window opened beside a marker: the SDK's panel state does not know it, and the verify prompt steps aside. */
+  engaged?: () => void;
 }
 
 export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Config, identity: Identity, onPanel: (active: boolean, clickedAway?: boolean) => void, started?: number, hooks: Hooks = {}): Core {
@@ -173,6 +174,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
   let browse: (filter?: OpenFilter) => void = () => {};
   let suspend = () => false;
   let showSettings: (value: boolean) => void = () => {};
+  let openIssue: (id: string) => void = () => {};
   let disposed = false;
   const reportLocators = locatorTelemetry(api);
   const runtime = runtimeTelemetry(api);
@@ -419,6 +421,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     };
     showSettings = value => { if (value && initial.launcher !== false) markActive(initial.project); setFlyout(value); };
     const close = () => toggle(false);
+    // Check it on the verify prompt: the panel opens on the report, which loads at once once settings are in (or with the list, as a deep link does).
+    const readyRef = useRef(false); readyRef.current = ready;
+    openIssue = id => {
+      browse();
+      if (readyRef.current) void openThread({ id }); else deepLink.current = id;
+    };
     function resetMode() {
       threadSequence.current++; shotSequence.current++;
       setLoading(false); setReviewing(false); setShot(null); setCapturing(false);
@@ -519,7 +527,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       chatBox.current = markedRef.current.find(pin => pin.issue.id === issue.id)?.box ?? null;
       const active = root.activeElement as HTMLElement | null;
       chatOpener.current = active && !active.classList.contains('hover-card') && !chatEl.current?.contains(active) ? active : null;
-      chatActive = true; chatRef.current = issue; chatLeft.current = false;
+      chatActive = true; chatRef.current = issue; chatLeft.current = false; hooks.engaged?.();
       // The thread on hand belongs to another report: it must not stand in for this one if this one fails to load.
       if (thread?.id !== issue.id) { setThread(null); commentCursor.current = null; }
       setChat(issue); setExpanded(false); setChatHeight(0); setNotice(''); loadFonts();
@@ -1251,7 +1259,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
   render(<App/>, container);
   return {
     reportError: () => runtime.error('entrypoint'), open: (filter?: OpenFilter) => browse(filter), comment: () => comment(), close: () => toggle(false),
-    suspend: () => suspend(), settings: (value: boolean) => showSettings(value),
+    suspend: () => suspend(), openIssue: (id: string) => openIssue(id), settings: (value: boolean) => showSettings(value),
     destroy: () => {
       if (disposed) return;
       disposed = true; panelActive = false; chatActive = false; runtime.active(false);

@@ -3,13 +3,13 @@
 // The confirmation controls, left to right. Cancel first: Yes is never where the Ready button was.
 export const CONFIRM = ["cancel", "yes"];
 
-export const SECTIONS = [["open", "Open"], ["fixing", "Being fixed"], ["prOpen", "PR open"], ["inReview", "In review"]];
+export const SECTIONS = [["open", "Open"], ["fixing", "Being fixed"], ["prOpen", "PR open"], ["inReview", "Fix ready"]];
 
 // Rows: { kind: "header", id, label, count } | { kind: "empty" } |
 //   { kind: "issue", issue, section, checkbox, actions } where `actions` lists the controls under the issue, left to right:
-//   [] (none), ["ready"] (the Ready for review button) or ["cancel", "yes"] (the confirmation; Cancel comes first,
+//   [] (none), ["ready"] (the Fix ready button) or ["cancel", "yes"] (the confirmation; Cancel comes first,
 //   so Yes never sits where the Ready button was).
-// `canWrite` / `archived` come from the view; `ready(issue)` says whether Ready for review is offered;
+// `canWrite` / `archived` come from the view; `ready(issue)` says whether Fix ready is offered;
 // `checkable(issue)` says whether the issue can be ticked for Fix (All projects: only the matched project's).
 // `asking` is the id of the issue whose confirmation is open.
 export function rowsOf(groups, { canWrite = false, archived = false, ready = () => false, asking = null, checkable = () => true } = {}) {
@@ -57,8 +57,8 @@ export function runLine(run, now, { focusable = false, agentStatus = null } = {}
     case "pr_open": {
       const pr = { ...base, remove: true, link: isHttps(run.prUrl) ? run.prUrl : null, branch: run.branch };
       if (run.auto && agentStatus === "blocked") return { ...pr, remove: false, icon: "dot", tone: "alert", text: "needs you", focus: reach };
-      if (run.auto && agentStatus === "working") return { ...pr, remove: false, icon: "spinner", tone: null, text: run.auto === "review" ? "merging, then In review once deployed" : "merging when checks pass", focus: reach };
-      // Idle or done with the issue still in progress: it merged and has nothing more to do, or it stopped to ask.
+      if (run.auto && agentStatus === "working") return { ...pr, remove: false, icon: "spinner", tone: null, text: run.auto === "review" ? "merging, then Fix ready once deployed" : "merging when checks pass", focus: reach };
+      // Idle or done with the issue not yet Fix ready: it merged and has nothing more to do, or it stopped to ask.
       // The row can't tell which, so it points at the terminal.
       if (run.auto && reach && (agentStatus === "idle" || agentStatus === "done")) return { ...pr, text: "agent idle · check its terminal", focus: true };
       return pr;

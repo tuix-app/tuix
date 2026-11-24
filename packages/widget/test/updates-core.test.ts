@@ -10,7 +10,7 @@ import type { Core } from '../src/types';
 let core: Core | undefined;
 afterEach(() => { core?.destroy(); core = undefined; localStorage.clear(); document.body.replaceChildren(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); mocks.request.mockReset(); });
 
-const issue = { id: 'mine', number: 4, title: 'Save is hidden', body: 'Save is hidden', status: 'resolved', state: 'done', type: 'bug', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Me' }, reporter: true, comment_count: 0, comments: [], inserted_at: '2026-09-20T10:00:00Z' };
+const issue = { id: 'mine', number: 4, title: 'Save is hidden', body: 'Save is hidden', status: 'resolved', state: 'done', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Me' }, reporter: true, comment_count: 0, comments: [], inserted_at: '2026-09-20T10:00:00Z' };
 const update = { id: 'n1', issue_id: 'mine', kind: 'resolved', state_kind: 'done', inserted_at: '2026-09-21T10:00:00Z', issue: { number: 4, title: 'Save is hidden', status: 'resolved', state: 'done', url: location.origin + '/' } };
 const elsewhere = { id: 'n2', issue_id: 'other', kind: 'member_reply', inserted_at: '2026-09-21T11:00:00Z', issue: { number: 9, title: 'Invoice total', status: 'open', url: 'https://app.example.test/invoices/9' } };
 // A legacy server sends only `kind`; the label still reads naturally.
@@ -55,7 +55,7 @@ it('renders updates in the settings flyout without opening the panel or loading 
   // Five newest, in an internal scroll, labelled by the new notification kinds.
   const items = slot.querySelectorAll<HTMLElement>('.update-item');
   expect(items).toHaveLength(5);
-  expect([...items].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Done', 'New reply', 'Ready for you to verify', 'Assigned to you', 'Assigned to you']);
+  expect([...items].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Closed as fixed', 'New reply', 'Ready for you to verify', 'Assigned to you', 'Assigned to you']);
   expect(slot.querySelector('.tuix-app.flyout-extra .updates')).not.toBeNull();
   expect(slot.querySelector('[data-setting="email-updates"]')).not.toBeNull();
   // The gold reply dot opens settings.
@@ -91,7 +91,7 @@ it('keeps updates at the top of Reports for hosts without a launcher flyout', as
   const { root } = fixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
   const items = root.querySelectorAll<HTMLElement>('.panel .update-item');
-  expect([...items].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Done', 'New reply']);
+  expect([...items].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Closed as fixed', 'New reply']);
   expect(items[1].tagName).toBe('A');
   expect(items[1].getAttribute('href')).toBe('https://app.example.test/invoices/9?tuix=other');
   // Without a flyout the reply dot is decoration, not a button.
@@ -164,26 +164,27 @@ it('restores how often after a failed save, and hides it without an email or on 
   }
 });
 
-it('keeps page markers on unresolved reports from everyone while the panel list follows Show and Involving', async () => {
-  savePreferences('updates', { show: 'verify', involving: 'me' });
+it('keeps page markers on unresolved reports from everyone while the panel list follows Show', async () => {
+  savePreferences('updates', { show: 'turn', involving: 'me' });
   fixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
   const lists = paths().filter(path => path.startsWith('/issues?')).map(path => new URLSearchParams(path.slice(8)));
   const markers = lists.filter(query => query.get('show') === 'unresolved');
-  const panel = lists.filter(query => query.get('show') === 'verify');
+  const panel = lists.filter(query => query.get('show') === 'turn');
   expect(markers.length).toBeGreaterThanOrEqual(1);
   expect(markers.every(query => query.get('involving') === 'everyone' && !query.has('mine'))).toBe(true);
   expect(panel.length).toBeGreaterThanOrEqual(1);
-  expect(panel.every(query => query.get('involving') === 'me')).toBe(true);
+  // An older stored Involving choice has no control any more and is no longer sent.
+  expect(panel.every(query => query.get('involving') === 'everyone')).toBe(true);
 });
 
-it('opens Reports with a filter as a session override: Pages All, the chosen Show and Involving', async () => {
+it('opens Reports with a filter as a session override: Pages All and the chosen Show', async () => {
   const { root } = fixture();
-  core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(200);
-  expect(readPreferences('updates')).toMatchObject({ scope: 'page', show: 'unresolved', involving: 'everyone' });
-  expect(paths()).toContain('/issues?scope=all&show=verify&involving=me');
-  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
-  expect(root.querySelector('[data-filter=involving] [data-value=me]')!.getAttribute('aria-pressed')).toBe('true');
+  core!.open({ scope: 'all', show: 'turn' }); await vi.advanceTimersByTimeAsync(200);
+  expect(readPreferences('updates')).toMatchObject({ scope: 'page', show: 'open', involving: 'everyone' });
+  expect(paths()).toContain('/issues?scope=all&show=turn&involving=everyone');
+  expect(root.querySelector('[data-filter=show] [data-value=turn]')!.getAttribute('aria-pressed')).toBe('true');
+  expect(root.querySelector('[data-filter=involving]')).toBeNull();
 });
 
 it('opens tuix.app through a one-time handoff, or falls back to an emailed sign-in link', async () => {
@@ -307,5 +308,34 @@ it('labels review reminders and falls back to the report status for a kind it do
   const { root } = fixture({ unread, hooks: { updates: slot } });
   root.append(slot);
   core!.settings!(true); await vi.advanceTimersByTimeAsync(200);
-  expect([...slot.querySelectorAll('.update-item')].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Still waiting for you to verify', 'Closes soon unless you check it', 'Asked you to check the fix', 'In review']);
+  expect([...slot.querySelectorAll('.update-item')].map(item => item.querySelector('.update-kind')!.textContent)).toEqual(['Still waiting for you to verify', 'Closes soon unless you check it', 'Asked you to check the fix', 'Fix ready']);
+});
+
+it('labels the conversation kinds (your turn, fix ready, closed, reopened, auto-closed) and falls back to the legacy kind, then the report state', async () => {
+  const slot = document.createElement('div');
+  const item = (id: string, kind: string, stateKind?: string) => ({ id, issue_id: 'r' + id, kind, ...(stateKind ? { state_kind: stateKind } : {}), inserted_at: '2026-09-23T10:00:00Z', issue: { number: 40, title: 'Kind ' + id, status: 'open', state: 'open', url: location.origin + '/' } });
+  const unread = [item('1', 'member_reply', 'your_turn'), item('2', 'in_review', 'fix_ready'), item('3', 'closed', 'closed'), item('4', 'reopened', 'reopened'), item('5', 'closed', 'auto_closed'), item('6', 'done', 'brand_new_kind'), item('7', 'mystery', 'brand_new_kind')];
+  const { root } = fixture({ unread, hooks: { updates: slot } });
+  root.append(slot);
+  core!.settings!(true); await vi.advanceTimersByTimeAsync(200);
+  expect([...slot.querySelectorAll('.update-item')].map(entry => entry.querySelector('.update-kind')!.textContent)).toEqual(['Your turn', 'Fix ready for you to check', 'Closed', 'Reopened', 'Closed automatically']);
+  core!.destroy(); core = undefined; document.body.replaceChildren();
+  const more = document.createElement('div');
+  const { root: next } = fixture({ unread: unread.slice(5), hooks: { updates: more } });
+  next.append(more);
+  core!.settings!(true); await vi.advanceTimersByTimeAsync(200);
+  // An unknown state_kind reads the legacy kind; with neither known, the report's own state word.
+  expect([...more.querySelectorAll('.update-item')].map(entry => entry.querySelector('.update-kind')!.textContent)).toEqual(['Closed as fixed', 'Open']);
+});
+
+it('says the new kinds in Polish', async () => {
+  const slot = document.createElement('div');
+  const unread = [{ id: '1', issue_id: 'r1', kind: 'member_reply', state_kind: 'your_turn', inserted_at: '2026-09-23T10:00:00Z', issue: { number: 1, title: 'A', status: 'open', state: 'open', url: location.origin + '/' } }];
+  vi.useFakeTimers();
+  mocks.request.mockImplementation(async (path: string) => path === '/config' ? { telemetry: false, capture: { screenshot: false, console: false, network: false } } : path === '/notifications' ? { notifications: unread } : path.startsWith('/issues?') ? { issues: [], next_before: null } : path === '/preferences' ? { email_available: false, notify_email: false } : { notifications: [] });
+  const host = document.createElement('div'); document.body.append(host);
+  const root = host.attachShadow({ mode: 'open' }), launcher = document.createElement('button'); root.append(launcher); root.append(slot);
+  core = mount(root, launcher, { project: 'updates', lang: 'pl' }, { id: 'me', name: 'Me' }, vi.fn(), undefined, { updates: slot } as never);
+  core.settings!(true); await vi.advanceTimersByTimeAsync(200);
+  expect(slot.querySelector('.update-kind')!.textContent).toBe('Twoja kolej');
 });

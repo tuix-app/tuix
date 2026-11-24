@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 const report = (number: number, extra: Record<string, unknown> = {}) => ({
-  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body', status: 'open', state: 'open', type: 'bug', severity: 'major', env_name: 'uat', url: location.origin + '/',
+  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body', status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/',
   locators: { testid: `[data-testid="t${number}"]` }, author: { name: 'Reporter' }, own: false, comment_count: 1, comments: [], inserted_at: new Date().toISOString(),
   latest_comment: { author: { name: 'Anna' }, team: true, body: 'We are looking into it.', inserted_at: new Date().toISOString() }, unread: false, ...extra,
 });
@@ -73,8 +73,7 @@ it('replaces the dot title with a card after a short delay, and keeps it while t
   await wait(60);
   const shown = card(root)!;
   expect(shown.querySelector('.card-title strong')?.textContent).toBe('#7 Save is hidden 7');
-  expect(shown.querySelector('.status')?.textContent).toBe('Open');
-  expect(shown.querySelector('.card-reply')?.textContent).toBe('Team We are looking into it.');
+  expect(shown.querySelector('.card-reply')?.textContent).toBe('Team: We are looking into it.');
   expect(shown.querySelector('.unread-dot')).not.toBeNull();
   expect(dot.getAttribute('aria-describedby')).toBe(shown.id);
   // Beside the dot (right of its 28px square), inside the viewport.
@@ -273,7 +272,7 @@ it('renders titles and replies as text, never HTML', async () => {
   const { root } = await page([hostile], { 7: [100, 200, 40, 20] });
   enter(root.querySelector('.pin')!); await wait(250);
   expect(card(root)!.querySelector('img, script, b')).toBeNull();
-  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('<b>Anna</b> <script>alert(2)</script> hi');
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('<b>Anna</b>: <script>alert(2)</script> hi');
 });
 
 it('keeps the card inside the viewport, beside the marker or below it when the sides are full', async () => {
@@ -347,17 +346,16 @@ it('speaks Polish', async () => {
   const { root } = await page([report(8, { latest_comment: null })], { 8: [100, 200, 40, 20] }, 'dot', { lang: 'pl' });
   enter(root.querySelector('.pin')!); await wait(250);
   expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Brak odpowiedzi');
-  expect(card(root)!.querySelector('.status')?.textContent).toBe('Otwarte');
 });
 
 it('names a team reply "Team" in the viewer language, and a person by name', async () => {
   const { root } = await page([report(7, { latest_comment: { author: { name: 'Team' }, team: true, body: 'Looking.', inserted_at: new Date().toISOString() } }), report(8, { latest_comment: { author: { name: 'Anna' }, team: false, body: 'Hi.', inserted_at: new Date().toISOString() } })], { 7: [100, 200, 40, 20], 8: [400, 200, 40, 20] }, 'dot', { lang: 'pl' });
   const [team, person] = root.querySelectorAll<HTMLElement>('.pin');
   enter(team); await wait(250);
-  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Zespół Looking.');
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Zespół: Looking.');
   expect(card(root)!.getAttribute('aria-label')).toContain('Zespół: Looking.');
   leave(team); enter(person); await wait(250);
-  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Anna Hi.');
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Anna: Hi.');
 });
 
 it('closes an outline card once the pointer moves onto the sidebar, and not before the linger time', async () => {
@@ -468,18 +466,17 @@ it('shows the start of the description, whole, when there is no reply, and the r
   const [first, second, third, fourth] = root.querySelectorAll<HTMLElement>('.pin');
   enter(first); await wait(250);
   expect(card(root)!.querySelector('.card-title strong')?.textContent).toBe('#1');
-  expect(card(root)!.querySelector('.card-excerpt')?.textContent).toBe(`${long}\nbelow the fold <b>on mobile</b> and the footer overlaps it`);
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe(`${long} below the fold <b>on mobile</b> and the footer overlaps it`);
   expect(card(root)!.querySelector('b')).toBeNull();
   expect(card(root)!.getAttribute('aria-label')).toContain(`#1 ${long} below the fold <b>on mobile</b>`);
   expect(card(root)!.getAttribute('aria-label')).not.toContain('No replies yet');
   // A one-line report shows its sentence once, as the description.
   leave(first); enter(second); await wait(250);
-  expect(card(root)!.querySelector('.card-excerpt')?.textContent).toBe('Save is hidden 2');
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Save is hidden 2');
   expect(card(root)!.textContent).not.toContain('No replies yet');
   // A reply is newer than the description.
   leave(second); enter(third); await wait(250);
-  expect(card(root)!.querySelector('.card-excerpt')).toBeNull();
-  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Team We are looking into it.');
+  expect(card(root)!.querySelector('.card-reply')?.textContent).toBe('Team: We are looking into it.');
   // Without an excerpt (an older server) the title and "No replies yet" remain.
   leave(third); enter(fourth); await wait(250);
   expect(card(root)!.querySelector('.card-title strong')?.textContent).toBe('#4 Save is hidden 4');

@@ -98,6 +98,23 @@ it('submits the last character even before the textarea has rendered its input u
   await vi.advanceTimersByTimeAsync(100);
 });
 
+it('has an Urgent checkbox instead of type and severity, and sends urgent with the report', async () => {
+  const root = await setup(); core!.comment!(); await pick(root);
+  expect(root.querySelector('.composer select')).toBeNull();
+  const urgent = root.querySelector<HTMLInputElement>('.composer .urgent-field input[type=checkbox]')!;
+  expect(urgent.checked).toBe(false);
+  urgent.click(); await vi.advanceTimersByTimeAsync(50);
+  mocks.request.mockResolvedValueOnce({ id: 'created', number: 1, title: 'Cannot pay', status: 'open', state: 'open', urgent: true, author: { name: 'User' }, locators: {}, comments: [] });
+  const field = root.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  field.value = 'Cannot pay'; field.dispatchEvent(new Event('input', { bubbles: true }));
+  field.form!.requestSubmit();
+  const sent = mocks.request.mock.calls.find(([path, method]) => path === '/issues' && method === 'POST');
+  expect(sent?.[2]).toMatchObject({ body: 'Cannot pay', urgent: true });
+  expect(sent?.[2]).not.toHaveProperty('type');
+  expect(sent?.[2]).not.toHaveProperty('severity');
+  await vi.advanceTimersByTimeAsync(100);
+});
+
 it('keeps the text and reuses the idempotency key after a failed submit', async () => {
   const root = await setup(); core!.comment!(); await pick(root); await type(root, 'Retry me');
   const keys: string[] = []; let fail = true;
@@ -181,9 +198,9 @@ it('drops a composer hidden behind settings when a filter asks for the report li
   expect(core!.suspend!()).toBe(true); await vi.advanceTimersByTimeAsync(50);
   // A capsule segment (or the host's tuix.open(filter)) shows the filtered list, not the hidden composer.
   panel.mockClear();
-  core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(100);
+  core!.open({ scope: 'all', show: 'turn' }); await vi.advanceTimersByTimeAsync(100);
   expect(root.querySelector('.composer')).toBeNull();
-  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
+  expect(root.querySelector('[data-filter=show] [data-value=turn]')!.getAttribute('aria-pressed')).toBe('true');
   // The SDK hears about the shown panel once.
   expect(panel.mock.calls).toEqual([[true]]);
   // Nothing was kept: the launcher starts picking again.
@@ -196,34 +213,29 @@ it('applies an open filter to this view only and leaves the stored preferences a
   const root = await setup();
   const stored = () => JSON.parse(localStorage.getItem('tuix:preferences:comment-test') ?? 'null');
   const choice = (filter: string, value: string) => root.querySelector<HTMLButtonElement>(`.page-reports [data-filter=${filter}] [data-value=${value}]`)!;
-  // Markers ask only when the panel opens, so the latest list request is the panel's.
-  const listed = () => new URLSearchParams(mocks.request.mock.calls.map(([path]) => path as string).filter(path => path.startsWith('/issues?')).pop()!.split('?')[1]);
-  core!.open({ scope: 'all', show: 'verify', involving: 'me' }); await vi.advanceTimersByTimeAsync(100);
-  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
-  expect(choice('involving', 'me').getAttribute('aria-pressed')).toBe('true');
+  const shownShow = () => ['turn', 'open', 'all'].find(value => choice('show', value).getAttribute('aria-pressed') === 'true');
+  // There is no Involving control any more: only Pages and Show.
+  const requests = (all = false) => mocks.request.mock.calls.map(([path]) => path as string).filter(path => path.startsWith('/issues?') && (!all || path.includes('scope=all')));
+  const listed = (all = false) => new URLSearchParams(requests(all).pop()!.split('?')[1]);
+  core!.open({ scope: 'all', show: 'turn' }); await vi.advanceTimersByTimeAsync(100);
+  expect(shownShow()).toBe('turn');
+  expect(root.querySelector('[data-filter=involving]')).toBeNull();
   expect(stored()).toBeNull();
-  // Choosing Show saves Show only: Pages and Involving stay the person's own, and this view keeps its filter.
-  const status = root.querySelector<HTMLSelectElement>('[data-filter=show] select')!;
-  status.value = 'all'; status.dispatchEvent(new Event('change', { bubbles: true })); await vi.advanceTimersByTimeAsync(100);
+  // Choosing Show saves Show only: Pages stays the person's own.
+  choice('show', 'all').click(); await vi.advanceTimersByTimeAsync(100);
   expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
-  expect(status.value).toBe('all');
-  expect(choice('involving', 'me').getAttribute('aria-pressed')).toBe('true');
+  expect(shownShow()).toBe('all');
   // All now includes finished reports without a second visibility switch.
-  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'all', involving: 'me' });
-  // Choosing the stored value still replaces the view's own.
-  choice('involving', 'everyone').click(); await vi.advanceTimersByTimeAsync(100);
-  expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
-  expect(choice('involving', 'everyone').getAttribute('aria-pressed')).toBe('true');
-  expect(Object.fromEntries(listed())).toEqual({ scope: 'all', show: 'all', involving: 'everyone' });
+  expect(Object.fromEntries(listed(true))).toEqual({ scope: 'all', show: 'all', involving: 'everyone' });
   // Pages chosen in settings replaces the view's Pages too.
   savePreferences('comment-test', { scope: 'page' }); await vi.advanceTimersByTimeAsync(100);
   expect(listed().get('route_key')).toBe('/');
   expect(listed().has('scope')).toBe(false);
   // A marker change is not a filter choice; and a new filter replaces the whole view filter.
-  core!.open({ show: 'verify' }); await vi.advanceTimersByTimeAsync(100);
+  core!.open({ show: 'turn' }); await vi.advanceTimersByTimeAsync(100);
   window.dispatchEvent(new CustomEvent(preferenceEvent)); await vi.advanceTimersByTimeAsync(100);
-  expect(root.querySelector<HTMLSelectElement>('[data-filter=show] select')!.value).toBe('verify');
-  expect(Object.fromEntries(listed())).toMatchObject({ show: 'verify', involving: 'everyone', route_key: '/' });
+  expect(shownShow()).toBe('turn');
+  expect(Object.fromEntries(new URLSearchParams(requests().filter(path => path.includes('show=turn')).pop()!.split('?')[1]))).toMatchObject({ show: 'turn', involving: 'everyone', route_key: '/' });
   expect(stored()).toEqual({ scope: 'page', show: 'all', involving: 'everyone', environment: '', version: 2 });
 });
 
@@ -231,7 +243,7 @@ it('applies an open filter to this view only and leaves the stored preferences a
 const marked = () => {
   const target = document.body.querySelector('button')!; target.dataset.testid = 'save';
   vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ x: 20, y: 40, width: 40, height: 20, left: 20, top: 40, right: 60, bottom: 60 } as DOMRect);
-  const report = { id: 'r1', number: 7, title: 'Save overlaps', body: 'Save overlaps', status: 'open', state: 'open', type: 'bug', env_name: 'uat', url: location.origin + location.pathname, locators: { testid: '[data-testid="save"]' }, author: { name: 'Anna' }, comments: [], allowed_states: [], inserted_at: '2026-09-22T12:00:00Z' };
+  const report = { id: 'r1', number: 7, title: 'Save overlaps', body: 'Save overlaps', status: 'open', state: 'open', env_name: 'uat', url: location.origin + location.pathname, locators: { testid: '[data-testid="save"]' }, author: { name: 'Anna' }, comments: [], allowed_states: [], inserted_at: '2026-09-22T12:00:00Z' };
   mocks.request.mockImplementation(async (path: string) => path === '/config' ? { telemetry: false, capture: { screenshot: false, network: false, console: false } } : path.startsWith('/issues?') ? { issues: [report] } : path === '/issues/r1' ? report : { notifications: [] });
 };
 

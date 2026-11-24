@@ -1,4 +1,4 @@
-import { tokenCss } from './tokens';
+import { tokenCss, crisp } from './tokens';
 import type { Config, Identity, Core, Summary } from './types';
 import { linkedIssue } from './deeplink';
 import { markersPinned } from './markers';
@@ -111,7 +111,7 @@ function mountLauncher() {
     host.style.cssText = 'all:initial!important;position:fixed!important;inset:0!important;z-index:2147483646!important;pointer-events:none!important;';
     root = host.attachShadow({ mode: 'closed' }); isolateKeys(root);
     const style = document.createElement('style'); if (config.nonce) style.nonce = config.nonce;
-    style.textContent = ':host{all:initial}[hidden]{display:none!important}' + tokenCss + "#tuix-launcher{all:initial;box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:44px;height:44px;border-radius:50%;background:var(--tx-peach);color:var(--tx-on-peach);cursor:pointer;pointer-events:auto;display:grid;place-items:center;font:600 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:0;box-shadow:0 12px 28px -10px rgba(0,0,0,.55);transition:opacity .16s var(--tx-ease)}#tuix-launcher:hover{opacity:.88}#tuix-launcher:focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}#tuix-launcher:disabled{cursor:wait}#tuix-launcher[aria-expanded=true]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}#tuix-launcher[data-mode=comment]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}@media(prefers-reduced-motion:reduce){#tuix-launcher{transition:none}#tuix-launcher[data-mode=comment]{animation:none}}";
+    style.textContent = ':host{all:initial}[hidden]{display:none!important}' + tokenCss + "#tuix-launcher{all:initial;" + crisp + ";box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:44px;height:44px;border-radius:50%;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line-control);cursor:pointer;pointer-events:auto;display:grid;place-items:center;font:600 13px/20px var(--tx-font);letter-spacing:0;transition:background-color .16s var(--tx-ease),border-color .16s var(--tx-ease),color .16s var(--tx-ease)}#tuix-launcher:hover,#tuix-launcher:focus-visible,#tuix-launcher[data-waiting],#tuix-launcher[aria-expanded=true],#tuix-launcher[data-mode=comment]{background:var(--tx-peach);border-color:var(--tx-peach);color:var(--tx-on-peach)}#tuix-launcher:focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px;box-shadow:0 0 0 7px var(--tx-surface)}#tuix-launcher:disabled{cursor:wait}#tuix-launcher[aria-expanded=true],#tuix-launcher[data-mode=comment]{box-shadow:0 0 0 3px var(--tx-pin-ring),0 0 0 5px var(--tx-peach)}@media(prefers-reduced-motion:reduce){#tuix-launcher{transition:none}}";
     launcher = document.createElement('button'); launcher.id = 'tuix-launcher'; launcher.type = 'button'; launcher.setAttribute('aria-label', 'Open tuix feedback');
     launcher.style[config.position === 'bottom-left' ? 'left' : 'right'] = '16px';
     launcher.hidden = config.launcher === false;
@@ -222,7 +222,7 @@ export const tuix = {
   init: (options: Config) => protect(() => commands.init(options)),
   config: (options: Partial<Config>) => protect(() => commands.config(options)),
   identify: (user: Identity | null) => protect(() => commands.identify(user)),
-  /** Opens report browsing; an optional filter sets Pages, Show and Involving first, e.g. `{ show: 'verify', involving: 'me' }`. */
+  /** Opens report browsing; an optional filter sets Pages, Show and Involving first, e.g. `{ show: 'turn', involving: 'me' }`. */
   async open(filter?: OpenFilter) { try { await commands.open(undefined, 'reports', cleanFilter(filter)); } catch { reportFailure(); } },
   close: () => protect(() => commands.close()),
   destroy: () => protect(() => commands.destroy()),

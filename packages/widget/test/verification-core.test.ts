@@ -8,7 +8,7 @@ import type { Core } from '../src/types';
 let core: Core | undefined;
 afterEach(() => { core?.destroy(); core = undefined; mock.environment = 'uat'; vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks(); document.body.replaceChildren(); });
 // The caller reported it; the fixer moved it to review.
-const issue = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'awaiting_verification', state: 'in_review', type: 'bug', env_name: 'uat', locators: {}, author: { name: 'Reporter' }, reporter: true, fixer: false, can_be_fixer: false, allowed_states: ['open', 'done', 'closed'], assignee: { name: 'Developer', me: false }, comments: [], inserted_at: new Date().toISOString(), fixed_note: {body: 'Restored the save button.', author: {name: 'Developer'}}, original_screenshot: [] };
+const issue = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'awaiting_verification', state: 'in_review', env_name: 'uat', locators: {}, author: { name: 'Reporter' }, reporter: true, fixer: false, can_be_fixer: false, allowed_states: ['open', 'done', 'closed'], assignee: { name: 'Developer', me: false }, comments: [], inserted_at: new Date().toISOString(), fixed_note: {body: 'Restored the save button.', author: {name: 'Developer'}}, original_screenshot: [] };
 const reopened = { ...issue, status: 'open', state: 'open', allowed_states: ['done', 'closed'] };
 async function openFixture(decide: (body: unknown) => unknown, screenshot = false) {
   vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
@@ -43,14 +43,14 @@ it.each(['uat', 'local', 'production'])('shows verification evidence in %s and r
   expect(root.textContent).toContain('The original element could not be found');
   // The page-scoped "Verify n" capsule is gone; the SDK summary capsule replaces it.
   expect(root.querySelector('.verify-badge')).toBeNull();
-  expect(root.querySelector('.thread-state .status')!.textContent).toBe('In review');
-  expect(root.querySelector('.fixer-line')!.textContent).toBe('Fixer: Developer');
+  // One primary button in the view: Works. Send is plain.
+  expect([...root.querySelectorAll('button.primary')].map(item => item.textContent)).toEqual(['Works']);
   // Done and Still broken live in the verification block; Close stays with the other actions.
-  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Works', 'Still broken']);
   expect([...root.querySelectorAll('.thread-actions [data-state-action]')].map(item => item.textContent)).toEqual(['Close']);
-  button(root, 'Done').click(); await vi.advanceTimersByTimeAsync(100);
+  button(root, 'Works').click(); await vi.advanceTimersByTimeAsync(100);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue/verify', 'POST', {outcome: 'works'});
-  expect(root.textContent).toContain('Fix verified. Thank you.');
+  expect(root.textContent).toContain('Thank you. Marked as fixed.');
   expect(root.textContent).not.toContain('Could not save your decision');
   expect(root.querySelector('.verify-tools')).toBeNull();
 });
@@ -62,15 +62,15 @@ it('preserves a broken-review note on failure and supports text-only review when
   const input = root.querySelector('.verify-tools textarea') as HTMLTextAreaElement;
   input.value = 'Save still disappears.'; input.dispatchEvent(new Event('input', {bubbles: true}));
   await vi.advanceTimersByTimeAsync(50);
-  button(root, 'Reopen report').click(); await vi.advanceTimersByTimeAsync(100);
+  button(root, 'Still broken').click(); await vi.advanceTimersByTimeAsync(100);
   expect(input.value).toBe('Save still disappears.');
   expect(root.textContent).toContain('Could not save your decision');
   fail = false;
-  button(root, 'Reopen report').click(); await vi.advanceTimersByTimeAsync(100);
+  button(root, 'Still broken').click(); await vi.advanceTimersByTimeAsync(100);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue/verify', 'POST', {outcome: 'broken', note: 'Save still disappears.', attachments: []});
   expect(mock.screenshot).not.toHaveBeenCalled();
   expect(root.querySelector('.verify-tools')).toBeNull();
-  expect(root.textContent).toContain('Report reopened with your review.');
+  expect(root.textContent).toContain('Sent back with your note.');
 });
 
 it('uploads a new captured screenshot with a broken review', async () => {
@@ -82,7 +82,7 @@ it('uploads a new captured screenshot with a broken review', async () => {
   const input = root.querySelector('.verify-tools textarea') as HTMLTextAreaElement;
   input.value = 'Still hidden.'; input.dispatchEvent(new Event('input', {bubbles: true}));
   await vi.advanceTimersByTimeAsync(50);
-  button(root, 'Reopen report').click(); await vi.advanceTimersByTimeAsync(100);
+  button(root, 'Still broken').click(); await vi.advanceTimersByTimeAsync(100);
   expect(mock.upload).toHaveBeenCalledWith('https://upload.example.test', {}, shot);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue/verify', 'POST', {outcome: 'broken', note: 'Still hidden.', attachments: ['upload']});
 });
@@ -131,10 +131,10 @@ it('opens a report straight on its review state for the verify prompt (Check it)
   core = mount(root, launcher, { project: 'fixture' }, { id: 'reviewer', name: 'Reviewer' }, () => {});
   core.openIssue!('issue'); await vi.advanceTimersByTimeAsync(300);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue');
-  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Works', 'Still broken']);
   // Once the list has loaded (the core is ready), Check it goes straight to the thread.
   core.close(); await vi.advanceTimersByTimeAsync(100); mock.request.mockClear();
   core.openIssue!('issue'); await vi.advanceTimersByTimeAsync(300);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue');
-  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+  expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Works', 'Still broken']);
 });

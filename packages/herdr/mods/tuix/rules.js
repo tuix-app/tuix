@@ -28,7 +28,7 @@ export function rulesView(v, t) {
     .child(option(v, t, "tuix-rules-merge", "Merge the pull request when its checks pass",
       "The agent watches the checks, fixes what its change broke, resolves conflicts with the base branch and merges. It never merges past a failing check or a required review. Reports come from people using your app: unless the repository requires a review, the agent's change is merged without anyone reading it.",
       { on: r.merge, toggle: (cx) => set({ merge: !r.merge }, cx) }))
-    .child(option(v, t, "tuix-rules-review", "Then set In review once the fix is deployed",
+    .child(option(v, t, "tuix-rules-review", "Then set Fix ready once the fix is deployed",
       "The agent waits for the deploy, then asks the reporter to check. If the deploy fails or it can't tell, it stops and asks you.",
       { on: r.review, enabled: r.merge, toggle: (cx) => set({ review: !r.review }, cx) }))
     .when(r.review, (e) => e.child(v_flex().gap(4)

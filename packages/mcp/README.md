@@ -18,9 +18,12 @@ Code, need only that URL. No Node, checkout or token copying is involved:
 The remote server has the local adapter's three tools plus `get_screenshot`;
 where a project admin allows it, its `get_issue` also returns the issue's
 `context` (screenshots, element, browser, console and network logs), and a
-connected app can see who an issue can be assigned to, change its status and
-assignee, reply to it, and save a component's design link (`list_people`, `set_issue_status`, `assign_issue`,
-`reply_to_issue`, `set_design_link`). A token created in Project settings can change issues too when
+connected app can see who an issue's turn can be passed to, change its status,
+pass or take the turn, reply to it, and save a component's design link (`list_people`, `set_issue_status`, `pass_turn`,
+`set_urgent`, `reply_to_issue`, `set_design_link`). `pass_turn` takes a `person` (`member:<id>` or `end_user:<id>` from
+`list_people`, `reporter`, `me` to take it, or null to leave it unclaimed); `assign_issue` stays as its older name. A reply
+always sends the turn to someone: without `pass_to` it goes to the default recipient (the reporter, or whoever handed the
+turn to the connected person). Issues carry `turn` and `turn_person`; there is no assignee. A token created in Project settings can change issues too when
 its box is ticked (it starts `tuix_write_`), on the hosted server only; this
 adapter accepts only `tuix_read_` tokens. Every issue
 carries `app_url` and `reference` for linking it from a pull request. The same
@@ -60,7 +63,7 @@ configuration file varies by client):
 ```
 
 Use the absolute path of `npx` if the client does not inherit your shell's
-`PATH`. To pin a version, write `@tuix/mcp@0.1.0`. Configuration is **environment-only**: no CLI options or token
+`PATH`. To pin a version, write `@tuix/mcp@0.2.0`. Configuration is **environment-only**: no CLI options or token
 files. The URL must be a bare HTTPS origin, optionally with a port or trailing
 slash, without credentials, path, query, or fragment. HTTP is allowed only for
 `localhost`, `127.0.0.1`, and `::1`, for local development.
@@ -69,7 +72,7 @@ A project admin must create a dedicated server-side integration credential
 (`tuix_read_` followed by 43 base64url characters). It is not a widget key,
 browser session, or general API key. In Tuix, open **Project settings → AI →
 Command-line and local clients → Create token**, then choose a 7-, 30-, or 90-day lifetime.
-Leave **Let it change status and assignee, and reply** unticked: that makes a `tuix_write_` token, which this adapter refuses; changes work only on the hosted server.
+Leave **Let it change status and turn, and reply** unticked: that makes a `tuix_write_` token, which this adapter refuses; changes work only on the hosted server.
 This UI issues a project-scoped credential. Do not put it in source control,
 prompts, issue reports, or logs. Store it using the AI client's local secret
 mechanism where available. Project and environment authorization is always
@@ -87,7 +90,7 @@ stdout.
 | Tool | Input | REST endpoint |
 | --- | --- | --- |
 | `list_projects` | Optional `limit`, `cursor` | `GET /integrations/v1/projects` |
-| `list_issues` | Required `project_id`; optional `status`, `environment`, `type`, `severity`, `route`, `updated_since`, `limit`, `cursor` | `GET /integrations/v1/issues` |
+| `list_issues` | Required `project_id`; optional `status`, `environment`, `urgent`, `route`, `updated_since`, `limit`, `cursor` | `GET /integrations/v1/issues` |
 | `get_issue` | Required `id`; optional comment `limit`, `cursor` | `GET /integrations/v1/issues/:id` |
 
 Page limits are integers from 1 to 100. Omitted limits use the server default.
@@ -98,12 +101,16 @@ preserving filters. For complete comments, follow `next_comments_cursor` using
 `get_issue` with the same issue ID. The adapter never silently truncates or
 pretends that one page is the full collection.
 
-Omitted status includes **all five** statuses: `open`, `in_progress`, `in_review`,
-`done`, `closed`. Results use these names. The previous names are still
-accepted as filters: `resolved` (done and closed), `acknowledged` and
-`fixed_awaiting_deploy` (in progress), `awaiting_verification` (in review),
-`wont_fix` (closed; Won't fix was merged into Closed). Type is `bug`, `ux`,
-`question`, or `idea`; severity is `blocking`, `major`, or `minor`.
+Omitted status includes everything. The filter takes `open` (a fix that is
+ready still counts as open), `fix_ready` or `closed`. Results carry `state`
+(`open`, `fix_ready`, `fixed`, `closed`) next to the stored `status` (`open`,
+`in_review`, `done`, `closed`). The previous names are still accepted as
+filters: `in_progress` (open), `in_review` and `awaiting_verification`
+(fix ready), `done` and `resolved` (closed and fixed), `acknowledged` and
+`fixed_awaiting_deploy` (open), `wont_fix` (closed; Won't fix was merged into
+Closed). `urgent` is `true` or
+`false`; urgent issues come first and carry `urgent: true`. The `type` and
+`severity` filters of earlier releases are still accepted and ignored.
 `updated_since` is an ISO 8601 timestamp with timezone. Environment is an
 environment name, not an arbitrary URL.
 

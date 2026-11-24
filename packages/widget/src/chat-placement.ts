@@ -6,7 +6,7 @@ export type Side = 'right' | 'left' | 'below' | 'above' | 'over';
 export interface Placement { left: number; top: number; side: Side; maxHeight: number }
 
 /** Window width and tallest height (`.chat-window` in widget.css), the gap to the element and the margin kept to the viewport edge. */
-export const CHAT_W = 320, CHAT_MAX_H = 480, CHAT_GAP = 12, CHAT_EDGE = 8;
+export const CHAT_W = 320, CHAT_MAX_H = 560, CHAT_GAP = 12, CHAT_EDGE = 8;
 /** Below this width, or on a touch-first device, a report opens in the side panel instead. */
 export const CHAT_MIN_WIDTH = 640;
 

@@ -46,7 +46,7 @@ test("HTTP auth, filters, opaque cursors, and encoded IDs stay on the configured
     return Response.json(projects);
   } });
   await client.listProjects({ limit: 100, cursor: "a+/=?&" });
-  const filters = { project_id: "p1", status: "closed", environment: "preview", type: "bug", severity: "major", route: "/a?b=1", updated_since: "2026-01-01T00:00:00Z", limit: 10, cursor: "next+/=" };
+  const filters = { project_id: "p1", status: "closed", environment: "preview", urgent: true, route: "/a?b=1", updated_since: "2026-01-01T00:00:00Z", limit: 10, cursor: "next+/=" };
   await client.listIssues(filters);
   await client.listIssues({ project_id: "p1" });
   await client.getIssue({ id: "../a?#/b", limit: 2, cursor: "comments+" });
@@ -122,7 +122,7 @@ test("SDK initialize, tools/list, tools/call expose only three read-only tools",
   const list = tools.find((tool) => tool.name === "list_issues");
   assert.deepEqual(list.inputSchema.required, ["project_id"]);
   // Only the new names are advertised; the legacy ones stay accepted below.
-  assert.deepEqual(list.inputSchema.properties.status.enum, ["open", "in_progress", "in_review", "done", "closed"]);
+  assert.deepEqual(list.inputSchema.properties.status.enum, ["open", "fix_ready", "closed"]);
   assert.equal(list.inputSchema.properties.status.type, "string");
   assert.equal(JSON.stringify(list.inputSchema).includes("acknowledged"), false);
   for (const [name, args, expected] of [
@@ -135,10 +135,14 @@ test("SDK initialize, tools/list, tools/call expose only three read-only tools",
     assert.deepEqual(JSON.parse(result.content[0].text), expected);
   }
   assert.equal(calls.length, 3);
-  for (const status of ["in_progress", "in_review", "closed", "acknowledged", "fixed_awaiting_deploy", "awaiting_verification", "resolved"]) {
+  for (const status of ["open", "fix_ready", "in_progress", "in_review", "done", "closed", "acknowledged", "fixed_awaiting_deploy", "awaiting_verification", "resolved"]) {
     assert.deepEqual((await client.callTool({ name: "list_issues", arguments: { project_id: "p1", status } })).structuredContent, issues);
     assert.equal(calls.at(-1).status, status);
   }
+  // The type and severity filters of earlier releases are accepted, not advertised.
+  assert.equal(JSON.stringify(list.inputSchema).includes("severity"), false);
+  assert.equal(list.inputSchema.properties.urgent.type, "boolean");
+  assert.equal((await client.callTool({ name: "list_issues", arguments: { project_id: "p1", type: "bug", severity: "blocking" } })).isError, undefined);
   calls.length = 3;
   for (const args of [{}, { project_id: "p1", limit: 0 }, { project_id: "p1", limit: 101 }, { project_id: "p1", status: "invalid" }, { project_id: "p1", status: "Done" }, { project_id: "p1", status: "" }, { project_id: "p1", updated_since: "yesterday" }, { project_id: "p1", extra: true }]) {
     assert.equal((await client.callTool({ name: "list_issues", arguments: args })).isError, true);
@@ -147,7 +151,7 @@ test("SDK initialize, tools/list, tools/call expose only three read-only tools",
 });
 
 test("issues keep their turn, and list_issues and get_issue explain it", async (t) => {
-  const open = { issues: [{ id: "i2", status: "open", turn: "reporter" }, { id: "i3", status: "in_review", turn: "verify" }], next_cursor: null };
+  const open = { issues: [{ id: "i2", status: "open", state: "open", turn: "reporter" }, { id: "i3", status: "in_review", state: "fix_ready", turn: "verify" }], next_cursor: null };
   const server = createServer({ listProjects: async () => projects, listIssues: async () => open, getIssue: async () => issue });
   const client = new Client({ name: "test", version: "1" });
   const [a, b] = InMemoryTransport.createLinkedPair();
@@ -159,6 +163,10 @@ test("issues keep their turn, and list_issues and get_issue explain it", async (
   assert.match(tools.find((tool) => tool.name === "get_issue").description, /turn, whose move it is/);
   const result = await client.callTool({ name: "list_issues", arguments: { project_id: "p1" } });
   assert.deepEqual(result.structuredContent.issues.map((i) => i.turn), ["reporter", "verify"]);
+  // The state words pass through next to the stored status, and the tools say so.
+  assert.deepEqual(result.structuredContent.issues.map((i) => i.state), ["open", "fix_ready"]);
+  assert.match(tools.find((tool) => tool.name === "list_issues").description, /state \(open, fix_ready, fixed, closed\)/);
+  assert.match(tools.find((tool) => tool.name === "get_issue").description, /state \(open, fix_ready, fixed, closed\)/);
 });
 
 test("SDK calls return sanitized structured errors, including invalid envelopes", async (t) => {

@@ -18,7 +18,7 @@ function fixture(context?: Record<string, unknown>) {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
   const report = {
     id: 'issue', number: 7, title: 'Save', body: 'Please check', status: 'open', state: 'open',
-    type: 'bug', env_name: 'uat', url: location.origin + '/', locators: { testid: '[data-testid="save"]' },
+    env_name: 'uat', url: location.origin + '/', locators: { testid: '[data-testid="save"]' },
     author: { name: 'Reporter' }, comments: [], comment_count: 0,
   };
   const data = { reports: [report] };

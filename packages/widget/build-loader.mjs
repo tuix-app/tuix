@@ -25,9 +25,12 @@ for (const file of await readdir('dist')) {
 // input protection for size.
 // Phoenix 1.8.17 and Vite 8.3.8 (Rolldown 1.2.19) emit about 320 bytes more for the same
 // source, which took the boundary to 63 KiB.
+// Review fixes of 2026-11-24 (two-tone focus rings, 44px targets on touch, the conversation's own
+// labels in both languages) took the boundary to 64 KiB (65,536 bytes); the core was 64,2xx bytes
+// and the old 63 KiB limit left under 300 bytes. Revisit when the next feature needs room.
 // The verify prompt's card loads only for a reporter with a fix to check, so it has
 // its own budget instead of taking from the core every visitor downloads.
-if (coreBytes >= 63 * 1024 || screenshotBytes >= 25 * 1024 || promptBytes >= 4 * 1024) throw new Error(`Widget budget exceeded: core=${coreBytes}, screenshot=${screenshotBytes}, prompt=${promptBytes}`);
+if (coreBytes >= 64 * 1024 || screenshotBytes >= 25 * 1024 || promptBytes >= 4 * 1024) throw new Error(`Widget budget exceeded: core=${coreBytes}, screenshot=${screenshotBytes}, prompt=${promptBytes}`);
 const loader = await readFile('dist/tuix.js');
 const size = gzipSync(loader).length;
 if (size >= 2048) throw new Error(`Loader exceeds 2 KiB gzip: ${size}`);

@@ -1,7 +1,7 @@
 import { readPreferences, savePreferences, preferenceEvent, type OpenFilter } from './preferences';
 import { readMarkers, saveMarkers, type MarkerStyle } from './markers';
 import { translations } from './i18n';
-import { tokenCss } from './tokens';
+import { tokenCss, crisp } from './tokens';
 import { VERSION } from './version';
 import type { Config, Summary } from './types';
 
@@ -26,24 +26,24 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
   const other = left ? 'right' : 'left';
   // The launcher opens a small menu on hover or focus: two dots rise out of it, Reports
   // nearest and Settings above. Only an explicit click opens the settings flyout.
-  style.textContent = tokenCss + `.tuix-menu-dot{all:initial;box-sizing:border-box;position:fixed;${side}:20px;width:36px;height:36px;border-radius:50%;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);display:grid;place-items:center;cursor:pointer;pointer-events:none;opacity:0;visibility:hidden;transform:translateY(var(--from)) scale(.98);transition:opacity .2s var(--tx-ease) var(--out,0s),transform .18s var(--tx-ease) var(--out,0s),visibility 0s linear calc(.18s + var(--out,0s)),border-color .2s,box-shadow .2s;box-shadow:var(--tx-shadow-dot);z-index:11}.tuix-menu-dot svg{width:18px;height:18px;display:block}.tuix-reports-button{bottom:calc(68px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));--from:8px;--out:.04s}.tuix-settings-button{bottom:calc(112px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));--from:8px;--in:.05s}.tuix-menu-dot.revealed,.tuix-menu-dot[aria-expanded=true]{pointer-events:auto;opacity:1;visibility:visible;transform:none;transition-delay:var(--in,0s),var(--in,0s),0s,0s,0s}.tuix-menu-dot:hover,.tuix-menu-dot[aria-expanded=true]{border-color:var(--tx-peach);box-shadow:var(--tx-shadow-dot)}.tuix-menu-dot:focus-visible,.tuix-settings :focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}.tuix-menu-dot:after{content:attr(data-label);position:absolute;${other === 'left' ? 'right' : 'left'}:calc(100% + 10px);top:50%;transform:translateY(-50%);white-space:nowrap;padding:5px 8px;border-radius:8px;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);font:600 12px/1.2 var(--tx-font);opacity:0;transition:opacity .15s;pointer-events:none}.tuix-menu-dot:hover:after,.tuix-menu-dot:focus-visible:after{opacity:1}.tuix-menu-dot[aria-expanded=true]:after{opacity:0}.tuix-settings{box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));${side}:72px;width:min(280px,calc(100vw - 88px));padding:20px;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;box-shadow:var(--tx-shadow);pointer-events:auto;font:13px/1.5 var(--tx-font);z-index:10;max-height:calc(100vh - 32px);overflow:auto;overscroll-behavior:contain;scrollbar-color:var(--tx-line) transparent;animation:tuix-settings-in .3s var(--tx-ease)}.tuix-settings[hidden]{display:none}.tuix-settings button,.tuix-settings select{font:inherit;font-weight:600;color:inherit;cursor:pointer;padding:8px 12px;border:1.5px solid var(--tx-line-control);border-radius:8px;background:transparent;color-scheme:var(--tx-scheme)}.tuix-settings select{border-radius:10px;background:var(--tx-bg)}.tuix-settings button[aria-pressed=true]{background:var(--tx-s-open-bg);border-color:var(--tx-peach);color:var(--tx-ink)}.tuix-settings fieldset{border:0;padding:0;margin:0 0 20px;min-width:0;display:flex;flex-wrap:wrap;gap:8px}.tuix-settings legend{padding:0;margin-bottom:8px;font-weight:600;color:var(--tx-muted)}.tuix-settings label{display:block;margin:0 0 20px}.tuix-settings select{display:block;width:100%;margin-top:8px;appearance:none;background-image:var(--tx-chevron);background-repeat:no-repeat;background-size:10px 6px;background-position:right 12px center;padding-right:32px}.tuix-settings .tuix-setting-group{font-weight:600;color:var(--tx-muted)}.tuix-settings .tuix-setting-group select{color:var(--tx-ink)}.tuix-settings-updates{display:block;margin:0;padding-top:20px;border-top:1px solid var(--tx-line-soft)}.tuix-settings-updates:empty{display:none}@keyframes tuix-settings-in{from{opacity:0;transform:translateX(${left ? '-' : ''}10px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.tuix-settings{animation:none}.tuix-menu-dot{transition:none}}@media(hover:none) and (pointer:coarse){.tuix-menu-dot{bottom:calc(20px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));transform:translateX(calc(${left ? -1 : 1} * var(--from))) scale(.98)}.tuix-reports-button{${side}:68px}.tuix-settings-button{${side}:112px}.tuix-menu-dot:after{display:none}.tuix-settings{bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));${side}:16px;width:min(300px,calc(100vw - 32px));max-height:calc(100vh - 88px)}}`;
+  style.textContent = tokenCss + `.tuix-menu-dot{all:initial;${crisp};box-sizing:border-box;position:fixed;${side}:20px;width:36px;height:36px;border-radius:50%;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line-control);display:grid;place-items:center;cursor:pointer;pointer-events:none;opacity:0;visibility:hidden;transform:translateY(var(--from));transition:opacity .2s var(--tx-ease) var(--out,0s),transform .18s var(--tx-ease) var(--out,0s),visibility 0s linear calc(.18s + var(--out,0s)),border-color .2s;z-index:11}.tuix-menu-dot svg{width:18px;height:18px;display:block}.tuix-reports-button{bottom:calc(68px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));--from:8px;--out:.04s}.tuix-settings-button{bottom:calc(112px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));--from:8px;--in:.05s}.tuix-menu-dot.revealed,.tuix-menu-dot[aria-expanded=true]{pointer-events:auto;opacity:1;visibility:visible;transform:none;transition-delay:var(--in,0s),var(--in,0s),0s,0s,0s}.tuix-menu-dot:hover,.tuix-menu-dot[aria-expanded=true]{border-color:var(--tx-ink)}.tuix-menu-dot:focus-visible,.tuix-settings :focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}.tuix-menu-dot:focus-visible,.tuix-summary button:focus-visible{box-shadow:0 0 0 6px var(--tx-surface)}.tuix-menu-dot:after{content:attr(data-label);position:absolute;${other === 'left' ? 'right' : 'left'}:calc(100% + 10px);top:0;bottom:0;height:fit-content;margin:auto 0;white-space:nowrap;padding:6px 8px;border-radius:8px;background:var(--tx-surface);color:var(--tx-ink);border:var(--tx-hairline) solid var(--tx-line-soft);font:600 13px/20px var(--tx-font);opacity:0;transition:opacity .15s;pointer-events:none}.tuix-menu-dot:hover:after,.tuix-menu-dot:focus-visible:after{opacity:1}.tuix-menu-dot[aria-expanded=true]:after{opacity:0}.tuix-settings{box-sizing:border-box;position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));${side}:72px;width:min(280px,calc(100vw - 88px));padding:20px;background:var(--tx-surface);color:var(--tx-ink);border:var(--tx-hairline) solid var(--tx-line-soft);border-radius:16px;box-shadow:var(--tx-shadow);pointer-events:auto;font:450 13px/20px var(--tx-font);z-index:10;max-height:calc(100vh - 32px);overflow:auto;overscroll-behavior:contain;scrollbar-color:var(--tx-line) transparent;}.tuix-settings[hidden]{display:none}.tuix-settings button,.tuix-settings select{font:inherit;font-weight:600;color:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--tx-line-control);border-radius:8px;background:transparent;color-scheme:var(--tx-scheme)}.tuix-settings select{border-radius:10px;background:var(--tx-bg)}.tuix-settings button[aria-pressed=true]{background:var(--tx-pick);border-color:var(--tx-ink);color:var(--tx-ink)}.tuix-settings fieldset{border:0;padding:0;margin:0 0 20px;min-width:0;display:flex;flex-wrap:wrap;gap:8px}.tuix-settings legend{padding:0;margin-bottom:8px;font-weight:600;color:var(--tx-muted)}.tuix-settings label{display:block;margin:0 0 20px}.tuix-settings select{display:block;width:100%;margin-top:8px;appearance:none;background-image:var(--tx-chevron);background-repeat:no-repeat;background-size:10px 6px;background-position:right 12px center;padding-right:32px}.tuix-settings .tuix-setting-group{font-weight:600;color:var(--tx-muted)}.tuix-settings .tuix-setting-group select{color:var(--tx-ink)}.tuix-settings-updates{display:block;margin:0;padding-top:20px;border-top:var(--tx-hairline) solid var(--tx-line-soft)}.tuix-settings-updates:empty{display:none}@media(prefers-reduced-motion:reduce){.tuix-menu-dot{transition:none}}@media(pointer:coarse){.tuix-summary button{min-height:44px}}@media(hover:none) and (pointer:coarse){.tuix-menu-dot{width:44px;height:44px;bottom:calc(20px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));transform:translateX(calc(${left ? -1 : 1} * var(--from)))}.tuix-reports-button{${side}:68px}.tuix-settings-button{${side}:120px}.tuix-menu-dot:after{display:none}.tuix-settings{bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));${side}:16px;width:min(300px,calc(100vw - 32px));max-height:calc(100vh - 88px)}}`;
   const button = document.createElement('button'), panel = document.createElement('section'), browse = document.createElement('button');
   const slot = document.createElement('div'), capsule = document.createElement('div');
   // One capsule beside the launcher: aqua "To verify", peach "Open", each opening Reports filtered to the caller.
-  style.textContent += `.tuix-summary{box-sizing:border-box;position:fixed;${side}:68px;bottom:calc(20px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));display:flex;align-items:center;gap:2px;padding:3px;background:var(--tx-surface);border:1px solid var(--tx-line);border-radius:8px;box-shadow:var(--tx-shadow-dot);pointer-events:auto;z-index:9;font:600 12px/1 var(--tx-font);animation:tuix-summary-in .3s var(--tx-ease)}.tuix-summary button{all:initial;box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:0 4px 0 8px;border-radius:8px;cursor:pointer;font:inherit;white-space:nowrap}.tuix-summary button:hover{background:var(--tx-raised)}.tuix-summary button:focus-visible{outline:2px solid var(--tx-focus);outline-offset:2px}.tuix-summary b{box-sizing:border-box;min-width:20px;height:20px;padding:0 8px;border-radius:8px;display:inline-grid;place-items:center;font-size:11.5px}.tuix-summary [data-summary=verify]{color:var(--tx-aqua-text)}.tuix-summary [data-summary=verify] b{background:var(--tx-aqua);color:var(--tx-on-aqua)}.tuix-summary [data-summary=open]{color:var(--tx-peach-text)}.tuix-summary [data-summary=open] b{background:var(--tx-peach);color:var(--tx-on-peach)}@keyframes tuix-summary-in{from{opacity:0;transform:translateX(${left ? '-' : ''}6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.tuix-summary{animation:none}}`;
+  style.textContent += `.tuix-summary{box-sizing:border-box;position:fixed;${side}:68px;bottom:calc(20px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));display:flex;align-items:center;padding:0;background:var(--tx-surface);border:1px solid var(--tx-line-control);border-radius:999px;pointer-events:auto;z-index:9;font:600 13px/20px var(--tx-font);}.tuix-summary button{all:initial;${crisp};box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 6px 0 14px;border-radius:999px;cursor:pointer;font:inherit;color:var(--tx-ink);white-space:nowrap}.tuix-summary button:hover{background:var(--tx-raised)}.tuix-summary button:focus-visible{outline:2px solid var(--tx-focus);outline-offset:2px}.tuix-summary b{box-sizing:border-box;min-width:24px;height:24px;padding:0 8px;border-radius:999px;display:inline-grid;place-items:center;font-size:13px;line-height:24px;background:var(--tx-peach);color:var(--tx-on-peach)}`;
   style.textContent += `
-    .tuix-settings input[role=switch]{appearance:none;box-sizing:border-box;position:relative;display:inline-block;cursor:pointer;width:34px;height:20px;vertical-align:middle;margin:0 8px 0 0;border:1.5px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg)}
+    .tuix-settings input[role=switch]{appearance:none;box-sizing:border-box;position:relative;display:inline-block;cursor:pointer;width:34px;height:20px;vertical-align:middle;margin:0 8px 0 0;border:1px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg)}
     .tuix-settings input[role=switch]:after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--tx-muted);transition:transform .16s var(--tx-ease)}
-    .tuix-settings input[role=switch]:checked{background:var(--tx-aqua);border-color:var(--tx-aqua)}
-    .tuix-settings input[role=switch]:checked:after{transform:translateX(14px);background:var(--tx-on-aqua)}
+    .tuix-settings input[role=switch]:checked{background:var(--tx-ink);border-color:var(--tx-ink)}
+    .tuix-settings input[role=switch]:checked:after{transform:translateX(14px);background:var(--tx-surface)}
     .tuix-settings-section{margin:0 0 20px}
-    .tuix-settings-section + .tuix-settings-section{border-top:1px solid var(--tx-line-soft);padding-top:20px}
-    .tuix-settings-section h3{font-size:14px;line-height:1.4;margin:0 0 8px;color:var(--tx-ink)}
-    .tuix-settings .tuix-setting-help{font-size:12.5px;line-height:1.5;color:var(--tx-muted);margin:0 0 16px}
+    .tuix-settings-section + .tuix-settings-section{border-top:var(--tx-hairline) solid var(--tx-line-soft);padding-top:20px}
+    .tuix-settings-section h3{font-size:14px;line-height:20px;margin:0 0 8px;color:var(--tx-ink)}
+    .tuix-settings .tuix-setting-help{font-size:13px;line-height:20px;color:var(--tx-muted);margin:0 0 16px}
     .tuix-settings .tuix-marker-toggle{display:flex;align-items:flex-start;gap:8px;margin:0 0 8px;font-weight:600}
     .tuix-settings .tuix-marker-toggle input{flex-shrink:0;margin:2px 0 0}
     .tuix-settings-section>:last-child{margin-bottom:0}
-    .tuix-settings .widget-version{margin:12px 0 0;font:11.5px/1.4 var(--tx-font);color:var(--tx-muted)}
+    .tuix-settings .widget-version{margin:12px 0 0;font:450 13px/20px var(--tx-font);color:var(--tx-muted)}
   `;
   browse.id = 'tuix-reports-toggle'; browse.className = 'tuix-menu-dot tuix-reports-button'; browse.type = 'button'; browse.dataset.action = 'reports';
   browse.setAttribute('aria-label', t.reports); browse.dataset.label = t.reports;
@@ -55,20 +55,19 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
   button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-expanded', 'false');
   slot.className = 'tuix-settings-updates';
   capsule.className = 'tuix-summary'; capsule.hidden = true; capsule.setAttribute('role', 'group'); capsule.setAttribute('aria-label', t.summaryLabel);
-  let counts: Summary = { to_verify: 0, assigned_active: 0 };
-  for (const [show, label] of [['verify', t.summaryVerify], ['open', t.summaryOpen]] as const) {
-    const segment = document.createElement('button'), count = document.createElement('b');
-    segment.type = 'button'; segment.dataset.summary = show; segment.append(label, count);
-    segment.onclick = () => onFilter?.({ scope: 'all', show, involving: 'me' });
-    capsule.append(segment);
-  }
+  let waiting = 0;
+  // One number: the conversations waiting for the viewer (their turn, fixes to check included). It opens Reports on Your turn.
+  { const segment = document.createElement('button'), count = document.createElement('b');
+    segment.type = 'button'; segment.dataset.summary = 'turn'; segment.append(t.summaryTurn, count);
+    segment.onclick = () => onFilter?.({ scope: 'all', show: 'turn' });
+    capsule.append(segment); }
   let timer: ReturnType<typeof setTimeout> | undefined;
   // Touch has no hover: there the control stays visible while feedback is open.
   let touchActive = false, feedbackActive = false;
   const touch = () => { try { return matchMedia('(hover: none) and (pointer: coarse)').matches; } catch { return false; } };
   /** The capsule steps aside while the menu dots, the flyout or a feedback panel are showing. */
   function sync() {
-    capsule.hidden = !(counts.to_verify > 0 || counts.assigned_active > 0) || button.classList.contains('revealed') || !panel.hidden || feedbackActive;
+    capsule.hidden = !(waiting > 0) || button.classList.contains('revealed') || !panel.hidden || feedbackActive;
     listen(button.classList.contains('revealed') || !panel.hidden);
   }
   function reveal(value: boolean) { for (const dot of [browse, button]) dot.classList.toggle('revealed', value || touchActive); sync(); }
@@ -170,17 +169,18 @@ export function mountSettings(root: ShadowRoot, launcher: HTMLButtonElement, con
   window.addEventListener(preferenceEvent, refresh);
   return { slot, open: () => { draw(); visible(true); }, close: () => { visible(false); leave(); },
     active: (value: boolean) => { feedbackActive = value; touchActive = value && touch(); reveal(touchActive || button.classList.contains('revealed')); if (!value) leave(); },
-    /** Counts from `/me/summary`; zero segments stay hidden. */
+    /** Counts from `/me/summary`: `waiting` (older servers: their two counts added, which never overlap); zero hides the capsule and lets the launcher rest. */
     summary: (value: Summary) => {
-      counts = { to_verify: Math.max(0, Math.floor(Number(value?.to_verify)) || 0), assigned_active: Math.max(0, Math.floor(Number(value?.assigned_active)) || 0) };
-      const [verify, open] = capsule.querySelectorAll('button');
-      verify.hidden = !counts.to_verify; open.hidden = !counts.assigned_active;
-      verify.lastChild!.textContent = String(counts.to_verify); open.lastChild!.textContent = String(counts.assigned_active);
-      verify.setAttribute('aria-label', t.summaryVerifyLabel.replace('{count}', String(counts.to_verify)));
-      open.setAttribute('aria-label', t.summaryOpenLabel.replace('{count}', String(counts.assigned_active)));
+      const whole = (number: unknown) => Math.max(0, Math.floor(Number(number)) || 0);
+      waiting = value?.waiting !== undefined ? whole(value.waiting) : whole(value?.to_verify) + whole(value?.assigned_active);
+      const segment = capsule.querySelector('button')!;
+      segment.lastChild!.textContent = String(waiting);
+      segment.setAttribute('aria-label', t.summaryTurnLabel.replace('{count}', String(waiting)));
+      // The launcher comes up while something waits for the viewer.
+      if (waiting > 0) launcher.dataset.waiting = String(waiting); else delete launcher.dataset.waiting;
       sync();
     },
-    destroy: () => {
+        destroy: () => {
     clearTimeout(timer);
     listen(false);
     window.removeEventListener(preferenceEvent, refresh);

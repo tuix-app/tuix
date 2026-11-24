@@ -5,7 +5,9 @@
 // worktree, terminal, state, queuedAt, startedAt, seenWorking, prUrl, repoMain, machine }; times are epoch ms.
 // `machine` is null (or missing, in records saved before it existed) for this computer.
 // `auto` is what the agent was told to do after the fix: null (or missing, in older records) for nothing more,
-// "merge" (watch the pull request and merge it) or "review" (merge, then set In review once deployed).
+// "merge" (watch the pull request and merge it) or "review" (merge, then set Fix ready once deployed).
+
+import { stateOf } from "./issues.js";
 
 export const LIMIT = 3;
 
@@ -61,13 +63,13 @@ export function stackable(runs, repoMain) {
   return runs.filter((r) => r.state === "pr_open" && r.repoMain === repoMain).map((r) => ({ number: r.number, branch: r.branch }));
 }
 
-// After a complete read of a project's issues: its PR-open runs whose issue is no longer in progress (moved on,
+// After a complete read of a project's issues: its PR-open runs whose issue is no longer open (moved on,
 // closed, or gone) are finished records and go. Other projects' runs, and runs without a projectId, stay;
 // a cut-off list proves nothing about what is missing from it.
 export function retirePrOpen(runs, projectId, issues, { cut = false } = {}) {
   if (cut) return runs;
-  const inProgress = new Set(issues.filter((i) => i.status === "in_progress").map((i) => i.id));
-  const kept = runs.filter((r) => !(r.state === "pr_open" && r.projectId === projectId && !inProgress.has(r.issueId)));
+  const open = new Set(issues.filter((i) => stateOf(i) === "open").map((i) => i.id));
+  const kept = runs.filter((r) => !(r.state === "pr_open" && r.projectId === projectId && !open.has(r.issueId)));
   return kept.length === runs.length ? runs : kept;
 }
 

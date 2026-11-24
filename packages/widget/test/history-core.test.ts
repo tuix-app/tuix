@@ -14,7 +14,7 @@ afterEach(() => { core?.destroy(); core = undefined; vi.useRealTimers(); vi.rest
 it('pages replies, preserves drafts during polling, and returns to the latest page after replying', async () => {
   vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
   const comment = (body: string) => ({ id: body, body, author: { name: 'Reviewer' }, team: false, inserted_at: new Date().toISOString() });
-  const issue = { id: 'issue', number: 1, title: 'Long discussion', body: 'Report', status: 'open', state: 'open', reporter: true, allowed_states: ['done', 'closed'], type: 'bug', env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, own: false, comments: [comment('Recent reply')], comments_older: 'older-id', inserted_at: new Date().toISOString() };
+  const issue = { id: 'issue', number: 1, title: 'Long discussion', body: 'Report', status: 'open', state: 'open', reporter: true, allowed_states: ['done', 'closed'], env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, own: false, comments: [comment('Recent reply')], comments_older: 'older-id', inserted_at: new Date().toISOString() };
   let deleted = false, replied = false;
   let releaseReply!: () => void;
   const heldReply = new Promise<void>(resolve => { releaseReply = resolve; });

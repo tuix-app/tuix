@@ -18,7 +18,7 @@ afterEach(async () => {
 
 const comment = (n: number, extra: Record<string, unknown> = {}) => ({ id: 'c' + n, body: 'Reply ' + n, author: { name: n % 2 ? 'Anna' : 'Reporter' }, team: n % 2 === 1, inserted_at: new Date(2026, 0, 1, 10, n).toISOString(), ...extra });
 const report = (number: number, extra: Record<string, unknown> = {}) => ({
-  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body ' + number, status: 'open', state: 'open', type: 'bug', severity: 'major', env_name: 'uat', url: location.origin + '/',
+  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body ' + number, status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/',
   locators: { testid: `[data-testid="t${number}"]` }, author: { name: 'Reporter' }, own: false, comment_count: 2, comments: [comment(1), comment(2)], inserted_at: new Date().toISOString(),
   latest_comment: { author: { name: 'Anna' }, team: true, body: 'Reply 1', inserted_at: new Date().toISOString() }, unread: false, can_mention: false, ...extra,
 });
@@ -77,7 +77,7 @@ it('opens a window beside the element when a dot is clicked, not the sidebar, an
   const chat = win(root)!;
   expect(chat.getAttribute('role')).toBe('dialog');
   expect(chat.querySelector('h2')?.textContent).toBe('#7 Save is hidden 7');
-  expect(chat.querySelector('header .status')?.textContent).toBe('Open');
+  expect(chat.querySelector('header .status')).toBeNull();
   expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Close conversation');
   expect([...chat.querySelectorAll('.comment p')].map(item => item.textContent)).toEqual(['Reply 1', 'Reply 2']);
   expect(root.querySelector('.panel')).toBeNull();
@@ -266,44 +266,44 @@ it('takes Escape for an open mention list before it closes the window', async ()
 
 const review = { state: 'in_review', status: 'awaiting_verification', reporter: true, can_be_fixer: false, allowed_states: ['done', 'open', 'closed'], fixed_note: { body: 'Restored the button.', author: { name: 'Dev' } } };
 
-it('offers Done and Still broken to the reporter of a report in review, and records Done', async () => {
+it('offers Works and Still broken to the reporter of a report in review, and records Works', async () => {
   const { root } = await page([report(7, review)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
   const tools = win(root)!.querySelector('.verify-tools')!;
-  expect([...tools.querySelectorAll('[data-state-action]')].map(item => item.textContent)).toEqual(['Done', 'Still broken']);
+  expect([...tools.querySelectorAll('[data-state-action]')].map(item => item.textContent)).toEqual(['Works', 'Still broken']);
   expect(tools.textContent).toContain('Restored the button.');
   mock.request.mockClear();
-  tools.querySelector<HTMLButtonElement>('[data-state-action="done"]')!.click(); await wait(300);
+  tools.querySelector<HTMLButtonElement>('[data-state-action="works"]')!.click(); await wait(300);
   expect(calls('/verify')[0].slice(1)).toEqual(['POST', { outcome: 'works' }]);
   // The window stays, on the verified report, with the thanks; the list drops the marker.
-  expect(win(root)!.querySelector('.notice')?.textContent).toBe('Fix verified. Thank you.');
+  expect(win(root)!.querySelector('.notice')?.textContent).toBe('Thank you. Marked as fixed.');
   expect(win(root)!.querySelector('.verify-tools')).toBeNull();
-  expect(win(root)!.querySelector('header .status')?.textContent).toBe('Done');
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Closed · Fixed');
 });
 
 it('needs a note for Still broken in the window and sends it with no screenshot', async () => {
   const { root } = await page([report(7, review)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
-  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="open"]')!.click(); await wait(100);
+  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="still_broken"]')!.click(); await wait(100);
   const note = win(root)!.querySelector<HTMLTextAreaElement>('.verify-tools textarea')!;
   expect(note.required).toBe(true);
-  const send = button(win(root)!.querySelector('.verify-tools')!, 'Reopen report');
+  const send = button(win(root)!.querySelector('.verify-tools')!, 'Still broken');
   expect(send.disabled).toBe(true);
   // The reply form gives way to the note.
   expect(win(root)!.querySelector('.mention-field')).toBeNull();
   typeIn(note, 'Still hidden.'); await wait(50);
-  expect(button(win(root)!.querySelector('.verify-tools')!, 'Reopen report').disabled).toBe(false);
+  expect(button(win(root)!.querySelector('.verify-tools')!, 'Still broken').disabled).toBe(false);
   mock.request.mockClear();
   note.closest('form')!.requestSubmit(); await wait(300);
   expect(calls('/verify')[0].slice(1)).toEqual(['POST', { outcome: 'broken', note: 'Still hidden.', attachments: [] }]);
   expect(calls('/uploads')).toHaveLength(0);
-  expect(win(root)!.querySelector('.notice')?.textContent).toBe('Report reopened with your review.');
+  expect(win(root)!.querySelector('.notice')?.textContent).toBe('Sent back with your note.');
 });
 
 it('takes no new screenshot for Still broken in the window', async () => {
   const { root } = await page([report(7, review)], { 7: [100, 200, 40, 20] }, { shots: true });
   dots(root)[0].click(); await wait(200);
-  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="open"]')!.click(); await wait(100);
+  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="still_broken"]')!.click(); await wait(100);
   expect(mock.screenshot).not.toHaveBeenCalled();
   expect(win(root)!.querySelector('.verify-tools details')).toBeNull();
   typeIn(win(root)!.querySelector('.verify-tools textarea')!, 'Still hidden.'); await wait(50);
@@ -317,7 +317,7 @@ it('leaves out the verify actions for anyone but the reporter, and for a report 
   dots(root)[0].click(); await wait(200);
   expect(win(root)!.querySelector('h2')?.textContent).toContain('#1');
   expect(win(root)!.querySelector('.verify-tools')).toBeNull();
-  expect(win(root)!.querySelector('header .status')?.textContent).toBe('In review');
+  expect(win(root)!.querySelector('header .status')).toBeNull();
   dots(root)[1].click(); await wait(200);
   expect(win(root)!.querySelector('h2')?.textContent).toContain('#2');
   expect(win(root)!.querySelector('.verify-tools')).toBeNull();
@@ -327,8 +327,9 @@ it('hides the reply form on a closed report', async () => {
   // The list leaves out finished reports, so the report finishes while the window is open.
   const { root } = await page([report(7)], { 7: [100, 200, 40, 20] }, { thread: item => ({ ...item, state: 'done', status: 'resolved', allowed_states: [] }) });
   dots(root)[0].click(); await wait(200);
-  expect(win(root)!.querySelector('header .status')?.textContent).toBe('Done');
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Closed · Fixed');
   expect(win(root)!.querySelector('form')).toBeNull();
+  expect(win(root)!.querySelector('.closed-note p')?.textContent).toBe('This conversation is closed.');
   expect(win(root)!.querySelector('.chat-moved')).toBeNull();
   expect(button(win(root)!, 'Open full thread')).not.toBeUndefined();
 });
@@ -366,10 +367,10 @@ it('follows the element on scroll and resize, flips to the left near the right e
   const target = document.querySelector<HTMLElement>('[data-testid="t7"]')!;
   const at = (x: number, y: number, width = 40, height = 20) => { (target.getBoundingClientRect as ReturnType<typeof vi.fn>).mockReturnValue({ x, y, width, height }); document.dispatchEvent(new Event('scroll')); return wait(50); };
   dots(root)[0].click(); await wait(200);
-  // jsdom measures no height: the window counts as its tallest (480px) and is centred on the element, kept 8px inside the viewport.
+  // jsdom measures no height: the window counts as its tallest (560px) and is centred on the element, kept 8px inside the viewport.
   expect(Number.parseInt(win(root)!.style.top)).toBe(8);
   await at(100, 500);
-  expect(Number.parseInt(win(root)!.style.top)).toBe(500 + 10 - 240);
+  expect(Number.parseInt(win(root)!.style.top)).toBe(innerHeight - 560 - 8);
   expect(win(root)!.dataset.side).toBe('right');
   await at(900, 300);
   expect(win(root)!.dataset.side).toBe('left');
@@ -537,7 +538,7 @@ it('is labelled in Polish', async () => {
   dots(root)[0].click(); await wait(200);
   const chat = win(root)!;
   expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Zamknij rozmowę');
-  expect(chat.querySelector('header .status')?.textContent).toBe('Do sprawdzenia');
+  expect(chat.querySelector('header .status')).toBeNull();
   expect(chat.querySelector('[data-action="show-earlier"]')?.textContent).toBe('Pokaż wcześniejsze');
   expect(chat.querySelector('[data-action="open-full-thread"]')?.textContent).toBe('Otwórz pełną rozmowę');
   expect(chat.querySelector('textarea')).not.toBeNull();
@@ -567,7 +568,7 @@ it('keeps the live connection for a window that outlives the sidebar, and stops 
 it('does not announce a changed status when the sidebar opens over a window in Still broken', async () => {
   const { root } = await page([report(7, review)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
-  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="open"]')!.click(); await wait(100);
+  win(root)!.querySelector<HTMLButtonElement>('[data-state-action="still_broken"]')!.click(); await wait(100);
   expect(win(root)!.querySelector('.verify-tools textarea')).not.toBeNull();
   core!.open(); await wait(200);
   expect(win(root)).toBeNull();
@@ -693,7 +694,7 @@ it('returns the focus to the dot on Escape after Show earlier, Done and Cancel r
 
   const { root: other } = await page([report(7, review)], { 7: [100, 200, 40, 20] });
   dots(other)[0].click(); await wait(200);
-  const done = win(other)!.querySelector<HTMLButtonElement>('[data-state-action="done"]')!;
+  const done = win(other)!.querySelector<HTMLButtonElement>('[data-state-action="works"]')!;
   done.focus(); done.click(); await wait(300);
   expect(win(other)!.querySelector('.verify-tools')).toBeNull();
   expect(other.activeElement).toBe(win(other));
@@ -704,7 +705,7 @@ it('returns the focus to the dot on Escape after Show earlier, Done and Cancel r
 
   const { root: third } = await page([report(7, review)], { 7: [100, 200, 40, 20] });
   dots(third)[0].click(); await wait(200);
-  win(third)!.querySelector<HTMLButtonElement>('[data-state-action="open"]')!.click(); await wait(100);
+  win(third)!.querySelector<HTMLButtonElement>('[data-state-action="still_broken"]')!.click(); await wait(100);
   const cancel = button(win(third)!.querySelector('.verify-tools')!, 'Cancel');
   cancel.focus(); cancel.click(); await wait(100);
   expect(win(third)!.querySelector('.verify-tools textarea')).toBeNull();

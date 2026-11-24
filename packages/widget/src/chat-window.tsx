@@ -1,7 +1,7 @@
 import type { Ref } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
-import { statusLabel, type translations } from './i18n';
-import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon } from './thread';
+import type { translations } from './i18n';
+import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon, TurnLine, ThreadActions, type ActionProps } from './thread';
 import type { Placement } from './chat-placement';
 import type { Mention, EscapeRef } from './mentions';
 import type { Api } from './api';
@@ -16,9 +16,11 @@ type T = ReturnType<typeof translations>;
 export interface ChatWindowProps {
   t: T; lang?: string; api: Api;
   /** The report as the marker list knows it (its title is there before the thread loads), and its thread once loaded. */
-  issue: Pick<Issue, 'id' | 'number' | 'title'>; thread: Issue | null;
-  /** The state key (`stateOf`), the colour class of the marker, and where the window sits. */
-  state: string; turn: string | null; tone: string; place: Placement; windowRef: Ref<HTMLElement>;
+  issue: Issue; thread: Issue | null;
+  /** The dot's state (your turn, open, closed), and where the window sits. */
+  tone: string; place: Placement; windowRef: Ref<HTMLElement>;
+  /** Fix ready, Take it, Close / Reopen and a note form, as the side panel has them; the urgent toggle. */
+  actions: ActionProps;
   /** What the marker lost: its element is not on screen any more, or was found by its stored position only. */
   gone: boolean; moved: boolean;
   loading: boolean; error: string; notice: string; busy: boolean; closed: boolean;
@@ -45,7 +47,7 @@ export function ChatWindow(p: ChatWindowProps) {
   return <section ref={p.windowRef} id="tuix-chat" class="chat-window" role="dialog" aria-label={heading} tabIndex={-1} data-state={p.tone} data-side={p.place.side}
     style={{ left: p.place.left, top: p.place.top, maxHeight: p.place.maxHeight }}>
     <header>
-      <div class="chat-title"><h2>{heading}</h2><span class="chat-status"><span class="status" data-status={p.state}>{statusLabel(p.state, p.lang)}</span>{p.turn && <span class="turn">{p.turn}</span>}</span></div>
+      <div class="chat-title"><h2>{heading}</h2><TurnLine issue={thread ?? issue} lang={p.lang}/>{(thread ?? issue).urgent && <p class="report-kind"><span class="urgent-mark">{t.urgent}</span></p>}</div>
       <button type="button" class="icon-button" data-action="close-chat" aria-label={t.closeChat} onClick={p.onClose}><CloseIcon/></button>
     </header>
     <div class="chat-body" ref={body}>
@@ -57,14 +59,15 @@ export function ChatWindow(p: ChatWindowProps) {
         <DesignRow link={thread.design_link} t={t}/>
         {earlier && <button type="button" class="text-button" data-action="show-earlier" disabled={p.loading || p.busy} onClick={hidden > 0 ? p.onExpand : p.onFull}>{t.showEarlier}</button>}
         {!earlier && thread.body && <p class="chat-report"><span class="muted">{thread.author.name}</span><br/>{thread.body}</p>}
-        <ThreadComments comments={shown} lang={p.lang} t={t}/>
+        <ThreadComments comments={shown} timeline={thread.timeline} older={earlier} lang={p.lang} t={t}/>
         {!comments.length && !earlier && <p class="muted">{t.noReplies}</p>}
         {p.verify && <VerifyTools t={t} thread={thread} busy={p.busy} reviewing={p.verify.reviewing} note={p.verify.note} works={p.verify.works} broken={p.verify.broken}
           onNote={p.verify.onNote} onWorks={p.verify.onWorks} onBroken={p.verify.onBroken} onCancel={p.verify.onCancel} onSend={p.verify.onSend}/>}
       </>}
     </div>
     <footer>
-      {thread && !p.closed && !p.verify?.reviewing && <ReplyForm api={p.api} thread={thread} t={t} buffer={p.reply} busy={p.busy} picks={p.picks} onPick={p.onPick} escape={p.escape} onSubmit={p.onSend}/>}
+      {thread && !p.closed && !p.verify?.reviewing && !p.actions.pending && <ReplyForm api={p.api} thread={thread} t={t} buffer={p.reply} busy={p.busy} picks={p.picks} onPick={p.onPick} escape={p.escape} onSubmit={p.onSend} primary={!p.verify}/>}
+      {thread && !p.verify?.reviewing && <ThreadActions {...p.actions}/>}
       <button type="button" class="text-button" data-action="open-full-thread" onClick={p.onFull}>{t.openFullThread}</button>
     </footer>
   </section>;

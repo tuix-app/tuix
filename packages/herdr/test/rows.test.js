@@ -20,7 +20,7 @@ test("checkbox only on open, writable, non-archived rows", () => {
   assert.deepEqual(boxes({ canWrite: true, archived: true }), [false, false, false, false]);
 });
 
-test("Ready for review only on PR open rows the view offers it for", () => {
+test("Fix ready only on PR open rows the view offers it for", () => {
   assert.deepEqual(issues(rowsOf(groups)).map((r) => r.actions), [[], [], [], []]);
   assert.deepEqual(issues(rowsOf(groups, { ready: () => true })).map((r) => r.actions), [[], [], ["ready"], []]);
 });
@@ -81,7 +81,7 @@ test("runLine: a PR-open run whose agent keeps going shows what it does", () => 
   const merge = runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus: "working" });
   assert.deepEqual([merge.icon, merge.tone, merge.text, merge.focus], ["spinner", null, "merging when checks pass", true]);
   assert.deepEqual([merge.link, merge.branch, merge.remove, merge.stacked], ["https://github.com/example/app/pull/9", "b", false, 5]); // no Remove while the agent acts
-  assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).text, "merging, then In review once deployed");
+  assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).text, "merging, then Fix ready once deployed");
   assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).focus, false);
   const blocked = runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus: "blocked" });
   assert.deepEqual([blocked.icon, blocked.tone, blocked.text, blocked.focus, blocked.remove, blocked.stacked], ["dot", "alert", "needs you", true, false, 5]);

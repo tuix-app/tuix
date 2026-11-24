@@ -2,7 +2,7 @@ import { PageReports, pageLink } from './page-reports';
 import { VERSION } from './version';
 import { EvidencePreview } from './evidence-preview';
 import { mentionIds, type Mention, type EscapeRef } from './mentions';
-import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon } from './thread';
+import { ThreadComments, ReplyForm, VerifyTools, DesignRow, CloseIcon, TurnLine, ThreadActions, type ActionProps } from './thread';
 import { ChatWindow } from './chat-window';
 import { createTextBuffer, ReportText, type TextBuffer } from './text-buffer';
 import { placeChat, CHAT_W, CHAT_MAX_H, CHAT_MIN_WIDTH } from './chat-placement';
@@ -21,13 +21,13 @@ import { sourceLocation, editorLink, readEditor, saveEditor, defaultEditor, type
 import { pickElement } from './picker';
 import { readMarkers } from './markers';
 import { readPreferences, savePreferences, preferenceEvent, type OpenFilter, type PreferenceChange } from './preferences';
-import { translations, statusLabel, turnLine } from './i18n';
-import { stateOf, fixPending, normalizeState, terminal, unresolved, markActive, turnAfterReply, type State, type TurnChoice } from './states';
+import { translations, statusLabel, turnLine, fill } from './i18n';
+import { stateOf, actionsOf, legacyState, fixPending, normalizeState, terminal, unresolved, markActive, turnAfterReply, myTurn, dotState, type TurnChoice } from './states';
 import type { RemoteConfig, Config, Core, Identity, Issue, Update, EmailPreference } from './types';
 import css from './widget.css?inline';
 import fontUrl from '@fontsource-variable/karla/files/karla-latin-wght-normal.woff2?url';
 import fontExtendedUrl from '@fontsource-variable/karla/files/karla-latin-ext-wght-normal.woff2?url';
-/** Dot marker diameter; `.pin` in widget.css must match so centring stays exact. */
+/** Dot hit area (24px at least, WCAG 2.5.8); `.pin` in widget.css must match so centring stays exact. The drawn dot inside it is 14px. */
 const DOT = 28;
 /** Hover card: how long a pointer rests on a marker before it opens, how long it lingers so the pointer can travel into it, and its width (`.hover-card` in widget.css). CARD_HEIGHT is only the guess for the first frame: the card is measured once drawn (it grows with its turn line and reply). */
 const CARD_DELAY = 200, CARD_LINGER = 200, CARD_W = 272, CARD_HEIGHT = 132, CARD_GAP = 10, CARD_EDGE = 8;
@@ -41,10 +41,8 @@ const touchFirst = () => { try { return matchMedia('(hover: none) and (pointer: 
 const roomy = () => !touchFirst() && innerWidth >= CHAT_MIN_WIDTH;
 /** The sidebar's width (`.panel` in widget.css): the chat window keeps out of its way. */
 const PANEL_W = 360;
-/** Pin and marker color follows the conversation: peach open, gold in progress, an aqua ring in review. */
-const pinState = (state: string) => state === 'in_review' ? 'verify' : state === 'in_progress' ? 'warm' : 'open';
-/** Fixer transitions; on an unassigned report the server assigns the caller first. */
-const fixerStates: readonly string[] = ['in_progress', 'in_review'];
+/** Dots and markers follow whose turn it is: filled peach for the viewer's, a muted outline for the rest, and a quieter one for closed conversations (shown under All only). */
+const pinState = dotState;
 /** How often tuix emails a person (the server's `Tuix.EmailSchedule`), in the order offered. */
 const emailSchedules = ['immediately', 'every_15_minutes', 'hourly', 'twice_daily', 'daily'] as const;
 /** The browser's IANA zone, which the server checks; without one, summaries follow UTC. */
@@ -60,7 +58,7 @@ function screenshotModule() {
   screenshotLoad ??= import('./screenshot').catch(error => { screenshotLoad = undefined; throw error; });
   return screenshotLoad;
 }
-interface Draft { body: TextBuffer; type: string; severity: string; locators: LocatorBundle; key: string; route: string; url: string }
+interface Draft { body: TextBuffer; urgent: boolean; locators: LocatorBundle; key: string; route: string; url: string }
 interface Box { x: number; y: number; width: number; height: number }
 interface Pin { issue: Issue; box: Box; orphan: boolean }
 const uuid = () => {
@@ -137,7 +135,17 @@ function environment(config: Config) {
   return { clientHints, viewport: { width: innerWidth, height: innerHeight }, dpr: devicePixelRatio, title: document.title.slice(0, 200), ua: navigator.userAgent.slice(0, 500), lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, online: navigator.onLine, release: config.release, context };
 }
 
-function CheckIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>; }
+
+/**
+ * Where the turn goes once a reply is in, before the server confirms it (its next answer corrects any guess): to the person picked,
+ * back to the author for `keep`, and to "the team" when no one was picked (the server chooses). `turn_person` is dropped.
+ */
+function holderAfterReply(issue: Issue, choice: TurnChoice | undefined, me: string): Partial<Issue> {
+  if (issue.turn_holder === undefined || !unresolved.includes(stateOf(issue))) return {};
+  const picked = issue.turn_options?.find(option => option.value === choice);
+  const turn_holder = choice === 'keep' ? { name: me, me: true, reporter: !!issue.reporter } : picked ? { name: picked.name, me: false, reporter: !!picked.reporter } : { name: null, me: false, reporter: false };
+  return { turn_holder, turn_person: undefined };
+}
 
 /** What the SDK shares with the core. All optional: tests and `launcher: false` hosts mount without a flyout. */
 export interface Hooks {
@@ -221,6 +229,8 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const shown = { ...preferences, ...viewFilter };
     const allPages = shown.scope === 'all';
     const envFilter = api.environment === 'local' ? preferences.environment : '';
+    // Closed conversations are drawn as muted dots only under Show: All.
+    const closedToo = shown.show === 'all';
     // The settings flyout is open (updates render there) / a composer is hidden behind it, kept in memory.
     const [flyout, setFlyout] = useState(false), [suspended, setSuspended] = useState(false);
     const suspendedRef = useRef(false);
@@ -229,7 +239,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     const [handoffUrl, setHandoffUrl] = useState('');
     const [updatesError, setUpdatesError] = useState('');
     // A status change that needs a note (Still broken) waits here for it.
-    const [pendingState, setPendingState] = useState<State | null>(null), [stateNote, setStateNote] = useState('');
+    const [pendingState, setPendingState] = useState<string | null>(null), [stateNote, setStateNote] = useState('');
     const [route, setRoute] = useState(currentRoute(initial));
     const [pageUrl, setPageUrl] = useState(location.origin + location.pathname);
     const pageRef = useRef(pageUrl), routeRef = useRef(route);
@@ -450,10 +460,10 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     async function fetchList(current = () => true) {
       const sequence = ++listSequence.current;
       try {
-        // Page markers ignore the panel's filters: this page's unresolved reports from everyone.
-        const result = await api.request<{ issues: Issue[] }>('/issues?' + new URLSearchParams({ route_key: route, page_url: pageUrl, show: 'unresolved', involving: 'everyone', ...(envFilter ? { environments: envFilter } : {}) }));
+        // Page markers ignore the panel's list filters: this page's open conversations from everyone, and the closed ones too under Show: All.
+        const result = await api.request<{ issues: Issue[] }>('/issues?' + new URLSearchParams({ route_key: route, page_url: pageUrl, show: closedToo ? 'all' : 'unresolved', involving: 'everyone', ...(envFilter ? { environments: envFilter } : {}) }));
         if (current() && !disposed && sequence === listSequence.current && pageUrl === location.origin + location.pathname) {
-          const next = result.issues.filter(issue => unresolved.includes(stateOf(issue)) && (!issue.url || issue.url === pageUrl));
+          const next = result.issues.filter(issue => (closedToo ? [...unresolved, ...terminal] : unresolved).includes(stateOf(issue)) && (!issue.url || issue.url === pageUrl));
           setIssues(values => JSON.stringify(values) === JSON.stringify(next) ? values : next);
           runtime.loaded(performance.now() - activationStarted);
         }
@@ -588,10 +598,12 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       hooks.changed?.();
       if (settings && settings.enabled !== false && thread && !busy && !fixing.current && !threadRequests.current && threadRequest === threadSequence.current) await openThread(thread, false);
     };
-    // A thread read (or answered) after the list is newer on whose turn it is: the hover card follows it. The next list replaces the entry again.
+    // A thread read (or answered) after the list is newer on whose turn it is and what state it is in: the dot and the hover card follow it. The next list replaces the entry again.
     useManagedEffect(() => {
-      if (!thread || thread.turn === undefined) return;
-      setIssues(values => values.some(issue => issue.id === thread.id && issue.turn !== thread.turn) ? values.map(issue => issue.id === thread.id ? { ...issue, turn: thread.turn } : issue) : values);
+      if (!thread || (thread.turn === undefined && thread.turn_holder === undefined && !stateOf(thread))) return;
+      const change = (issue: Issue) => ({ ...issue, turn: thread.turn, turn_holder: thread.turn_holder, turn_person: thread.turn_person, state: thread.state, state_name: thread.state_name, status: thread.status ?? issue.status, urgent: thread.urgent });
+      const differs = (issue: Issue) => issue.id === thread.id && JSON.stringify(change(issue)) !== JSON.stringify({ ...issue });
+      setIssues(values => values.some(differs) ? values.map(issue => issue.id === thread.id ? change(issue) : issue) : values);
     }, [thread]);
     useManagedEffect(() => {
       if (!(open || chat) || !ready) return;
@@ -629,7 +641,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         catch { if (!stopped && !disposed) runtime.error('refresh'); /* Next active poll retries. */ }
       }, 60000);
       return () => { stopped = true; clearInterval(interval); listSequence.current++; };
-    }, [marking, open, ready, route, pageUrl, envFilter]);
+    }, [marking, open, ready, route, pageUrl, envFilter, closedToo]);
     // Updates on your reports: for the open sidebar, pinned markers and the settings flyout.
     useManagedEffect(() => {
       if (!listening || !ready) return;
@@ -831,7 +843,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     async function compose(element: Element) {
       if (!ready || config.enabled === false) return;
       const previous = reselecting.current; reselecting.current = null;
-      const next = { body: previous?.body ?? createTextBuffer(), type: previous?.type ?? 'bug', severity: previous?.severity ?? '', locators: locate(element), key: previous?.key ?? uuid(), route, url: location.origin + location.pathname };
+      const next = { body: previous?.body ?? createTextBuffer(), urgent: previous?.urgent ?? false, locators: locate(element), key: previous?.key ?? uuid(), route, url: location.origin + location.pathname };
       setDraft(next); setPicking(false); setThread(null); setShot(null); setError('');
       await captureShot(element);
     }
@@ -860,7 +872,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       const submittedActivation = activation;
       const submittedThread = ++threadSequence.current;
       setBusy(true); setError('');
-      const optimistic: Issue = { id: draft.key, number: 0, title: body.split('\n')[0], status: 'sending', type: draft.type, severity: draft.severity, env_name: api.environment, url: draft.url, route_key: draft.route, locators: draft.locators, author: { name: identity.name }, comment_count: 0, inserted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const optimistic: Issue = { id: draft.key, number: 0, title: body.split('\n')[0], status: 'sending', urgent: draft.urgent, env_name: api.environment, url: draft.url, route_key: draft.route, locators: draft.locators, author: { name: identity.name }, comment_count: 0, inserted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       setIssues(values => [optimistic, ...values]); setDraft(null); setNotice(t.sending);
       try {
         const attachments: string[] = [];
@@ -868,7 +880,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           const upload = await api.request<{ id: string; url: string; headers: Record<string, string> }>('/uploads', 'POST', { content_type: 'image/png', byte_size: shot.size });
           await api.upload(upload.url, upload.headers, shot); attachments.push(upload.id);
         }
-        const issue = await api.request<Issue>('/issues', 'POST', { body, type: draft.type, severity: draft.type === 'bug' ? draft.severity || null : null, locators: draft.locators, route_key: draft.route, url: draft.url, idempotency_key: draft.key, release: config.release, widget_version: VERSION, environment: environment(config), ...capture.current?.snapshot(), attachments });
+        const issue = await api.request<Issue>('/issues', 'POST', { body, urgent: draft.urgent, locators: draft.locators, route_key: draft.route, url: draft.url, idempotency_key: draft.key, release: config.release, widget_version: VERSION, environment: environment(config), ...capture.current?.snapshot(), attachments });
         if (disposed) return;
         if (submittedActivation === activation) runtime.submitted(performance.now() - activationStarted);
         if (submittedThread === threadSequence.current && submittedActivation === activation && panelActive) {
@@ -882,15 +894,15 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       if (!thread || busy || !body.trim()) return;
       const sequence = threadSequence.current, pending = uuid(), picked = mentions, ids = mentionIds(body, picked);
       setBusy(true); setError(''); reply.set(''); setMentions([]);
-      const turn = thread.turn, turnPerson = thread.turn_person;
-      setThread(value => value && { ...value, turn: turnAfterReply(value, choice), ...(turnAfterReply(value, choice) !== value.turn && { turn_person: undefined }), comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
+      const turn = thread.turn, turnPerson = thread.turn_person, holder = thread.turn_holder;
+      setThread(value => value && { ...value, turn: turnAfterReply(value, choice), ...holderAfterReply(value, choice, identity.name), comments: [...(value.comments ?? []), { id: pending, body, pending: true, author: { name: identity.name }, team: false, inserted_at: new Date().toISOString() }] });
       try {
         // Servers before mentions read only `body`; a reply without mentions sends nothing else.
         await api.request('/issues/' + thread.id + '/comments', 'POST', { body, ...(ids.length ? { mentions: ids } : {}), ...(choice ? { turn: choice } : {}) });
         if (!disposed && engaged() && sequence === threadSequence.current) void openThread(thread, false, null);
       } catch {
         if (!disposed && engaged() && sequence === threadSequence.current) {
-          setThread(value => value && { ...value, turn, turn_person: turnPerson, comments: value.comments?.filter(comment => comment.id !== pending) });
+          setThread(value => value && { ...value, turn, turn_person: turnPerson, turn_holder: holder, comments: value.comments?.filter(comment => comment.id !== pending) });
           // The picks come back with the text; pruning before the next send drops any the text no longer names.
           reply.set(reply.current || body); setMentions(value => [...value, ...picked.filter(pick => !value.some(kept => kept.id === pick.id))]);
           setError(t.replyError); runtime.error('reply');
@@ -970,7 +982,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       else void openThread({ id }, false, null);
     }
     /** One thread action at a time; failures keep any note for a retry. */
-    async function threadAction(path: 'state' | 'assign', body: object, failure: string, saved?: string) {
+    async function threadAction(path: 'state' | 'assign' | 'urgent', body: object, failure: string, saved?: string) {
       if (!thread || busy || fixing.current) return;
       fixing.current = true;
       const sequence = ++threadSequence.current, id = thread.id;
@@ -985,8 +997,13 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       } catch { if (!disposed && panelActive && sequence === threadSequence.current) { setError(failure); runtime.error('resolve'); } }
       finally { fixing.current = false; if (!disposed) setBusy(false); }
     }
-    const changeState = (state: State, note?: string) => threadAction('state', note === undefined ? { state } : { state, note }, t.stateError, t.stateSaved.replace('{status}', statusLabel(state, initial.lang)));
-    const assignToMe = () => threadAction('assign', {}, t.assignError);
+    /** Sends an action (fix_ready, works, still_broken, close, reopen); a server before actions gets the old state name. */
+    const changeState = (action: string, note?: string) => {
+      const state = thread?.actions ? action : legacyState[action] ?? action;
+      return threadAction('state', note === undefined ? { state } : { state, note }, t.stateError, t.stateSaved);
+    };
+    const takeIt = () => threadAction('assign', {}, t.takeError);
+    const setUrgent = (urgent: boolean) => threadAction('urgent', { urgent }, t.urgentError);
     /** Open tuix.app: a one-time handoff when this person is linked and signed, otherwise an emailed sign-in link.
      *  The link's own address, for a middle click or a copied link, is sign-in (`/login`), never the bare origin,
      *  which is the marketing page once it is on. The handoff itself uses the origin (`appUrl`) only. */
@@ -1041,7 +1058,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
       <div class="updates-head"><h3 id="tuix-updates-title">{t.notifications}</h3>{updates.length > 0 && <button type="button" class="text-button" data-action="read-updates" onClick={() => void readAllUpdates()}>{t.markAllRead}</button>}</div>
       <p class="muted">{t.updates}</p>
       {updates.length ? <ul class="update-list">{updates.slice(0, 5).map(update => {
-        const label = t.updateKinds[update.state_kind ?? ''] ?? t.updateKinds[normalizeState(update.kind)] ?? statusLabel(update.issue?.state ?? update.issue?.status ?? '', initial.lang);
+        const label = t.updateKinds[update.state_kind ?? ''] ?? t.updateKinds[update.kind] ?? t.updateKinds[normalizeState(update.kind)] ?? statusLabel(update.issue?.state ?? update.issue?.status ?? '', initial.lang);
         const title = update.issue ? `#${update.issue.number} ${update.issue.title}` : t.updateUnavailable;
         const elsewhere = update.issue?.url && update.issue.url !== pageUrl ? pageLink(update.issue.url, update.issue_id) : null;
         const content = <><span class="update-kind">{label}</span><strong>{title}</strong><time>{new Date(update.inserted_at).toLocaleString(initial.lang)}</time></>;
@@ -1063,26 +1080,28 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
         {(linkNotice || handoffUrl) && <p class="muted" role="status">{linkNotice}{linkNotice && handoffUrl ? ' ' : ''}{handoffUrl && <a class="app-link" href={handoffUrl} target="_blank" rel="noopener noreferrer" data-action="continue-app" onClick={() => setTimeout(() => { if (!disposed) { setHandoffUrl(''); setLinkNotice(''); } })}>{t.continueApp}</a>}</p>}
       </div>, slot);
     }, [flyout, ready, error, updates, updatesError, emailPreference, appUrl, linking, linkNotice, handoffUrl, open, pageUrl]);
-    // Thread actions come from the caller's allowed states (people-and-statuses §5, §7 item 12); without them (a
-    // server before §6) the thread is read-only.
+    // Thread actions come from the server's `actions`, else from the caller's allowed states (conversations §6); without
+    // either (a server before §6) the thread is read-only.
     const threadState = thread ? stateOf(thread) : '';
     // The side panel shows the thread unless a chat window has it.
     const panelThread = chat ? null : thread;
-    const allowed = new Set<string>(thread?.allowed_states ?? []);
+    const available = thread ? actionsOf(thread) : [];
     const closedThread = terminal.includes(threadState);
     const reporter = !!(thread?.reporter ?? thread?.own);
-    // Fixer powers: the fixer, or anyone allowed to be one on an unassigned report (Start assigns them first).
-    const takeable = !!thread?.can_be_fixer && !closedThread && (!!thread.fixer || !thread.assignee);
-    // The server's allowed states decide, on finished reports too (a reporter may still close a Done report; a fixer
-    // may close a report that will not be fixed, saying why in a reply). Fixer states also need can_be_fixer: an unsigned session may be the assignee, but the server refuses its fixer actions (§5).
-    const may = (next: State) => !!thread && next !== threadState && (fixerStates.includes(next) ? !!thread.can_be_fixer && (allowed.has(next) || takeable) : allowed.has(next));
-    // The reporter decides a report in review in the verification block, which can attach a new screenshot.
-    const verifying = threadState === 'in_review' && reporter && (may('done') || may('open'));
-    const actions = ([['done', t.actionDone], ['open', threadState === 'in_review' ? t.stillBroken : t.actionReopen], ['in_progress', t.actionStart], ['in_review', t.actionReview], ['closed', t.actionClose]] as [State, string][])
-      .filter(([next]) => may(next) && !(verifying && (next === 'done' || next === 'open')) && (next !== 'open' || threadState === 'in_review' || closedThread));
-    const needsNote = (next: State) => next === 'open' && threadState === 'in_review';
-    const canAssign = !!thread?.can_be_fixer && !thread.fixer && !thread.assignee?.me && !closedThread;
-    const canFix = !!thread && api.environment === 'local' && takeable && (threadState === 'open' || threadState === 'in_progress') && !fixPending(thread);
+    const may = (action: string) => available.includes(action);
+    // The reporter decides a report with a fix ready in the verification block, which can attach a new screenshot.
+    const verifying = threadState === 'in_review' && reporter && (may('works') || may('still_broken'));
+    // Fix ready is Mark fixed (below) in a local environment, where the fix waits for a deploy.
+    const local = api.environment === 'local';
+    // Take it: the server says (`actions`, else `can_take`); a server before stored turns is asked the old way.
+    const canAssign = !!thread && !myTurn(thread) && (thread.actions ? may('take') : thread.can_take ?? (!!thread.can_be_fixer && !thread.fixer && !thread.assignee?.me && !closedThread));
+    const canFix = !!thread && local && may('fix_ready') && !fixPending(thread);
+    /** The quiet actions of a thread (Fix ready, Take it, Close / Reopen, a note form), shared by the side panel and the chat window. */
+    const controls: ActionProps = { t, busy, available, urgent: thread?.can_set_urgent && !closedThread ? { on: !!thread.urgent, toggle: () => void setUrgent(!thread.urgent) } : null, local, verifying, closed: closedThread, take: canAssign, pending: pendingState, note: stateNote, onNote: setStateNote,
+      onAction: action => void changeState(action),
+      onPending: action => { setPendingState(action); setStateNote(''); setError(''); if (!action) { holdChatFocus(); focusState(); } },
+      onSend: () => { if (pendingState) void changeState(pendingState, pendingState === 'reopen' ? stateNote.trim() || undefined : stateNote); },
+      onTake: () => void takeIt() };
     /** A marker or its hover card was chosen: the report opens in a chat window, or in the sidebar where there is no room (people-and-statuses §7 item 16). */
     function openMarker(issue: Issue) {
       if (issue.status === 'sending') return;
@@ -1094,20 +1113,21 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     }
     /** The card keeps to what the list already carries: no request per hover. Text only, never HTML. */
     function hoverCard(pin: Pin, anchor: Box, point?: { x: number; y: number }) {
-      const { issue } = pin, reply = issue.latest_comment, state = stateOf(issue);
+      const { issue } = pin, reply = issue.latest_comment;
       const unread = !!issue.unread || updates.some(update => update.issue_id === issue.id);
-      const number = `#${issue.number || '…'}`, status = statusLabel(state, initial.lang);
+      const number = `#${issue.number || '…'}`;
       const author = reply?.team ? t.team : reply?.author.name;
       const turn = turnLine(issue, initial.lang);
-      // Without a reply the card shows the start of the description, whole: its first line is the title, kept on a line of its own, so the title row gives way to the number. An older server sends no excerpt, and the title stays.
+      // Without a reply the card shows the start of the description, one line: its first line is the title, kept on a line of its own. An older server sends no excerpt, and the title stays.
       const excerpt = reply ? '' : (issue.excerpt ?? '').replace(/\s*\n\s*/g, '\n').trim();
       const title = excerpt ? number : `${number} ${issue.title}`;
-      const label = [excerpt ? `${number} ${excerpt.replace(/\n/g, ' ')}` : title, status, turn, pin.orphan && t.moved, unread && t.unreadUpdates, reply && `${author}: ${reply.body}`, !excerpt && reply === null && t.noReplies].filter(Boolean).join(' · ');
-      return <button type="button" id="tuix-card" ref={cardEl} class="hover-card" data-state={pinState(state)} aria-label={label} style={{ ...cardAt(anchor, point, cardHeight), maxHeight: innerHeight - 2 * CARD_EDGE }}
+      const message = reply ? `${author}: ${reply.body}` : excerpt.replace(/\n/g, ' ');
+      const label = [excerpt ? `${number} ${excerpt.replace(/\n/g, ' ')}` : title, issue.urgent && t.urgent, turn, pin.orphan && t.moved, unread && t.unreadUpdates, reply && `${author}: ${reply.body}`, !excerpt && reply === null && t.noReplies].filter(Boolean).join(' · ');
+      return <button type="button" id="tuix-card" ref={cardEl} class="hover-card" data-state={pinState(issue)} aria-label={label} style={{ ...cardAt(anchor, point, cardHeight), maxHeight: innerHeight - 2 * CARD_EDGE }}
         onPointerEnter={() => { overCard.current = true; planCard(cardRef.current, 0); }} onPointerLeave={() => { overCard.current = false; planCard(null, CARD_LINGER); }} onFocus={() => planCard(cardRef.current, 0)} onBlur={() => planCard(null, CARD_LINGER)} onClick={() => openMarker(issue)}>
         <span class="card-title">{unread && <span class="unread-dot" aria-hidden="true"/>}<strong>{title}</strong></span>
-        <span class="card-meta"><span class="status" data-status={state}>{status}</span>{turn && <span class="turn">{turn}</span>}{pin.orphan && <span class="muted">{t.moved}</span>}</span>
-        {reply ? <span class="card-reply"><strong>{author}</strong> {reply.body}</span> : excerpt ? <span class="card-reply card-excerpt">{excerpt}</span> : reply === null && <span class="card-reply muted">{t.noReplies}</span>}
+        {(turn || issue.urgent || pin.orphan) && <span class="card-meta">{issue.urgent && <span class="urgent-mark">{t.urgent}</span>}{turn && <span class="turn-line">{myTurn(issue) && <span class="turn-dot" aria-hidden="true"/>}<span class="turn">{turn}</span></span>}{pin.orphan && <span class="muted">{t.moved}</span>}</span>}
+        {message ? <span class="card-reply">{message}</span> : reply === null && <span class="card-reply muted">{t.noReplies}</span>}
       </button>;
     }
     // The chat window follows its element through the same live pins as the markers; when the element leaves, the window stays where it was.
@@ -1117,29 +1137,27 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
     if (chatPin || chatAway) chatBox.current = (chatPin?.box ?? chatAway)!;
     const chatThread = chat && thread?.id === chat.id ? thread : null;
     const chatState = chat ? stateOf(chatThread ?? chatPin?.issue ?? chat) : '';
-    // The thread, once loaded, is newer than the list on whose turn it is; against an older server neither has one.
-    const chatTurn = chat ? turnLine(chatThread && chatThread.turn !== undefined ? chatThread : chatPin?.issue ?? chat, initial.lang) : null;
     const chatAnchor = chatBox.current ?? { x: pointer.current.x, y: pointer.current.y, width: 1, height: 1 };
     const chatPlace = chat ? placeChat(chatAnchor, { width: CHAT_W, height: chatHeight || CHAT_MAX_H },
       // The open sidebar's side is left to it.
       { left: visible && left ? PANEL_W : 0, top: 0, right: innerWidth - (visible && !left ? PANEL_W : 0), bottom: innerHeight },
       { x: chatAnchor.x + chatAnchor.width / 2 - DOT / 2, y: chatAnchor.y + chatAnchor.height / 2 - DOT / 2, width: DOT, height: DOT }) : null;
     return <div class="tuix-app" lang={initial.lang ?? (navigator.language.startsWith('pl') ? 'pl' : 'en')}>
-      {!!issues.length && !visible && initial.launcher !== false && <span class={'badge attention-dot' + (left ? ' left' : '')} aria-label={t.title}/>}
-      {/* The gold reply dot opens the settings flyout, where Updates on your reports live. */}
+      {!!issues.length && !visible && initial.launcher !== false && <span class={'badge attention-dot' + (left ? ' left' : '')} data-turn={issues.some(myTurn) ? 'yes' : undefined} aria-label={t.title}/>}
+      {/* The reply dot opens the settings flyout, where Updates on your reports live. */}
       {dot && initial.launcher !== false && (hooks.openSettings
         ? <button type="button" class={'reply-dot' + (left ? ' left' : '')} data-action="open-updates" aria-label={t.updates} onClick={() => hooks.openSettings!()}/>
         : <span class={'reply-dot' + (left ? ' left' : '')}/>)}
       {marking && marked.map(pin => {
-        const pinned = stateOf(pin.issue), verify = pinned === 'in_review', id = pin.issue.id, sending = pin.issue.status === 'sending';
+        const tone = pinState(pin.issue), id = pin.issue.id, sending = pin.issue.status === 'sending';
         const state = (pin.orphan ? ' orphan' : '') + ((chat ? chat.id : thread?.id) === id ? ' active' : '');
         const spot = { x: pin.box.x + pin.box.width / 2 - DOT / 2, y: pin.box.y + pin.box.height / 2 - DOT / 2, width: DOT, height: DOT };
         // Outlines and fills stay click-through, so the host element underneath keeps working; hit-testing the pointer against their boxes gives them the hover card, and the card opens the chat.
         return <Fragment key={id}>{markers.style !== 'dot'
-          ? <span data-state={pinState(pinned)} class={'marker' + (markers.style === 'fill' ? ' fill' : '') + (verify ? ' verify-marker' : '') + state} aria-hidden="true" style={{ left: pin.box.x, top: pin.box.y, width: pin.box.width, height: pin.box.height }}/>
-          : <button data-state={pinState(pinned)} data-issue={id} class={'pin' + (verify ? ' verify-pin' : '') + state} disabled={sending} style={{ left: spot.x, top: spot.y }} aria-label={`${verify ? t.verify + ' · ' : ''}#${pin.issue.number || '…'} ${pin.issue.title}${pin.orphan ? ' · ' + t.moved : ''}`} aria-describedby={hoverable && card === id ? 'tuix-card' : undefined}
+          ? <span data-state={tone} class={'marker' + (markers.style === 'fill' ? ' fill' : '') + state} aria-hidden="true" style={{ left: pin.box.x, top: pin.box.y, width: pin.box.width, height: pin.box.height }}/>
+          : <button data-state={tone} data-issue={id} class={'pin' + state} disabled={sending} style={{ left: spot.x, top: spot.y }} aria-label={`${myTurn(pin.issue) ? t.yourTurn + ' · ' : ''}#${pin.issue.number || '…'} ${pin.issue.title}${pin.orphan ? ' · ' + t.moved : ''}`} aria-describedby={hoverable && card === id ? 'tuix-card' : undefined}
             onPointerEnter={event => { if (hoverable && cardable(id) && !sending && event.pointerType !== 'touch') planCard(id, CARD_DELAY); }} onPointerLeave={() => planCard(null, CARD_LINGER)}
-            onFocus={() => { if (hoverable && cardable(id) && !sending && !refocusing.current) planCard(id, 0); }} onBlur={() => planCard(null, CARD_LINGER)} onClick={() => openMarker(pin.issue)} aria-haspopup={roomy() ? 'dialog' : undefined} aria-expanded={chat?.id === id ? true : undefined} aria-controls={chat?.id === id ? 'tuix-chat' : undefined}>{verify ? <CheckIcon/> : null}</button>}
+            onFocus={() => { if (hoverable && cardable(id) && !sending && !refocusing.current) planCard(id, 0); }} onBlur={() => planCard(null, CARD_LINGER)} onClick={() => openMarker(pin.issue)} aria-haspopup={roomy() ? 'dialog' : undefined} aria-expanded={chat?.id === id ? true : undefined} aria-controls={chat?.id === id ? 'tuix-chat' : undefined}/>}
           {hoverable && card === id && hoverCard(pin, markers.style === 'dot' ? spot : pin.box, markers.style === 'dot' ? undefined : cardPoint.current)}</Fragment>;
       })}
       {visible && picking && <>{ready && (touchPick ? <div class="pick-surface touch" aria-hidden="true"/> : <div class="pick-surface" onMouseMove={movePicker} onClick={event => { event.preventDefault(); event.stopPropagation(); const element = movePicker(event); if (element) void compose(element); }}/>)}
@@ -1161,52 +1179,38 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           {!chat && loading && <p role="status">{t.loading}</p>}
           {/* Hosts without a launcher have no flyout, so their updates stay at the top of Reports. */}
           {!panelThread && ready && !slot && (updates.length > 0 || emailPreference?.email_available) && updatesSection}
-          {!panelThread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} onScopeChange={scope => savePreferences(initial.project, { scope })} involving={shown.involving} onInvolvingChange={involving => savePreferences(initial.project, { involving })} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : located.current}/>}
-          {panelThread && <><button onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
-            <p class="muted">#{panelThread.number} · {panelThread.author.name} · {panelThread.env_name}</p>
-            <p class="report-kind">{t[panelThread.type as 'bug'] ?? panelThread.type}{panelThread.severity ? ` · ${t[panelThread.severity as 'major'] ?? panelThread.severity}` : ''}</p>
+          {!panelThread && ready && <PageReports api={api} environments={envFilter} lang={initial.lang} route={allPages ? undefined : route} pageUrl={allPages ? undefined : pageUrl} show={shown.show} onShowChange={show => savePreferences(initial.project, { show })} onScopeChange={scope => savePreferences(initial.project, { scope })} involving={viewFilter.involving} onOpen={issue => void openThread(issue)} refreshKey={allPages ? undefined : located.current}/>}
+          {panelThread && <><button class="text-button" onClick={() => { threadSequence.current++; shotSequence.current++; setReviewing(false); setShot(null); setCapturing(false); setPendingState(null); setThread(null); }}>{t.reports}</button>
+            <p class="muted meta">#{panelThread.number} · {panelThread.author.name} · {panelThread.env_name}{panelThread.urgent && <> · <span class="urgent-mark">{t.urgent}</span></>}</p>
+            <div class="thread-state" tabIndex={-1}><TurnLine issue={panelThread} lang={initial.lang}/></div>
             <DesignRow link={panelThread.design_link} t={t}/>
             <p class="thread-body">{panelThread.body}</p>
             {(panelThread.original_screenshot ?? panelThread.attachments)?.map(item => <figure class="evidence" key={item.id}>
               <figcaption>{t.originalEvidence}</figcaption>
               <EvidencePreview item={item} label={t.originalEvidence} unavailable={t.previewUnavailable} retry={t.retry} onRetry={() => void openThread(panelThread, false)}/>
             </figure>)}
-            {!(panelThread.original_screenshot ?? panelThread.attachments)?.length && <div class="evidence-empty">
-              <p>{panelThread.screenshot_status === 'none' ? t.noScreenshot : panelThread.screenshot_status === 'restricted' ? t.restrictedScreenshot : t.unavailableScreenshot}</p>
-              {panelThread.screenshot_status === 'unavailable' && <button disabled={loading} onClick={() => void openThread(panelThread, false)}>{t.retry}</button>}
-            </div>}
-            <div class="thread-state" tabIndex={-1}>
-              <span class="status" data-status={threadState}>{statusLabel(threadState, initial.lang)}</span>
-              <span class="fixer-line">{panelThread.assignee ? <>{t.fixer}: <strong>{panelThread.assignee.me ? t.you : panelThread.assignee.name}</strong></> : t.noFixer}</span>
-              {canAssign && <button type="button" data-action="assign" disabled={busy} onClick={() => void assignToMe()}>{t.assignToMe}</button>}
-            </div>
             {fixPending(panelThread) && <p class="fix-pending">{t.fixPending}</p>}
             {!!panelThread.review_screenshot?.length && <details><summary>{t.reviewEvidence}</summary>{panelThread.review_screenshot.map(item => <EvidencePreview item={item} label={t.reviewEvidence} unavailable={t.previewUnavailable}/>)}</details>}
-            {verifying && <VerifyTools t={t} thread={panelThread} busy={busy} reviewing={reviewing} capturing={capturing} note={reviewNote} works={may('done')} broken={may('open')}
+            {verifying && <VerifyTools t={t} thread={panelThread} busy={busy} reviewing={reviewing} capturing={capturing} note={reviewNote} works={may('works')} broken={may('still_broken')}
               head={<><h3>{t.verifyTitle}</h3><p class="muted">{threadOrphan ? t.orphanVerify : t.compareLive}</p>
                 {!(panelThread.original_screenshot ?? panelThread.attachments)?.length && <p class="muted">{t.noOriginal}</p>}</>}
               evidence={<details><summary>{t.reviewCapture}</summary>{capturing ? <p role="status">{t.capturing}</p> : preview ? <><img src={preview} alt={t.reviewCapture}/><button type="button" disabled={busy} onClick={() => { shotSequence.current++; setShot(null); }}>{t.remove}</button></> : <p class="muted">{t.skipped}</p>}{config.capture?.screenshot !== false && <button type="button" disabled={busy || capturing} onClick={() => void captureShot(resolve(panelThread.locators, document).element ?? document.body)}>{t.retake}</button>}</details>}
               onNote={setReviewNote} onWorks={() => void verifyThread('works')} onBroken={startReview} onCancel={cancelReview} onSend={() => void verifyThread('broken')}/>}
-            {!reviewing && !pendingState && actions.length > 0 && <div class="thread-actions">{actions.map(([next, label]) =>
-              <button type="button" key={next} data-state-action={next} disabled={busy} onClick={() => { if (needsNote(next)) { setPendingState(next); setStateNote(''); setError(''); } else void changeState(next); }}>{label}</button>)}</div>}
-            {pendingState && <form class="state-note" onSubmit={event => { event.preventDefault(); if (stateNote.trim()) void changeState(pendingState, stateNote); }}>
-              <label>{t.reviewNote}<textarea value={stateNote} onInput={event => setStateNote(event.currentTarget.value)} required maxLength={2000} disabled={busy}/></label>
-              <div class="verification-actions"><button type="button" disabled={busy} onClick={() => { setPendingState(null); setStateNote(''); focusState(); }}>{t.cancel}</button><button type="submit" class="primary" disabled={busy || !stateNote.trim()}>{t.stillBroken}</button></div>
-            </form>}
-            {canFix && <details class="fix-tools">
+            {(commentCursor.current || panelThread.comments_older) && <nav class="actions" aria-label={t.replyPages}>
+              {commentCursor.current && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, null)}>{t.latestReplies}</button>}
+              {panelThread.comments_older && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, panelThread.comments_older!)}>{t.olderReplies}</button>}
+            </nav>}
+            {panelThread.comments && <ThreadComments comments={panelThread.comments} timeline={panelThread.timeline} older={!!panelThread.comments_older} lang={initial.lang} t={t}/>}
+            {!reviewing && <ThreadActions {...controls}/>}
+            {canFix && !pendingState && <details class="fix-tools">
               <summary>{t.markFixed}</summary>
               <form onSubmit={event => { event.preventDefault(); void markFixed(); }}>
                 <p class="muted">{t.fixHelp}</p>
                 <label>{t.fixNote}<textarea value={fixNote} onInput={event => setFixNote(event.currentTarget.value)} required maxLength={2000} disabled={busy}/></label>
                 <p class="muted">{initial.commit || initial.release ? <>{t.fixBuild}: <code>{initial.commit || initial.release}</code></> : t.noFixBuild}</p>
-                <button type="submit" class="primary" disabled={busy || !fixNote.trim()}>{busy ? t.recordingFix : t.markFixed}</button>
+                <button type="submit" disabled={busy || !fixNote.trim()}>{busy ? t.recordingFix : t.markFixed}</button>
               </form>
             </details>}
-            {(commentCursor.current || panelThread.comments_older) && <nav class="actions" aria-label={t.replyPages}>
-              {commentCursor.current && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, null)}>{t.latestReplies}</button>}
-              {panelThread.comments_older && <button disabled={loading || busy} onClick={() => void openThread(panelThread, false, panelThread.comments_older!)}>{t.olderReplies}</button>}
-            </nav>}
-            {panelThread.comments && <ThreadComments comments={panelThread.comments} lang={initial.lang} t={t}/>}
             {source && api.environment === 'local' && <div class="source-tools">
               <p><strong>{t.source}</strong><br/><code>{source.path}:{source.line}</code></p>
               {sourceLink && <a href={sourceLink}>{t.openEditor}</a>}
@@ -1219,7 +1223,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
                 </form>
               </details>
             </div>}
-            {!reviewing && !closedThread && <ReplyForm api={api} thread={panelThread} t={t} buffer={reply} busy={busy}
+            {!reviewing && !pendingState && !closedThread && <ReplyForm api={api} thread={panelThread} t={t} buffer={reply} busy={busy} primary={!verifying}
               picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])} escape={mentionEscape} onSubmit={choice => void replyToThread(choice)}/>}
           </>}
         </div>
@@ -1234,7 +1238,7 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
             }}>{t.changeElement}</button>
           </div>
           <label>{t.body}<ReportText buffer={draft.body} disabled={busy}/></label>
-          <div class="form-row"><label>{t.type}<select value={draft.type} onChange={event => editDraft({ type: event.currentTarget.value })} disabled={busy}>{(['bug','ux','question','idea'] as const).map(type => <option value={type}>{t[type]}</option>)}</select></label>{draft.type === 'bug' && <label>{t.severity}<select value={draft.severity} onChange={event => editDraft({ severity: event.currentTarget.value })} disabled={busy}><option value="">{t.optional}</option>{(['blocking','major','minor'] as const).map(level => <option value={level}>{t[level]}</option>)}</select></label>}</div>
+          <label class="urgent-field"><input type="checkbox" checked={draft.urgent} onChange={event => editDraft({ urgent: event.currentTarget.checked })} disabled={busy}/> {t.urgent}<span class="muted">{t.urgentHint}</span></label>
           <section class="composer-evidence">
             <h3>{t.screenshot}</h3>
             {capturing ? <p role="status">{t.capturing}</p> : preview ? <>
@@ -1248,11 +1252,11 @@ export function mount(root: ShadowRoot, launcher: HTMLButtonElement, initial: Co
           <div class="actions"><button type="button" disabled={busy} onClick={() => { chosen.current = null; reselecting.current = null; setDraft(null); setShot(null); setCapturing(false); shotSequence.current++; }}>{t.cancel}</button><button type="submit" class="primary" disabled={!ready || busy || capturing}>{busy ? t.sending : t.send}</button></div>
         </form>
       </section>}
-      {chat && chatPlace && <ChatWindow t={t} lang={initial.lang} api={api} issue={chatPin?.issue ?? chat} thread={chatThread} state={chatState} turn={chatTurn} tone={pinState(chatState)} place={chatPlace} windowRef={chatEl}
+      {chat && chatPlace && <ChatWindow t={t} lang={initial.lang} api={api} issue={chatPin?.issue ?? chat} thread={chatThread} tone={pinState(chatThread ?? chatPin?.issue ?? chat)} place={chatPlace} windowRef={chatEl} actions={controls}
         gone={!chatPin && !chatAway && !terminal.includes(chatState)} moved={!!chatPin?.orphan} loading={loading} error={error} notice={notice} busy={busy} closed={closedThread}
         expanded={expanded} onExpand={() => { holdChatFocus(); setExpanded(true); }} reply={reply} picks={mentions} onPick={mention => setMentions(value => [...value.filter(kept => kept.id !== mention.id), mention])}
         escape={mentionEscape} onSend={choice => { holdChatFocus(); void replyToThread(choice); }}
-        verify={chatThread && verifying ? { works: may('done'), broken: may('open'), reviewing, note: reviewNote, onNote: setReviewNote, onWorks: () => { holdChatFocus(); void verifyThread('works'); }, onBroken: () => { holdChatFocus(); startReview(); }, onCancel: () => { holdChatFocus(); cancelReview(); }, onSend: () => { holdChatFocus(); void verifyThread('broken'); } } : null}
+        verify={chatThread && verifying ? { works: may('works'), broken: may('still_broken'), reviewing, note: reviewNote, onNote: setReviewNote, onWorks: () => { holdChatFocus(); void verifyThread('works'); }, onBroken: () => { holdChatFocus(); startReview(); }, onCancel: () => { holdChatFocus(); cancelReview(); }, onSend: () => { holdChatFocus(); void verifyThread('broken'); } } : null}
         onRetry={() => void openThread(chat, true, null, true)} onFull={fullThread} onClose={() => closeChat()}/>}
     </div>;
   }

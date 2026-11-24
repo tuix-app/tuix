@@ -6,7 +6,7 @@ import { McpError, collect, createClient, validUrl } from "./lib/mcp.js";
 import { CLIENT_NAME, discover, pollOnce, registerClient, revoke, startDevice } from "./lib/oauth.js";
 import { browserUrl, onStartError, pollStep } from "./lib/poll.js";
 import { createSession, signinMessage, withRefresh } from "./lib/session.js";
-import { groupIssues, matchProject, relocation } from "./lib/issues.js";
+import { groupIssues, matchProject, relocation, stateOf } from "./lib/issues.js";
 import { ALL, fixProjectFor, labelOf, mapLimit, mergeRead, queueReload, targetsFor, yourTurnAll } from "./lib/all.js";
 import { defaultBase, repoOf } from "./lib/git.js";
 import { claudeMissing } from "./lib/launch.js";
@@ -27,7 +27,7 @@ import { fitSize } from "./lib/thread.js";
 import { dropRun, pumpRuns, queueFixes, trackRuns, trackSoon } from "./launch.js";
 
 const DEFAULT_URL = "https://tuix.app";
-const STATUSES = ["open", "in_progress", "in_review"];
+const STATUSES = ["open"]; // the filter's open includes fix_ready
 const IN_FLIGHT = 4; // projects read at once in All projects (the MCP allows 120 requests a minute per connection)
 const PANEL_LABEL = CLIENT_NAME; // comments this panel posts carry the registered client name as `via`
 const RETRY_REFRESH_MS = 30000;
@@ -368,7 +368,7 @@ export default class Tuix extends View {
 
   pumpRuns(cx) { return pumpRuns(this, cx); }
 
-  // One project's issues (all three statuses) and, with a connection that can change issues, its people.
+  // One project's open issues (fix ready included) and, with a connection that can change issues, its people.
   async readProject(client, project) {
     const issues = []; let cut = false;
     for (const status of STATUSES) { // list_issues takes one status at a time
@@ -557,11 +557,11 @@ export default class Tuix extends View {
   // Fix runs in this repository, so in All projects only for issues of the project matched to it.
   inFixProject(issue) { return !this.all || (Boolean(this.fixProject) && issue?.projectId === this.fixProject.id); }
 
-  canReady(issue) { return this.canWrite && !this.archivedIssue(issue) && issue?.status === "in_progress"; }
+  canReady(issue) { return this.canWrite && !this.archivedIssue(issue) && stateOf(issue) === "open"; }
 
   askReady(id, cx) { this.confirming = id; cx.notify(); }
 
-  // The only place the panel sets in_review, and only after the person's "Yes".
+  // The only place the panel sets fix_ready, and only after the person's "Yes".
   readyForReview(id, cx) {
     const client = this.client;
     if (!client || this.confirming !== id) return;
@@ -569,7 +569,7 @@ export default class Tuix extends View {
     this.confirming = null; cx.notify();
     cx.spawn(async (cx) => {
       try {
-        await client.call("set_issue_status", { id, status: "in_review" });
+        await client.call("set_issue_status", { id, status: "fix_ready" });
         this.notice = null;
         if (this.th?.id === id) await this.loadThread(cx);
         await this.load(cx, only);

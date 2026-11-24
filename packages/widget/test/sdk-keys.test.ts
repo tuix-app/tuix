@@ -15,7 +15,7 @@ afterEach(async () => {
   history.replaceState({}, '', '/'); localStorage.clear(); document.body.replaceChildren();
   vi.useRealTimers(); vi.restoreAllMocks(); mocks.request.mockReset();
 });
-const report = { id: '00000000-0000-4000-8000-000000000003', number: 3, title: 'Save overlaps', body: 'Save overlaps', status: 'open', state: 'open', type: 'bug', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Anna' }, comments: [], allowed_states: [], inserted_at: '2026-10-09T10:00:00Z' };
+const report = { id: '00000000-0000-4000-8000-000000000003', number: 3, title: 'Save overlaps', body: 'Save overlaps', status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Anna' }, comments: [], allowed_states: [], inserted_at: '2026-10-09T10:00:00Z' };
 /** Real keys are composed: they leave the shadow root, retargeted to <tuix-widget>. */
 const press = (target: Element, key: string, init: KeyboardEventInit = {}) => { for (const type of keys) target.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true, composed: true, cancelable: true, ...init })); };
 

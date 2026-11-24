@@ -18,7 +18,7 @@ afterEach(async () => {
 
 const comment = (n: number, extra: Record<string, unknown> = {}) => ({ id: 'c' + n, body: 'Reply ' + n, author: { name: n % 2 ? 'Anna' : 'Reporter' }, team: n % 2 === 1, inserted_at: new Date(2026, 0, 1, 10, n).toISOString(), ...extra });
 const report = (number: number, extra: Record<string, unknown> = {}) => ({
-  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body ' + number, status: 'open', state: 'open', type: 'bug', severity: 'major', env_name: 'uat', url: location.origin + '/',
+  id: 'issue-' + number, number, title: 'Save is hidden ' + number, body: 'Body ' + number, status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/',
   locators: { testid: `[data-testid="t${number}"]` }, author: { name: 'Reporter' }, own: false, comment_count: 2, comments: [comment(1), comment(2)], inserted_at: new Date().toISOString(),
   latest_comment: { author: { name: 'Anna' }, team: true, body: 'Reply 1', inserted_at: new Date().toISOString() }, unread: false, can_mention: false, ...extra,
 });
@@ -72,31 +72,62 @@ const button = (root: ParentNode, label: string) => [...root.querySelectorAll('b
 
 
 import { turnLine } from '../src/i18n';
-import { turnOf, turnAfterReply } from '../src/states';
+import { turnOf, turnAfterReply, myTurn, dotState } from '../src/states';
 
 const as = (viewer: 'reporter' | 'fixer' | 'other', turn: string | null | undefined) => ({ turn, reporter: viewer === 'reporter', fixer: viewer === 'fixer' });
 
-it('phrases whose turn it is for the viewer, in both languages', () => {
-  // Reporter, fixer (team side), and someone who is neither; every turn.
-  const matrix: [ReturnType<typeof as>, string, string][] = [
-    [as('reporter', 'reporter'), 'Waiting for your reply', 'Czeka na Twoją odpowiedź'],
-    [as('reporter', 'team'), 'The team is on it', 'Zespół się tym zajmuje'],
-    [as('reporter', 'verify'), 'Fix ready for you to check', 'Poprawka gotowa do sprawdzenia'],
-    [as('fixer', 'reporter'), 'Waiting for the reporter', 'Czeka na zgłaszającego'],
-    [as('fixer', 'team'), 'Your turn', 'Twoja kolej'],
-    [as('fixer', 'verify'), 'Waiting for the reporter to check', 'Czeka na sprawdzenie przez zgłaszającego'],
-    [as('other', 'reporter'), 'Waiting for the reporter', 'Czeka na zgłaszającego'],
-    [as('other', 'team'), 'Waiting for the team', 'Czeka na zespół'],
-    [as('other', 'verify'), 'Waiting for the reporter to check', 'Czeka na sprawdzenie przez zgłaszającego'],
+it('has ONE turn line, phrased for the viewer, in both languages', () => {
+  const holder = (name: string | null, me = false, reporter = false) => ({ name, me, reporter });
+  const team = { can_take: true }, reporterView = { reporter: true }, member = { name: 'Anna' };
+  const matrix: [string, Parameters<typeof turnLine>[0], string, string][] = [
+    ['team, their own turn', { ...team, state: 'open', turn_holder: holder('Anna', true) }, 'Your turn', 'Twoja kolej'],
+    ['team, someone else holds it', { ...team, state: 'open', turn_holder: holder(member.name) }, 'Waiting for Anna', 'Czeka na: Anna'],
+    ['team, the reporter holds it in review', { ...team, state: 'in_review', turn_holder: holder('Ola', false, true) }, 'Waiting for Ola', 'Czeka na: Ola'],
+    ['team, a holder without a name', { ...team, state: 'open', turn_holder: holder(null) }, 'Waiting for the team', 'Czeka na zespół'],
+    ['team, a reporter without a name', { ...team, state: 'open', turn_holder: holder(null, false, true) }, 'Waiting for the reporter', 'Czeka na zgłaszającego'],
+    ['team, nobody holds it', { ...team, state: 'open', turn_holder: null }, 'Unclaimed', 'Nikt się tym jeszcze nie zajął'],
+    ['reporter, the team holds it', { ...reporterView, state: 'open', turn_holder: holder('Anna') }, 'Waiting for the team', 'Czeka na zespół'],
+    ['reporter, nobody holds it: never Unclaimed', { ...reporterView, state: 'open', turn_holder: null }, 'Waiting for the team', 'Czeka na zespół'],
+    ['reporter, a fix to check', { ...reporterView, state: 'in_review', turn_holder: holder('Ola', true, true) }, 'Your turn', 'Twoja kolej'],
+    ['another person from the app, nobody holds it: never Unclaimed', { state: 'open', turn_holder: null }, 'Waiting for the team', 'Czeka na zespół'],
+    ['closed as fixed', { ...team, state: 'done', turn_holder: null }, 'Closed · Fixed', 'Zamknięte · Naprawione'],
+    ['closed otherwise', { ...reporterView, state: 'closed' }, 'Closed', 'Zamknięte'],
+    ['state_name wins', { ...team, state_name: 'fixed', state: 'open' }, 'Closed · Fixed', 'Zamknięte · Naprawione'],
   ];
-  for (const [issue, en, pl] of matrix) { expect(turnLine(issue, 'en')).toBe(en); expect(turnLine(issue, 'pl')).toBe(pl); }
+  for (const [name, issue, en, pl] of matrix) { expect(turnLine(issue, 'en'), name).toBe(en); expect(turnLine(issue, 'pl'), name).toBe(pl); }
+  // A report still sending has no turn yet.
+  expect(turnLine({ status: 'sending' }, 'en')).toBeNull();
+});
+
+it('falls back to `turn` against a server before stored turns, and shows nothing without one', () => {
+  const matrix: [ReturnType<typeof as>, string][] = [
+    [as('reporter', 'reporter'), 'Your turn'], [as('reporter', 'team'), 'Waiting for the team'], [as('reporter', 'verify'), 'Your turn'],
+    [as('fixer', 'reporter'), 'Waiting for the reporter'], [as('fixer', 'team'), 'Your turn'], [as('fixer', 'verify'), 'Waiting for the reporter'],
+    [as('other', 'reporter'), 'Waiting for the reporter'], [as('other', 'team'), 'Waiting for the team'], [as('other', 'verify'), 'Waiting for the reporter'],
+  ];
+  for (const [issue, en] of matrix) expect(turnLine({ ...issue, state: 'open' }, 'en')).toBe(en);
   // The reporter who is also the fixer reads it as the reporter.
-  expect(turnLine({ turn: 'team', reporter: true, fixer: true }, 'en')).toBe('The team is on it');
-  // Absent (an older server), null (finished) and a value from a newer server show nothing.
-  for (const turn of [undefined, null, 'later']) for (const viewer of ['reporter', 'fixer', 'other'] as const) expect(turnLine(as(viewer, turn), 'en')).toBeNull();
+  expect(turnLine({ turn: 'team', reporter: true, fixer: true, state: 'open' }, 'en')).toBe('Waiting for the team');
+  // Absent (an older server) and a value from a newer server show nothing.
+  for (const turn of [undefined, null, 'later']) for (const viewer of ['reporter', 'fixer', 'other'] as const) expect(turnLine({ ...as(viewer, turn), state: 'open' }, 'en')).toBeNull();
   expect(turnLine({}, 'en')).toBeNull();
   expect(turnOf({ turn: 'later' })).toBeNull();
   expect(turnOf({ turn: 'verify' })).toBe('verify');
+});
+
+it('knows whose turn it is for the dot: the stored holder, else the older `turn`', () => {
+  expect(myTurn({ state: 'open', turn_holder: { me: true } })).toBe(true);
+  expect(myTurn({ state: 'open', turn_holder: { me: false } })).toBe(false);
+  expect(myTurn({ state: 'open', turn_holder: null })).toBe(false);
+  // Finished conversations have no turn, whatever the holder says.
+  expect(myTurn({ state: 'done', turn_holder: { me: true } })).toBe(false);
+  expect(myTurn({ state: 'open', turn: 'verify', reporter: true })).toBe(true);
+  expect(myTurn({ state: 'open', turn: 'team', fixer: true })).toBe(true);
+  expect(myTurn({ state: 'open', turn: 'team', reporter: true })).toBe(false);
+  expect(dotState({ state: 'open', turn_holder: { me: true } })).toBe('turn');
+  expect(dotState({ state: 'in_review', turn_holder: { me: false } })).toBe('open');
+  expect(dotState({ state: 'closed' })).toBe('closed');
+  expect(dotState({ state_name: 'fixed' })).toBe('closed');
 });
 
 it('hands the turn over when the viewer replies, by the same rule as the server', () => {
@@ -109,6 +140,12 @@ it('hands the turn over when the viewer replies, by the same rule as the server'
   expect(turnAfterReply({ turn: 'verify', reporter: true })).toBe('verify');
   expect(turnAfterReply({ turn: null, reporter: true })).toBeNull();
   expect(turnAfterReply({ reporter: true })).toBeUndefined();
+});
+
+it('a picked person other than the reporter leaves the turn with the team; the reporter option hands it over', () => {
+  const issue = { turn: 'team' as const, fixer: true, turn_options: options };
+  expect(turnAfterReply(issue, 'end_user:rep')).toBe('reporter');
+  expect(turnAfterReply(issue, 'member:abc')).toBe('team');
 });
 
 it('lets the fixer choose: keep leaves the turn, reporter hands it over, verify and finished stay', () => {
@@ -127,8 +164,9 @@ const waiting = { turn: 'reporter', reporter: true, fixer: false };
 it('shows the turn in the hover card, and in its label', async () => {
   const { root } = await page([report(7, waiting)], { 7: [100, 200, 40, 20] });
   const card = (await hover(root))!;
-  expect(card.querySelector('.card-meta .turn')?.textContent).toBe('Waiting for your reply');
-  expect(card.getAttribute('aria-label')).toContain('Waiting for your reply');
+  expect(card.querySelector('.card-meta .turn')?.textContent).toBe('Your turn');
+  expect(card.querySelector('.card-meta .turn-dot')).not.toBeNull();
+  expect(card.getAttribute('aria-label')).toContain('Your turn');
   // The card shows a line of text, nothing else changed: still no request for a hover.
   expect(calls('/issues/issue-7')).toHaveLength(0);
 });
@@ -154,14 +192,17 @@ it('shows no turn when the server sent none or the report is finished', async ()
 it('shows the turn in the chat window header', async () => {
   const { root } = await page([report(7, waiting)], { 7: [100, 200, 40, 20] });
   dots(root)[0].click(); await wait(200);
-  const status = win(root)!.querySelector('header .chat-status')!;
-  expect(status.querySelector('.status')?.textContent).toBe('Open');
-  expect(status.querySelector('.turn')?.textContent).toBe('Waiting for your reply');
+  const header = win(root)!.querySelector('header')!;
+  // One turn line, no status chip.
+  expect(header.querySelectorAll('.turn-line')).toHaveLength(1);
+  expect(header.querySelector('.status')).toBeNull();
+  expect(header.querySelector('.turn')?.textContent).toBe('Your turn');
+  expect(header.querySelector('.turn-dot')).not.toBeNull();
   core!.destroy(); core = undefined; document.body.replaceChildren(); localStorage.clear();
 
   const { root: pl } = await page([report(7, { turn: 'verify', state: 'in_review', status: 'awaiting_verification', reporter: true })], { 7: [100, 200, 40, 20] }, { lang: 'pl' });
   dots(pl)[0].click(); await wait(200);
-  expect(win(pl)!.querySelector('header .turn')?.textContent).toBe('Poprawka gotowa do sprawdzenia');
+  expect(win(pl)!.querySelector('header .turn')?.textContent).toBe('Twoja kolej');
   core!.destroy(); core = undefined; document.body.replaceChildren(); localStorage.clear();
 
   const { root: older } = await page([report(7)], { 7: [100, 200, 40, 20] });
@@ -184,12 +225,11 @@ it('follows a live update: the window header and the hover card change with the 
   // The fix goes to review and the report is checked: the state and the turn change together.
   Object.assign(stored, { turn: 'verify', state: 'in_review', status: 'awaiting_verification' });
   await mock.refresh(); await wait(200);
-  expect(win(root)!.querySelector('header .status')?.textContent).toBe('In review');
-  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Waiting for the reporter to check');
-  // Finished: the line goes.
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Waiting for the reporter');
+  // Finished: the line says so.
   Object.assign(stored, { turn: null, state: 'done', status: 'resolved' });
   await mock.refresh(); await wait(200);
-  expect(win(root)!.querySelector('header .turn')).toBeNull();
+  expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Closed · Fixed');
 });
 
 it('hands the turn over at once when the reporter replies, and takes it back if sending fails', async () => {
@@ -207,41 +247,44 @@ it('hands the turn over at once when the reporter replies, and takes it back if 
   });
   dots(root)[0].click(); await wait(200);
   const line = () => win(root)!.querySelector('header .turn')?.textContent;
-  expect(line()).toBe('Waiting for your reply');
+  expect(line()).toBe('Your turn');
 
   typeIn(reply(root), 'Here is the page'); await wait(10);
   reply(root).closest('form')!.requestSubmit(); await wait(5);
   // Before the server answers.
-  expect(line()).toBe('The team is on it');
+  expect(line()).toBe('Waiting for the team');
   release(); await wait(200);
-  expect(line()).toBe('Waiting for your reply');
+  expect(line()).toBe('Your turn');
   expect(win(root)!.querySelector('[role="alert"]')?.textContent).toContain('Could not send your reply');
 
   fail = false;
   reply(root).closest('form')!.requestSubmit(); await wait(5);
   release(); await wait(200);
-  expect(line()).toBe('The team is on it');
+  expect(line()).toBe('Waiting for the team');
   // The hover card follows the thread once the window is closed.
   escape(); await wait(100);
-  expect((await hover(root))!.querySelector('.turn')?.textContent).toBe('The team is on it');
+  expect((await hover(root))!.querySelector('.turn')?.textContent).toBe('Waiting for the team');
 });
 
 const comments = () => calls('/issues/issue-7/comments').filter(([, method]) => method === 'POST');
-const fixerView = { turn: 'team', reporter: false, fixer: true, can_be_fixer: true, turn_person: 'member:abc' };
+const options = [{ value: 'end_user:rep', name: 'Rita', reporter: true }, { value: 'member:abc', name: 'Anna', team: true }];
+const fixerView = { turn: 'team', reporter: false, fixer: true, can_be_fixer: true, turn_person: 'member:abc', turn_options: options, default_turn: 'end_user:rep' };
+const sendTo = (form: Element) => form.querySelector<HTMLSelectElement>('select[data-send-to]')!;
+const pick = (form: Element, value: string) => { const select = sendTo(form); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); };
 
-it('gives a signed fixer Reply & pass and Reply, each sending its choice and moving the turn', async () => {
-  for (const [label, turn, line] of [['Reply & pass', 'reporter', 'Waiting for the reporter'], ['Reply', 'keep', 'Your turn']] as const) {
+it('gives a signed team session one Send with a Send to picker, each choice sent and moving the turn', async () => {
+  for (const [value, turn, line] of [['end_user:rep', 'end_user:rep', 'Waiting for the reporter'], ['keep', 'keep', 'Your turn']] as const) {
     const stored: Report & { turn?: string | null } = report(7, fixerView);
-    const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: (path, method, body) => { if (path === '/issues/issue-7/comments' && method === 'POST') { if ((body as { turn?: string }).turn === 'reporter') stored.turn = 'reporter'; return { id: 'c3' }; } return served(stored)(path); } });
+    const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: (path, method, body) => { if (path === '/issues/issue-7/comments' && method === 'POST') { if ((body as { turn?: string }).turn === 'end_user:rep') stored.turn = 'reporter'; return { id: 'c3' }; } return served(stored)(path); } });
     dots(root)[0].click(); await wait(200);
     const form = reply(root).closest('form')!;
-    expect([...form.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Reply', 'Reply & pass']);
-    expect(button(form, 'Reply & pass').classList.contains('primary')).toBe(true);
-    expect(button(form, 'Reply & pass').title).toMatch(/hand the turn to the reporter/);
-    expect(button(form, 'Reply').title).toMatch(/keep the turn/);
+    expect([...form.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Send']);
+    // The server's order, then Keep with me; preselected by its default.
+    expect([...sendTo(form).options].map(item => [item.value, item.textContent])).toEqual([['end_user:rep', 'Rita (reporter)'], ['member:abc', 'Anna'], ['keep', 'Keep with me']]);
+    expect(sendTo(form).value).toBe('end_user:rep');
+    pick(form, value); await wait(5);
     typeIn(reply(root), 'Looking'); await wait(10);
-    button(form, label).click(); await wait(5);
-    // Before the server answers, and after it has.
+    button(form, 'Send').click(); await wait(5);
     expect(win(root)!.querySelector('header .turn')?.textContent).toBe(line);
     await wait(200);
     expect(win(root)!.querySelector('header .turn')?.textContent).toBe(line);
@@ -251,15 +294,15 @@ it('gives a signed fixer Reply & pass and Reply, each sending its choice and mov
   }
 });
 
-it('Reply & pass is what submitting the form does for a fixer', async () => {
+it('sends the server\'s default recipient when the form is submitted untouched', async () => {
   const stored: Report & { turn?: string | null } = report(7, fixerView);
   const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: served(stored) });
   dots(root)[0].click(); await wait(200);
   typeIn(reply(root), 'Done here'); await submit(root);
-  expect(comments()[0][2]).toEqual({ body: 'Done here', turn: 'reporter' });
+  expect(comments()[0][2]).toEqual({ body: 'Done here', turn: 'end_user:rep' });
 });
 
-it('restores the turn and who holds it when a fixer\'s reply fails', async () => {
+it('restores the turn and who holds it when a team reply fails', async () => {
   let release: () => void = () => {};
   const stored: Report & { turn?: string | null } = report(7, fixerView);
   const { root } = await page([stored], { 7: [100, 200, 40, 20] }, {
@@ -267,7 +310,7 @@ it('restores the turn and who holds it when a fixer\'s reply fails', async () =>
   });
   dots(root)[0].click(); await wait(200);
   typeIn(reply(root), 'Soon'); await wait(10);
-  button(win(root)!, 'Reply & pass').click(); await wait(5);
+  button(win(root)!, 'Send').click(); await wait(5);
   expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Waiting for the reporter');
   release(); await wait(200);
   expect(win(root)!.querySelector('header .turn')?.textContent).toBe('Your turn');
@@ -279,9 +322,22 @@ it('keeps the single Reply for the reporter, other viewers and a fixer who canno
     const stored: Report & { turn?: string | null } = report(7, view);
     const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: served(stored) });
     dots(root)[0].click(); await wait(200);
-    expect([...reply(root).closest('form')!.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Reply']);
+    expect([...reply(root).closest('form')!.querySelectorAll('button')].map(item => item.textContent)).toEqual(['Send']);
     typeIn(reply(root), 'Hi'); await submit(root);
     expect(comments()[0][2]).toEqual({ body: 'Hi' });
     core!.destroy(); core = undefined; document.body.replaceChildren(); localStorage.clear(); mock.request.mockReset();
   }
+});
+
+it('sends no choice when the default recipient is not among the offered people', async () => {
+  const stored = report(7, { ...fixerView, default_turn: 'member:hidden' });
+  const { root } = await page([stored], { 7: [100, 200, 40, 20] }, { handler: (path, method) => (path === '/issues/issue-7/comments' && method === 'POST' ? { id: 'c3' } : served(stored)(path)) });
+  dots(root)[0].click(); await wait(200);
+  const form = reply(root).closest('form')!;
+  expect(sendTo(form).value).toBe('');
+  expect(sendTo(form).options[0].textContent).toBe('Default');
+  typeIn(reply(root), 'Looking'); await wait(10);
+  button(form, 'Send').click(); await wait(50);
+  expect(comments()).toHaveLength(1);
+  expect(comments()[0][2]).toEqual({ body: 'Looking' });
 });

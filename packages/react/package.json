@@ -1,6 +1,6 @@
 {
   "name": "@tuix/react",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "React and Next.js lifecycle integration for the existing Tuix widget",
   "license": "MIT",
@@ -11,7 +11,7 @@
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./babel": { "types": "./dist/babel.d.ts", "default": "./dist/babel.js" }
   },
-  "peerDependencies": { "@babel/core": "^7.0.0 || ^8.0.0", "@tuix/widget": "^0.2.3 || ^0.3.0", "react": "^19.0.0" },
+  "peerDependencies": { "@babel/core": "^7.0.0 || ^8.0.0", "@tuix/widget": "^0.2.3 || ^0.3.0 || ^0.4.0", "react": "^19.0.0" },
   "peerDependenciesMeta": { "@babel/core": { "optional": true } },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

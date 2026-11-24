@@ -5,7 +5,7 @@ import type { Issue } from '../src/types';
 
 const page = location.origin + location.pathname;
 const issue = (extra: Partial<Issue> = {}): Issue => ({
-  id: 'a', number: 1, title: 'Save is hidden', status: 'awaiting_verification', state: 'in_review', type: 'bug', env_name: 'uat', url: page, locators: {} as never,
+  id: 'a', number: 1, title: 'Save is hidden', status: 'awaiting_verification', state: 'in_review', env_name: 'uat', url: page, locators: {} as never,
   author: { name: 'Reporter' }, comment_count: 0, inserted_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', reporter: true, allowed_states: ['done', 'open'],
   verification_started_at: '2026-11-02T10:00:00Z', ...extra,
 });
@@ -21,13 +21,16 @@ it('asks only when every condition holds', () => {
   expect(eligible(issue(), context({ panelOpen: true }))).toBe(false);
   expect(eligible(issue(), context({ deepLink: true }))).toBe(false);
   expect(eligible(issue(), context({ isDismissed: () => true }))).toBe(false);
-  for (const state of ['open', 'in_progress', 'done', 'closed'] as const) expect(eligible(issue({ state, status: state }), context()), state).toBe(false);
+  for (const state of ['open', 'done', 'closed'] as const) expect(eligible(issue({ state, status: state }), context()), state).toBe(false);
   // Someone else's report, as the review controls see it; `own` stands in for `reporter` on older servers.
   expect(eligible(issue({ reporter: false }), context())).toBe(false);
   expect(eligible(issue({ reporter: undefined, own: true }), context())).toBe(true);
   // The server does not let the caller decide.
   expect(eligible(issue({ allowed_states: [] }), context())).toBe(false);
   expect(eligible(issue({ allowed_states: undefined }), context())).toBe(false);
+  // A server with actions says it with `actions` (and `state_name`), not allowed_states.
+  expect(eligible(issue({ allowed_states: undefined, actions: ['reply', 'works', 'still_broken'], state_name: 'fix_ready' }), context())).toBe(true);
+  expect(eligible(issue({ allowed_states: ['done', 'open'], actions: ['reply'] }), context())).toBe(false);
   // Another page, or a report with no page.
   expect(eligible(issue({ url: page + 'other' }), context())).toBe(false);
   expect(eligible(issue({ url: undefined }), context())).toBe(false);
@@ -99,7 +102,7 @@ it('renders an accessible card, announces it once and opens the thread from Chec
   prompt.sync(2); await vi.advanceTimersByTimeAsync(SETTLE_MS + 10);
   expect(card().hidden).toBe(false);
   expect(card().getAttribute('role')).toBe('group');
-  expect(card().textContent).toContain('Fixed — does it work now?');
+  expect(card().textContent).toContain('Fix ready. Does it work now?');
   expect(card().textContent).toContain('#3 Save is hidden');
   expect(card().textContent).toContain('1 of 2');
   const buttons = [...card().querySelectorAll('button')];

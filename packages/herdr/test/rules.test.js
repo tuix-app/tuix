@@ -36,6 +36,11 @@ test("rulesFor reads the repository's own entry", () => {
   assert.deepEqual(rulesFor(JSON.parse('{"__proto__":{"merge":true}}'), "__proto__"), { merge: true, review: false, deploy: "" });
 });
 
+test("a stored in_review reads as Fix ready", () => {
+  assert.deepEqual(normalize({ merge: true, review: "in_review", deploy: "" }), { merge: true, review: true, deploy: "" });
+  assert.deepEqual(normalize({ merge: false, review: "in_review" }), { merge: false, review: false, deploy: "" });
+});
+
 test("autoOf and summary", () => {
   assert.equal(autoOf(OFF), null);
   assert.equal(autoOf(undefined), null);
@@ -43,5 +48,5 @@ test("autoOf and summary", () => {
   assert.equal(autoOf({ merge: true, review: true, deploy: "" }), "review");
   assert.equal(summary(OFF), "After a fix: nothing more");
   assert.equal(summary({ merge: true, review: false, deploy: "" }), "After a fix: merge when checks pass");
-  assert.equal(summary({ merge: true, review: true, deploy: "" }), "After a fix: merge, then In review once deployed");
+  assert.equal(summary({ merge: true, review: true, deploy: "" }), "After a fix: merge, then Fix ready once deployed");
 });

@@ -140,7 +140,7 @@ export function MentionField({ api, issue, enabled, label, t, buffer, picks, onP
           // A finger picks on click (a tap), so touching the list to scroll it picks no one; a mouse or pen picks as it goes down.
           if ((event as PointerEvent).pointerType === 'touch') { release(); touched.current = {}; return; }
           event.preventDefault(); pick(person);
-        }} onClick={() => { release(); pick(person); }}><span>{person.name}</span>{person.team && <span class="status" data-status="team">{t.team}</span>}</li>)}
+        }} onClick={() => { release(); pick(person); }}><span>{person.name}</span>{person.team && <span class="role">{t.team}</span>}</li>)}
     </ul>}
     {on && <p id="tuix-mention-hint" class="muted">{t.mentionHint}</p>}
     {on && <p class="visually-hidden" role="status">{live}</p>}

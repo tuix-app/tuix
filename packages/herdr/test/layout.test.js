@@ -34,9 +34,9 @@ test("tokens and the device code are never stored by the panel", () => {
   }
 });
 
-test("only Ready for review sets in_review, and only after the Yes", () => {
+test("only Fix ready sets fix_ready, and only after the Yes", () => {
   const main = read("mods/tuix/main.js");
-  for (const file of ["list.js", "thread.js", "shots.js", "signin.js"]) assert.doesNotMatch(read(`mods/tuix/${file}`), /set_issue_status|in_review/, file);
+  for (const file of ["list.js", "thread.js", "shots.js", "signin.js"]) assert.doesNotMatch(read(`mods/tuix/${file}`), /set_issue_status|fix_ready/, file);
   assert.equal(main.match(/set_issue_status/g).length, 1);
   assert.match(main, /readyForReview\(id, cx\) \{\s*const client = this\.client;\s*if \(!client \|\| this\.confirming !== id\) return;/);
 });

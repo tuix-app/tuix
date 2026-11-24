@@ -134,5 +134,6 @@ as a consumer would; `npm run test:next` then exercises them in Next.js.
 
 ## Version history
 
+- **0.2.1**: accepts widget 0.4.0 (the peer range is now `^0.2.3 || ^0.3.0 || ^0.4.0`). No other change.
 - **0.2.0**: adds the Babel plugin `@tuix/react/babel`, which adds `data-tuix-component` to components' root elements at build time.
 - **0.1.1**: passes `group` and `group_name` from the signed identity on to the widget (identify v3, needs a Tuix server with identify v3). Pass the result of `signIdentity` as is; do not add a `group` of your own to the identity.

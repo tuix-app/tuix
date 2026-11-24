@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useId } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Api } from './api';
 import type { Issue } from './types';
 import { translations, statusLabel } from './i18n';
 import { showQuery, type Show, type Involving } from './preferences';
-import { stateOf } from './states';
+import { stateOf, myTurn } from './states';
 
 export function pageLink(raw?: string, issueId?: string) {
   try {
@@ -15,47 +15,36 @@ export function pageLink(raw?: string, issueId?: string) {
   } catch { return null; }
 }
 
-/** Involving: reports the caller sent or fixes, or everyone's. */
-export function InvolvingFilter({ involving, onChange, lang }: {
-  involving: Involving; onChange: (value: Involving) => void; lang?: 'en' | 'pl';
-}) {
-  const t = translations(lang);
-  return <fieldset class="report-filter segmented" data-filter="involving">
-    <legend>{t.involving}</legend>
-    <button type="button" data-value="me" aria-pressed={involving === 'me'} onClick={() => onChange('me')}>{t.mine}</button>
-    <button type="button" data-value="everyone" aria-pressed={involving === 'everyone'} onClick={() => onChange('everyone')}>{t.everyone}</button>
-  </fieldset>;
-}
-
-/** A single status choice: All reports always includes finished reports. */
+/** Show: Your turn, Open (fix ready included) or All (closed too), three short choices like Pages. */
 export function ReportFilter({ show, onChange, lang }: {
   show: Show; onChange: (value: Show) => void; lang?: 'en' | 'pl';
 }) {
-  const t = translations(lang), id = useId();
-  const help = show === 'finished' ? t.finishedHelp : show === 'unresolved' ? t.unresolvedHelp : '';
-  return <div class="report-filter report-status" data-filter="show">
-    <label for={id}>{t.status}</label>
-    <select id={id} value={show} aria-describedby={help ? id + '-help' : undefined} onChange={event => onChange(event.currentTarget.value as Show)}>
-      {([['unresolved', t.statusUnresolved], ['open', t.statusActive], ['verify', t.statusReady], ['finished', t.statusFinished], ['all', t.statusEverything]] as const).map(([value, label]) =>
-        <option key={value} value={value}>{label}</option>)}
-    </select>
-    {help && <p id={id + '-help'} class="filter-help">{help}</p>}
-  </div>;
+  const t = translations(lang);
+  return <fieldset class="report-filter segmented" data-filter="show">
+    <legend>{t.show}</legend>
+    {([['turn', t.showTurn], ['open', t.showOpen], ['all', t.showAll]] as const).map(([value, label]) =>
+      <button type="button" key={value} data-value={value} aria-pressed={show === value} onClick={() => onChange(value)}>{label}</button>)}
+  </fieldset>;
 }
 
-export function PageReports({ api, environments, lang, route, pageUrl, show, onShowChange, onScopeChange, involving = 'everyone', onInvolvingChange, onOpen, refreshKey }: {
+export function PageReports({ api, environments, lang, route, pageUrl, show, onShowChange, onScopeChange, involving = 'everyone', onOpen, refreshKey }: {
   api: Pick<Api, 'request'>; environments: string; lang?: 'en' | 'pl';
   route?: string; pageUrl?: string; show: Show; onShowChange: (value: Show) => void;
   onScopeChange?: (value: 'page' | 'all') => void;
-  involving?: Involving; onInvolvingChange?: (value: Involving) => void;
+  /** Only a host's or the capsule's session filter sets this; there is no control for it. */
+  involving?: Involving;
   onOpen?: (issue: Issue) => void; refreshKey?: unknown;
 }) {
   const t = translations(lang);
-  const [issues, setIssues] = useState<Issue[]>([]), [next, setNext] = useState<number | null>(null);
+  /** The quiet word after a title: only a conversation that is past Open has one (Fix ready, Fixed, Closed). */
+  const word = (issue: Issue) => stateOf(issue) === 'open' || stateOf(issue) === 'sending' ? '' : statusLabel(stateOf(issue), lang);
+  /** One line of the newest message ("Anna: …"), else the start of the report. */
+  const message = (issue: Issue) => issue.latest_comment ? `${issue.latest_comment.author.name}: ${issue.latest_comment.body}` : (issue.excerpt ?? '').replace(/\s+/g, ' ').trim();
+  const [issues, setIssues] = useState<Issue[]>([]), [next, setNext] = useState<number | string | null>(null);
   const [loading, setLoading] = useState(false), [error, setError] = useState(false);
   const generation = useRef(0), pending = useRef(false);
   const selection = useRef<unknown[]>([]);
-  async function load(before?: number, background = false) {
+  async function load(before?: number | string, background = false) {
     if (pending.current) return;
     pending.current = true; if (!background) setLoading(true); setError(false);
     const current = generation.current;
@@ -67,7 +56,15 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
         show: showQuery(show), involving, ...(environments ? { environments } : {}),
         ...(before ? { before: String(before) } : {}),
       });
-      const result = await api.request<{ issues: Issue[]; next_before: number | null }>('/issues?' + query);
+      let result: { issues: Issue[]; next_before: number | string | null };
+      try { result = await api.request('/issues?' + query); }
+      catch (failure) {
+        // A server before Your turn does not know `show=turn`: ask for the open reports and keep the ones the caller holds.
+        if (show !== 'turn') throw failure;
+        query.set('show', 'unresolved');
+        result = await api.request('/issues?' + query);
+        result = { ...result, issues: result.issues.filter(issue => issue.turn_holder?.me) };
+      }
       if (current !== generation.current) return;
       setIssues(previous => before ? [...new Map([...previous, ...result.issues].map(issue => [issue.id, issue])).values()] : result.issues);
       setNext(result.next_before);
@@ -98,16 +95,14 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
         <button type="button" data-value="all" aria-pressed={route === undefined} onClick={() => onScopeChange('all')}>{t.allPages}</button>
       </fieldset>}
       <ReportFilter show={show} onChange={onShowChange} lang={lang}/>
-      {onInvolvingChange && <InvolvingFilter involving={involving} onChange={onInvolvingChange} lang={lang}/>}
     </div>
     {loading && <p role="status">{t.loading}</p>}
     {error && <p role="alert">{t.loadError} <button onClick={() => void load(next ?? undefined)}>{t.retry}</button></p>}
-    {!loading && !error && !issues.length && <p>{involving === 'me' ? t.noOwnReports : t.noPageReports}</p>}
+    {!loading && !error && !issues.length && <p>{t.noPageReports}</p>}
     {route !== undefined && onOpen ? <ol class="issue-list">{issues.map(issue => <li key={issue.id}>
       <button type="button" class="issue-item" disabled={issue.status === 'sending'} onClick={() => onOpen(issue)}>
-        <strong>{issue.title}</strong>
-        <span class="report-kind">{t[issue.type as 'bug'] ?? issue.type}{issue.severity ? ` · ${t[issue.severity as 'major'] ?? issue.severity}` : ''}</span>
-        <span class="issue-meta"><span>#{issue.number}</span><span>{issue.author.name}</span><span>{new Date(issue.inserted_at).toLocaleDateString(lang)}</span><span class="status" data-status={stateOf(issue)}>{statusLabel(stateOf(issue), lang)}</span></span>
+        <span class="row-title">{myTurn(issue) && <span class="turn-dot" role="img" aria-label={t.yourTurn}/>}{issue.urgent && <span class="urgent-mark">{t.urgent}</span>}<span class="issue-number">#{issue.number}</span><strong>{issue.title}</strong>{word(issue) && <span class="row-word">{word(issue)}</span>}</span>
+        {message(issue) && <span class="row-message">{message(issue)}</span>}
       </button>
     </li>)}</ol> : [...pages].map(([url, reports]) => {
       const page = pageLink(url);
@@ -116,7 +111,7 @@ export function PageReports({ api, environments, lang, route, pageUrl, show, onS
         {page && <p class="muted">{page.origin}</p>}
         <ul>{reports.map(issue => {
           const link = pageLink(issue.url, issue.id);
-          return <li key={issue.id}>{link ? <a href={link.href} rel="noreferrer">#{issue.number} · {issue.title}</a> : issue.title}<span class="status" data-status={stateOf(issue)}>{statusLabel(stateOf(issue), lang)}</span></li>;
+          return <li key={issue.id}>{link ? <a href={link.href} rel="noreferrer">#{issue.number} · {issue.title}</a> : issue.title}{word(issue) && <span class="row-word">{word(issue)}</span>}</li>;
         })}</ul>
       </section>;
     })}

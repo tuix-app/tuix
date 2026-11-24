@@ -14,7 +14,7 @@ afterEach(() => { core?.destroy(); core = undefined; vi.useRealTimers(); vi.rest
 it('records a local peer fix with its note and host commit, preserving the note after failure', async () => {
   vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
   // Unassigned, and this signed developer may be its fixer: Mark fixed assigns them.
-  const issue = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', type: 'bug', env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, reporter: false, fixer: false, can_be_fixer: true, assignee: null, allowed_states: [], comments: [], inserted_at: new Date().toISOString() };
+  const issue = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, reporter: false, fixer: false, can_be_fixer: true, assignee: null, allowed_states: [], comments: [], inserted_at: new Date().toISOString() };
   let fail = true, pollPending = false;
   let finishPoll!: (value: unknown) => void, finishFix!: (value: unknown) => void;
   mock.request.mockImplementation(async (path: string) => {
@@ -60,13 +60,11 @@ it('records a local peer fix with its note and host commit, preserving the note 
   expect(root.querySelector('.fix-tools')).toBeNull();
   expect(root.textContent).toContain('Waiting for deployment to UAT');
   expect(root.querySelector('.fix-pending')!.textContent).toBe('Fix waiting for deploy');
-  expect(root.querySelector('.fixer-line')!.textContent).toBe('Fixer: you');
-  expect(root.querySelector('.thread-state .status')!.textContent).toBe('In progress');
 });
 
 it('hides Mark fixed from people who cannot fix, and outside local development', async () => {
   vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
-  const base = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', type: 'bug', env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, comments: [], inserted_at: new Date().toISOString() };
+  const base = { id: 'issue', number: 1, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', env_name: 'uat', locators: {}, author: { name: 'Reviewer' }, comments: [], inserted_at: new Date().toISOString() };
   for (const [environment, extra, visible] of [
     ['local', { can_be_fixer: false, allowed_states: ['done', 'closed'], reporter: true }, false],
     ['local', { can_be_fixer: true, fixer: false, assignee: { name: 'Someone else', me: false } }, false],

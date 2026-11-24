@@ -103,7 +103,7 @@ it('does not let an older configuration response re-enable capture', async () =>
 });
 
 it('switching to reports cancels a pending thread response', async () => {
-  const issue = { id: 'first', number: 1, title: 'First report', body: 'Old thread', status: 'open', state: 'open', type: 'bug',
+  const issue = { id: 'first', number: 1, title: 'First report', body: 'Old thread', status: 'open', state: 'open', 
     author: { name: 'Reviewer' }, inserted_at: '2026-09-22T12:00:00Z', locators: {} };
   let finish!: (value: object) => void;
   mocks.request.mockImplementation((path: string) => {

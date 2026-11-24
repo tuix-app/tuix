@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { branchName, groupIssues, matchProject, turnLabel, yourTurnCount } from "../mods/tuix/lib/issues.js";
+import { branchName, groupIssues, matchProject, stateOf, turnLabel, yourTurnCount } from "../mods/tuix/lib/issues.js";
 
 const i = (number, status, extra = {}) => ({ id: `i${number}`, number, status, ...extra });
 const run = (n, state) => ({ issueId: `i${n}`, state });
@@ -25,8 +25,17 @@ test("groupIssues: queued, blocked and stopped runs are fixing; other run states
   assert.deepEqual(ids(g), { open: [4], fixing: [1, 2, 3], prOpen: [], inReview: [] });
 });
 
-test("groupIssues: pr_open run on an issue not in progress does not count", () => {
-  assert.deepEqual(ids(groupIssues([i(1, "open")], [run(1, "pr_open")])), { open: [1], fixing: [], prOpen: [], inReview: [] });
+test("groupIssues: a pr_open run on an open issue is PR open; once the fix is ready or finished it is not", () => {
+  assert.deepEqual(ids(groupIssues([i(1, "open")], [run(1, "pr_open")])), { open: [], fixing: [], prOpen: [1], inReview: [] });
+  assert.deepEqual(ids(groupIssues([i(1, "in_review")], [run(1, "pr_open")])), { open: [], fixing: [], prOpen: [], inReview: [1] });
+  assert.deepEqual(ids(groupIssues([i(1, "done")], [run(1, "pr_open")])), { open: [], fixing: [], prOpen: [], inReview: [] });
+});
+
+test("stateOf reads `state` first, then maps the status", () => {
+  assert.deepEqual(["open", "fix_ready", "fixed", "closed"].map((state) => stateOf({ state, status: "open" })), ["open", "fix_ready", "fixed", "closed"]);
+  const mapped = ["open", "in_progress", "acknowledged", "fixed_awaiting_deploy", "in_review", "awaiting_verification", "done", "resolved", "closed", "wont_fix", undefined];
+  assert.deepEqual(mapped.map((status) => stateOf({ status })), ["open", "open", "open", "open", "fix_ready", "fix_ready", "fixed", "fixed", "closed", "closed", "open"]);
+  assert.equal(stateOf({ state: "mystery", status: "done" }), "fixed");
 });
 
 test("runs for missing issues are ignored", () => {
@@ -38,7 +47,7 @@ test("turnLabel", () => {
   assert.equal(turnLabel({ turn: "team", turn_person: "member:me" }, { me: "member:me", names }), "Your turn");
   assert.equal(turnLabel({ turn: "team", turn_person: "member:a" }, { me: "member:me", names }), "Waiting for Anna");
   assert.equal(turnLabel({ turn: "verify", turn_person: "end_user:x", author: { name: "Ada" } }, { me: null, names }), "Waiting for Ada to check the fix");
-  assert.equal(turnLabel({ turn: "team", turn_person: null }, { me: null, names }), "Waiting for the team, nobody assigned");
+  assert.equal(turnLabel({ turn: "team", turn_person: null }, { me: null, names }), "Unclaimed");
   assert.equal(turnLabel({ turn: null }, { me: null, names }), "");
 });
 
@@ -49,7 +58,7 @@ test("turnLabel: reporter, name fallbacks", () => {
   assert.equal(turnLabel({ turn: "reporter", turn_person: null }, { me: null, names }), "Waiting for the reporter (reporter)");
   assert.equal(turnLabel({ turn: "verify", turn_person: null }, { me: null, names }), "Waiting for the reporter to check the fix");
   assert.equal(turnLabel({ turn: "team", turn_person: "member:z", author: { name: "Ada" } }, { me: null, names }), "Waiting for the team");
-  assert.equal(turnLabel({ turn: "team", turn_person: null }, { me: "member:me", names }), "Waiting for the team, nobody assigned");
+  assert.equal(turnLabel({ turn: "team", turn_person: null }, { me: "member:me", names }), "Unclaimed");
 });
 
 test("yourTurnCount", () => {

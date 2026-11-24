@@ -1,8 +1,9 @@
 import { translations } from './i18n';
+import { crisp } from './tokens';
 import { linkedIssue } from './deeplink';
 import { currentRoute } from './locators';
 import { readPreferences } from './preferences';
-import { stateOf } from './states';
+import { stateOf, actionsOf } from './states';
 import type { Api } from './api';
 import type { Config, Issue } from './types';
 
@@ -35,8 +36,8 @@ export function eligible(issue: Issue, context: PromptContext): boolean {
   if (!context.active || !context.identified || context.panelOpen || context.deepLink) return false;
   if (stateOf(issue) !== 'in_review') return false;
   if (!(issue.reporter ?? issue.own)) return false;
-  const allowed = issue.allowed_states ?? [];
-  if (!allowed.includes('done') && !allowed.includes('open')) return false;
+  const actions = actionsOf(issue);
+  if (!actions.includes('works') && !actions.includes('still_broken')) return false;
   if (!issue.url || issue.url !== context.pageUrl) return false;
   return !context.isDismissed(issue);
 }
@@ -100,7 +101,7 @@ export interface PromptOptions {
 /** A card re-checks its report on tab refocus at most this often. */
 export const RECHECK_MS = 60000;
 
-const css = (side: string) => `.tuix-verify{box-sizing:border-box;position:fixed;${side}:16px;bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:min(300px,calc(100vw - 32px));padding:12px 14px;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-inline-start:3px solid var(--tx-aqua);border-radius:8px;box-shadow:var(--tx-shadow-dot);pointer-events:auto;z-index:9;font:500 13px/1.4 var(--tx-font);animation:tuix-verify-in .24s var(--tx-ease)}.tuix-verify p{margin:0}.tuix-verify b{font-size:14px;font-weight:700}.tuix-verify .r,.tuix-verify .c{color:var(--tx-muted);font-size:12.5px;margin-top:2px}.tuix-verify .r{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tuix-verify div{display:flex;gap:8px;margin-top:10px}.tuix-verify button{all:initial;box-sizing:border-box;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border:1px solid var(--tx-line-control);border-radius:8px;cursor:pointer;font:600 13px/1 var(--tx-font);color:var(--tx-ink)}.tuix-verify button:hover{background:var(--tx-raised)}.tuix-verify .k{background:var(--tx-aqua);border-color:var(--tx-aqua);color:var(--tx-on-aqua)}.tuix-verify button:focus-visible{outline:2px solid var(--tx-focus);outline-offset:2px}.tuix-verify-live{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}@keyframes tuix-verify-in{from{opacity:0;transform:translateY(6px)}}@media(prefers-reduced-motion:reduce){.tuix-verify{animation:none}}`;
+const css = (side: string) => `.tuix-verify{box-sizing:border-box;position:fixed;${side}:16px;bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:min(300px,calc(100vw - 32px));padding:12px 16px 16px;background:var(--tx-surface);color:var(--tx-ink);border:var(--tx-hairline) solid var(--tx-line-soft);border-radius:12px;box-shadow:var(--tx-shadow);pointer-events:auto;z-index:9;font:450 13px/20px var(--tx-font);}.tuix-verify p{margin:0}.tuix-verify b{display:flex;align-items:center;gap:8px;font-size:15px;line-height:22px;font-weight:600}.tuix-verify b:before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-peach)}.tuix-verify .r,.tuix-verify .c{color:var(--tx-ink);margin-top:2px}.tuix-verify .c{color:var(--tx-muted)}.tuix-verify .r{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tuix-verify div{display:flex;gap:8px;margin-top:12px}.tuix-verify button{all:initial;${crisp};box-sizing:border-box;display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--tx-line-control);border-radius:12px;cursor:pointer;font:600 13px/20px var(--tx-font);color:var(--tx-ink)}.tuix-verify button:hover{background:var(--tx-raised)}.tuix-verify .k{background:var(--tx-peach);border-color:var(--tx-peach);color:var(--tx-on-peach)}.tuix-verify .k:hover{background:var(--tx-peach);border-color:var(--tx-ink)}.tuix-verify button:focus-visible{outline:2px solid var(--tx-focus);outline-offset:2px}.tuix-verify-live{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
 
 const truncate = (text: string, length = 80) => text.length > length ? text.slice(0, length - 1).trimEnd() + '…' : text;
 

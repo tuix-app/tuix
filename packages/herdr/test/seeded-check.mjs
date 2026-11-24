@@ -21,7 +21,7 @@ try {
   // locKey is set so render() does not relocate (which would leave the thread) before drawing it.
   const thread = `    this.locKey = JSON.stringify(location()); this.project = this.projects[0]; this.me = "member:1";
     this.people = [{ id: "member:1", name: "Maja", team: true, me: true }, { id: "member:2", name: "Jan", team: true }];
-    const issue = { id: "i1", number: 17, title: "Reply box loses draft", severity: "major", type: "bug", status: "in_progress", turn: "team", turn_person: "member:1", author: { name: "Anna" } };
+    const issue = { id: "i1", number: 17, title: "Reply box loses draft", urgent: true, status: "in_progress", turn: "team", turn_person: "member:1", author: { name: "Anna" } };
     this.issues = [issue]; this.groups = { open: [], fixing: [], prOpen: [issue], inReview: [] }; this.confirming = "i1"; this.paneW = 340;
     this.state = "thread"; this.th = { id: "i1", issue, loading: false, loaded: true, failed: false, cursor: null, sel: 0, open: new Set(["element", "console"]), passOpen: true, replyError: "Nope", sending: false,
       shots: { s1: { path: "mods/tuix/.cache/i1-s1.png" }, s2: { failed: true } },

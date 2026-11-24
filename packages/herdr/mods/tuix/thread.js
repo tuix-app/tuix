@@ -1,7 +1,7 @@
 // The thread view: screenshots, context chips, comments, reply box. Report content is shown as plain text only.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Textarea } from "gpui-base";
-import { turnLabel } from "./lib/issues.js";
+import { STATE_LABEL, stateOf, turnLabel } from "./lib/issues.js";
 import { CONFIRM } from "./lib/rows.js";
 import { chipsOf, fitSize, isAgent, linksOf, outline, pageLine, passChoices, relTime } from "./lib/thread.js";
 
@@ -66,12 +66,12 @@ function comment(v, t, c) {
 function readyRow(v, t, issue) {
   if (!v.canReady(issue)) return null;
   const who = issue.author?.name ?? "the reporter";
-  // The question is inert text on its own line above the buttons, so no control sits where Ready was.
+  // The question is inert text on its own line above the buttons, so no control sits where Fix ready was.
   const controls = { cancel: () => v.button("ready-cancel", "Cancel", (_e, cx) => v.askReady(null, cx)),
     yes: () => v.button("ready-yes", "Yes", (_e, cx) => v.readyForReview(issue.id, cx), { primary: true }) };
   return v.confirming === issue.id
     ? v_flex().gap(6).child(div().text_size(12).child(`Ask ${who} to check?`)).child(h_flex().gap(8).children(CONFIRM.map((c) => controls[c]())))
-    : h_flex().child(v.button("ready", "Ready for review", (_e, cx) => v.askReady(issue.id, cx)));
+    : h_flex().child(v.button("ready", "Fix ready", (_e, cx) => v.askReady(issue.id, cx)));
 }
 
 function fixRow(v, t, issue) {
@@ -106,15 +106,14 @@ export function threadView(v, t) {
     .child(h_flex().h(36).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.border)
       .child(div().id("thread-back").cursor_pointer().text_color(t.muted).px(4).on_click((_e, cx) => v.closeThread(cx)).child("←"))
       .child(div().flex_none().font_semibold().child(`#${issue.number}`))
-      .when(Boolean(issue.severity), (e) => e.child(tag(t, issue.severity, issue.severity === "blocking" ? t.ansi1 : null)))
-      .when(Boolean(issue.type), (e) => e.child(tag(t, issue.type)))
+      .when(issue.urgent === true, (e) => e.child(tag(t, "urgent", t.ansi1)))
       .child(div().flex_1())
       .when(th.loading, (e) => e.child(div().text_size(11).text_color(t.dim).child("Loading…"))))
     .child(v_flex().id("tuix-thread-scroll").flex_1().min_h(0).overflow_y_scrollbar().px(12).py(10).gap(10)
       .child(div().font_semibold().child(issue.title ?? ""))
       .child(h_flex().gap(8).items_center().flex_wrap()
         .when(Boolean(label), (e) => e.child(div().px(6).py(1).rounded(10).bg(t.raised).text_size(11).text_color(label === "Your turn" ? t.accent : t.muted).child(label)))
-        .child(div().text_size(11).text_color(t.dim).truncate().child([String(issue.status ?? "").replace("_", " "), page].filter(Boolean).join(" · "))))
+        .child(div().text_size(11).text_color(t.dim).truncate().child([STATE_LABEL[stateOf(issue)], page].filter(Boolean).join(" · "))))
       .when(th.failed, (e) => e.child(h_flex().gap(8).items_center()
         .child(div().text_size(11).text_color(t.ansi1).child("Couldn't load this issue"))
         .child(v.button("thread-retry", "Retry", (_e, cx) => v.retryThread(cx)))))

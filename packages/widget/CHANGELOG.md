@@ -1,5 +1,20 @@
 # Widget changelog
 
+## 0.4.0
+
+A conversation, not a status board, and a quieter look. Needs a Tuix server with conversations (`urgent`, `turn`, `actions`, `timeline`, `sent_to`, `can_set_urgent`, `waiting`); against an older server the widget keeps the previous header, buttons and counts, and shows no urgent mark or toggle.
+
+- **Urgent instead of type and severity.** The composer has one **Urgent** checkbox. An urgent report carries a small "Urgent" mark in the list, the hover card, the chat window and the side panel. The reporter and people in a signed session get **Mark urgent** / **Clear urgent** in the thread (not on a closed conversation).
+- **Whose turn it is.** The thread says "Your turn", "Waiting for Anna", "Waiting for the team" or "Unclaimed" instead of "Fixer: ...". **Take it** replaces **Assign to me**, and in a signed team session the reply form has a **Send to** picker with one **Send** button instead of Reply / Reply & pass.
+- **Actions instead of statuses.** A report is Open, Fix ready, Fixed or Closed. Its buttons are the ones the server offers: **Fix ready** (**Mark fixed** locally), **Works**, **Still broken** (with a note), **Close** and **Reopen** (which can carry a note). Start, Ready for review and Done are gone. A closed conversation says "This conversation is closed. Reopen it to reply."
+- **The thread is a conversation.** Replies appear in time order with small one-sentence lines between them (took it, passed it, marked urgent, fix ready, works, still broken, closed, reopened, closed automatically) and "-> Anna" beside a reply that sent the turn.
+- **Lists.** **Show** is Your turn, Open or All. A row is the urgent mark, number, title, the newest message and a quiet word (Fix ready, Fixed, Closed), with a small peach dot when it is your turn. The two counts beside the launcher became one **Your turn** count.
+- **Dots.** Smaller and flat: a filled peach dot for your turn, an outline for other open conversations, a smaller outline for closed ones (under **All** only). No pulse, glow, shadow, number or check icon.
+- **A quieter look.** One accent: peach only for your turn and the one primary button. The launcher rests as a plain surface circle and turns peach on hover, focus and while something waits for you. One hairline around the panel, window, card and messages, Karla at a steady weight, nothing under 13px, no animations, softer shadows only on what floats. Targets are 44px (everything on touch), and the launcher, pins and menu dots have a focus ring that shows over any host page. The core bundle is 64,226 bytes gzipped; the budget is 64 KiB.
+- **Verify card.** "Fix ready. Does it work now?" with **Check it** in peach.
+- **Removed.** The **Involving** filter on the reports list (the API parameter stays), and the Type and Severity pickers.
+- Polish strings for all of the above.
+
 ## 0.3.5
 
 - **A nudge to check fixes.** When you are on a page where one of your own reports is waiting in **To verify**, a small card beside the launcher asks "Fixed — does it work now?" with the report's number and title. **Check it** opens the report with its screenshot, the developer's note and Done / Still broken; **Later** hides it for 24 hours (a new review round asks again). It shows one report at a time, never steals focus, and only after the summary has said there is something to verify. Needs a server that sends `verification_started_at` on list entries; against an older server the card still works but a new review round of a dismissed report stays hidden until the day is over. Polish: "Naprawione — czy już działa?", "Sprawdź", "Później".

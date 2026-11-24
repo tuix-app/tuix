@@ -13,7 +13,7 @@ afterEach(async () => { core?.destroy(); core = undefined; if (vi.isFakeTimers()
 // Browsers have `onpointerdown` and its siblings on elements, which tells Preact the event's casing; jsdom does not.
 for (const name of ['onpointerdown', 'onpointerup', 'onpointercancel']) if (!(name in HTMLElement.prototype)) Object.defineProperty(HTMLElement.prototype, name, { value: null, writable: true, configurable: true });
 type Payload = Record<string, unknown>;
-const base = { id: 'issue', number: 7, title: 'Total overlaps', body: 'Total overlaps', status: 'open', state: 'open', type: 'bug', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Ola' }, comment_count: 0, comments: [] as Payload[], inserted_at: '2026-10-06T10:00:00Z', updated_at: '2026-10-06T10:00:00Z', reporter: true, allowed_states: ['done', 'closed'], can_mention: true };
+const base = { id: 'issue', number: 7, title: 'Total overlaps', body: 'Total overlaps', status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/', locators: {}, author: { name: 'Ola' }, comment_count: 0, comments: [] as Payload[], inserted_at: '2026-10-06T10:00:00Z', updated_at: '2026-10-06T10:00:00Z', reporter: true, allowed_states: ['done', 'closed'], can_mention: true };
 const directory = [{ id: 'member:dana', name: 'Dana Kowalska', team: true }, { id: 'end_user:dan', name: 'Dan', team: false }, { id: 'member:daniel', name: 'Daniel', team: true }];
 
 interface Options { issue?: Payload; people?: (query: string) => Promise<unknown> | unknown; reply?: (body: Payload) => Promise<unknown> | unknown; unread?: Payload[]; lang?: 'en' | 'pl' }

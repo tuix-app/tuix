@@ -10,7 +10,8 @@ const clean = (s) => String(s ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").rep
 // unticking and ticking again doesn't lose it; only the prompt of a `review` run uses it.
 export function normalize(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { merge: false, review: false, deploy: "" };
-  const merge = raw.merge === true, review = merge && raw.review === true;
+  // A stored "in_review" (what the setting once named) reads as Fix ready.
+  const merge = raw.merge === true, review = merge && (raw.review === true || raw.review === "in_review");
   return { merge, review, deploy: typeof raw.deploy === "string" ? clean(raw.deploy) : "" };
 }
 
@@ -25,5 +26,5 @@ export const autoOf = (rules) => (rules?.review ? "review" : rules?.merge ? "mer
 
 export function summary(rules) {
   const auto = autoOf(rules);
-  return auto === "review" ? "After a fix: merge, then In review once deployed" : auto === "merge" ? "After a fix: merge when checks pass" : "After a fix: nothing more";
+  return auto === "review" ? "After a fix: merge, then Fix ready once deployed" : auto === "merge" ? "After a fix: merge when checks pass" : "After a fix: nothing more";
 }

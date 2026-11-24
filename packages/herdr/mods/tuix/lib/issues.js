@@ -1,7 +1,15 @@
 // Issue helpers for the panel: project matching, grouping, turn labels, counts, branch names.
 // Pure functions; no host imports.
 
-const FINISHED = new Set(["done", "closed"]);
+const FINISHED = new Set(["fixed", "closed"]);
+// What people see: open, fix_ready, fixed, closed. Servers send `state`; an older one only the status.
+const BY_STATUS = { open: "open", in_progress: "open", acknowledged: "open", fixed_awaiting_deploy: "open", in_review: "fix_ready", awaiting_verification: "fix_ready", done: "fixed", resolved: "fixed", closed: "closed", wont_fix: "closed" };
+const STATE_WORDS = new Set(["open", "fix_ready", "fixed", "closed"]);
+export const STATE_LABEL = { open: "Open", fix_ready: "Fix ready", fixed: "Fixed", closed: "Closed" };
+export function stateOf(issue) {
+  if (STATE_WORDS.has(issue?.state)) return issue.state;
+  return BY_STATUS[issue?.status] ?? "open";
+}
 const FIXING_RUN_STATES = new Set(["queued", "running", "blocked", "stopped"]);
 
 export function matchProject(repoName, projects) {
@@ -15,10 +23,11 @@ export function groupIssues(issues, runs) {
   for (const r of runs) stateByIssue.set(r.issueId, r.state);
   const groups = { open: [], fixing: [], prOpen: [], inReview: [] };
   for (const issue of issues) {
-    if (FINISHED.has(issue.status)) continue;
+    const shown = stateOf(issue);
+    if (FINISHED.has(shown)) continue;
     const state = stateByIssue.get(issue.id);
-    if (issue.status === "in_review") groups.inReview.push(issue);
-    else if (state === "pr_open" && issue.status === "in_progress") groups.prOpen.push(issue);
+    if (shown === "fix_ready") groups.inReview.push(issue);
+    else if (state === "pr_open") groups.prOpen.push(issue);
     else if (FIXING_RUN_STATES.has(state)) groups.fixing.push(issue);
     else groups.open.push(issue);
   }
@@ -33,13 +42,13 @@ export function turnLabel(issue, { me, names }) {
   const author = issue.author?.name;
   if (issue.turn === "verify") return `Waiting for ${known ?? author ?? "the reporter"} to check the fix`;
   if (issue.turn === "reporter") return `Waiting for ${known ?? author ?? "the reporter"} (reporter)`;
-  if (!person) return "Waiting for the team, nobody assigned";
+  if (!person) return "Unclaimed";
   return `Waiting for ${known ?? "the team"}`;
 }
 
 // Is the issue waiting for this person? Without an id (a connection that can't list people): the team's turn.
 export function isYourTurn(issue, me) {
-  if (FINISHED.has(issue.status)) return false;
+  if (FINISHED.has(stateOf(issue))) return false;
   return me ? issue.turn_person === me : issue.turn === "team";
 }
 

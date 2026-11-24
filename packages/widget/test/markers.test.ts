@@ -28,8 +28,7 @@ it('reads an unknown or missing style as dot', () => {
 it('keeps border and fill overlays click-through in the stylesheet', () => {
   const css = readFileSync(resolve(__dirname, '../src/widget.css'), 'utf8');
   expect(css).toMatch(/\.tuix-app \.marker\{[^}]*pointer-events:none/);
-  // The fill layer sits inside the marker, which is already click-through, and carries the state color at half opacity.
-  expect(css).toMatch(/\.marker\.fill:before\{[^}]*opacity:\.5/);
-  expect(css).toMatch(/\.marker\.fill\[data-state=warm\]:before\{background:var\(--tx-gold\)/);
-  expect(css).toMatch(/\.marker\.fill\[data-state=verify\]:before\{background:var\(--tx-aqua\)/);
+  // The fill layer sits inside the marker, which is already click-through; peach only for the viewer's turn, muted otherwise.
+  expect(css).toMatch(/\.marker\.fill:before\{[^}]*opacity:\.2/);
+  expect(css).toMatch(/\.marker\.fill\[data-state=turn\]:before\{background:var\(--tx-peach\)/);
 });

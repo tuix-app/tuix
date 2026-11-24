@@ -112,15 +112,15 @@ it('fetches the summary once for a returning browser without mounting the core, 
   // jsdom has no requestIdleCallback: the fallback waits for load, then a one-second settle.
   await vi.waitFor(() => expect(capsule.hidden).toBe(false), { timeout: 3000 });
   expect(capsule.getAttribute('role')).toBe('group');
-  expect(capsule.getAttribute('aria-label')).toBe('Reports waiting for you');
+  expect(capsule.getAttribute('aria-label')).toBe('Waiting for you');
   expect(summaries(fetch)).toHaveLength(1);
   expect(fetch.mock.calls[1][1]).toMatchObject({ method: 'GET', headers: { 'x-tuix-widget': '2', authorization: 'Bearer token' } });
   expect(mock.mount).not.toHaveBeenCalled();
-  expect(capsule.textContent).toBe('To verify2Open3');
-  capsule.querySelector<HTMLButtonElement>('[data-summary=verify]')!.click();
+  expect(capsule.textContent).toBe('Your turn5');
+  capsule.querySelector<HTMLButtonElement>('[data-summary=turn]')!.click();
   await vi.waitFor(() => expect(mock.mount).toHaveBeenCalledOnce());
   const core = mock.mount.mock.results[0].value;
-  await vi.waitFor(() => expect(core.open).toHaveBeenCalledWith({ scope: 'all', show: 'verify', involving: 'me' }));
+  await vi.waitFor(() => expect(core.open).toHaveBeenCalledWith({ scope: 'all', show: 'turn' }));
   // The core shares the summary's API client: one identify for both.
   expect((mock.mount.mock.calls[0][6] as { api: unknown }).api).toBeDefined();
   // Closing the panel refreshes the counts.
@@ -202,7 +202,7 @@ it('forwards only known filter values from the public API and the loader queue',
   tuix.init({ project: 'filters' }); tuix.identify({ id: 'a', name: 'A' });
   await tuix.open({ show: 'verify', involving: 'nobody', bogus: true } as never);
   const core = mock.mount.mock.results[0].value;
-  expect(core.open).toHaveBeenLastCalledWith({ show: 'verify' });
+  expect(core.open).toHaveBeenLastCalledWith({ show: 'turn' });
   const { openFromLoader } = await import('../src/index');
   await openFromLoader(undefined, 'reports', { scope: 'all', involving: 'me' });
   expect(core.open).toHaveBeenLastCalledWith({ scope: 'all', involving: 'me' });

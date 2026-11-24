@@ -6,26 +6,26 @@ let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); localStorage.clear(); document.body.replaceChildren(); vi.useRealTimers(); vi.restoreAllMocks(); });
 it('validates per-project settings and retains blocked-storage choices for the session', () => {
   localStorage.setItem('tuix:preferences:bad', '{"scope":"bogus","show":"closed","environment":"secret","hideClosed":"no"}');
-  expect(readPreferences('bad')).toEqual({ scope: 'page', show: 'unresolved', involving: 'everyone', environment: '' });
+  expect(readPreferences('bad')).toEqual({ scope: 'page', show: 'open', involving: 'everyone', environment: '' });
   localStorage.setItem('tuix:preferences:broken', '{');
-  expect(readPreferences('broken').show).toBe('unresolved');
+  expect(readPreferences('broken').show).toBe('open');
   localStorage.setItem('tuix:preferences:wrong-shape', JSON.stringify({ show: ['open'] }));
-  expect(readPreferences('wrong-shape').show).toBe('unresolved');
+  expect(readPreferences('wrong-shape').show).toBe('open');
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw Error('blocked'); });
   savePreferences('blocked', { show: 'all', scope: 'all' });
   expect(readPreferences('blocked')).toEqual({ scope: 'all', show: 'all', involving: 'everyone', environment: '' });
-  expect(readPreferences('other').show).toBe('unresolved');
+  expect(readPreferences('other').show).toBe('open');
 });
 it('migrates Reported by: Me to Involving: Me and keeps the stored Open name for active work', () => {
   localStorage.setItem('tuix:preferences:old', '{"scope":"all","show":"open","author":"mine"}');
   expect(readPreferences('old')).toEqual({ scope: 'all', show: 'open', involving: 'me', environment: '' });
-  savePreferences('old', { show: 'verify' });
-  expect(JSON.parse(localStorage.getItem('tuix:preferences:old')!)).toEqual({ scope: 'all', show: 'verify', involving: 'me', environment: '', version: 2 });
+  savePreferences('old', { show: 'turn' });
+  expect(JSON.parse(localStorage.getItem('tuix:preferences:old')!)).toEqual({ scope: 'all', show: 'turn', involving: 'me', environment: '', version: 2 });
   // An explicit Involving choice wins over the legacy field.
   localStorage.setItem('tuix:preferences:both', '{"author":"mine","involving":"everyone"}');
   expect(readPreferences('both').involving).toBe('everyone');
   localStorage.setItem('tuix:preferences:everyone', '{"author":"all"}');
-  expect(readPreferences('everyone')).toMatchObject({ show: 'unresolved', involving: 'everyone' });
+  expect(readPreferences('everyone')).toMatchObject({ show: 'open', involving: 'everyone' });
 });
 it('reveals the reports and settings dots on hover, opens settings only on click and browses only explicitly', async () => {
   vi.useFakeTimers();
@@ -134,24 +134,28 @@ function mounted(project: string, options: Parameters<typeof mountSettings>[5] =
   return { root, launcher, settings, capsule: root.querySelector<HTMLElement>('.tuix-summary')! };
 }
 
-it('shows one summary capsule with clickable segments that open Reports filtered to the caller', () => {
+it('shows ONE summary count beside the launcher that opens Your turn, and lets the launcher rise while something waits', () => {
   vi.useFakeTimers();
   const onFilter = vi.fn();
-  const { settings, capsule } = mounted('capsule', { onFilter });
+  const { settings, capsule, launcher } = mounted('capsule', { onFilter });
   expect(capsule.hidden).toBe(true);
+  expect(launcher.dataset.waiting).toBeUndefined();
+  // Older servers: the two counts never overlap, so they add up.
   settings.summary({ to_verify: 2, assigned_active: 3 });
   expect(capsule.hidden).toBe(false);
-  const [verify, open] = capsule.querySelectorAll('button');
-  expect([verify.textContent, open.textContent]).toEqual(['To verify2', 'Open3']);
-  expect(verify.getAttribute('aria-label')).toBe('To verify 2: your reports waiting for your check');
-  expect(open.getAttribute('aria-label')).toBe('Open 3: reports assigned to you');
-  verify.click(); expect(onFilter).toHaveBeenLastCalledWith({ scope: 'all', show: 'verify', involving: 'me' });
-  open.click(); expect(onFilter).toHaveBeenLastCalledWith({ scope: 'all', show: 'open', involving: 'me' });
-  // Zero segments hide; both zero hides the capsule. Malformed counts read as zero.
-  settings.summary({ to_verify: 0, assigned_active: 1 });
-  expect([verify.hidden, open.hidden, capsule.hidden]).toEqual([true, false, false]);
-  settings.summary({ to_verify: 0, assigned_active: 0 });
+  expect(capsule.querySelectorAll('button')).toHaveLength(1);
+  const turn = capsule.querySelector('button')!;
+  expect(turn.textContent).toBe('Your turn5');
+  expect(turn.getAttribute('aria-label')).toBe('Your turn: 5 waiting for you');
+  expect(launcher.dataset.waiting).toBe('5');
+  turn.click(); expect(onFilter).toHaveBeenLastCalledWith({ scope: 'all', show: 'turn' });
+  // A server that sends `waiting` is read as it says.
+  settings.summary({ to_verify: 2, assigned_active: 3, waiting: 4 });
+  expect(turn.textContent).toBe('Your turn4');
+  // Zero hides the capsule and lets the launcher rest; malformed counts read as zero.
+  settings.summary({ to_verify: 0, assigned_active: 0, waiting: 0 });
   expect(capsule.hidden).toBe(true);
+  expect(launcher.dataset.waiting).toBeUndefined();
   settings.summary({ to_verify: 'x', assigned_active: -4 } as never);
   expect(capsule.hidden).toBe(true);
 });
@@ -208,16 +212,20 @@ it('groups marker appearance and explicit visibility, defaulting to dots while t
 });
 
 it('migrates legacy All without changing visible reports, then saves explicit All', () => {
-  for (const [project, hideClosed, expected] of [['legacy-on', true, 'unresolved'], ['legacy-off', false, 'all'], ['legacy-default', undefined, 'unresolved']] as const) {
+  for (const [project, hideClosed, expected] of [['legacy-on', true, 'open'], ['legacy-off', false, 'all'], ['legacy-default', undefined, 'open']] as const) {
     localStorage.setItem('tuix:preferences:' + project, JSON.stringify({ show: 'all', hideClosed }));
     expect(readPreferences(project).show).toBe(expected);
     savePreferences(project, { show: 'all' });
     expect(readPreferences(project).show).toBe('all');
     expect(JSON.parse(localStorage.getItem('tuix:preferences:' + project)!)).not.toHaveProperty('hideClosed');
   }
-  expect(readPreferences('fresh')).toEqual({ scope: 'page', show: 'unresolved', involving: 'everyone', environment: '' });
-  expect(['unresolved', 'open', 'verify', 'finished', 'all'].map(show => showQuery(show as Parameters<typeof showQuery>[0]))).toEqual(['unresolved', 'active', 'verify', 'finished', 'all']);
-  expect(cleanFilter({ show: 'finished', scope: 'all', involving: 'me', secret: true })).toEqual({ show: 'finished', scope: 'all', involving: 'me' });
+  expect(readPreferences('fresh')).toEqual({ scope: 'page', show: 'open', involving: 'everyone', environment: '' });
+  // Earlier stored and host values read as the three choices.
+  expect(['unresolved', 'open', 'verify', 'finished', 'all'].map(show => showQuery(cleanFilter({ show })!.show!))).toEqual(['active', 'active', 'turn', 'all', 'all']);
+  expect(cleanFilter({ show: 'finished', scope: 'all', involving: 'me', secret: true })).toEqual({ show: 'all', scope: 'all', involving: 'me' });
+  expect(cleanFilter({ show: 'closed' })).toBeUndefined();
+  localStorage.setItem('tuix:preferences:older', '{"show":"verify"}');
+  expect(readPreferences('older').show).toBe('turn');
 });
 
 it('localizes group context and hides developer options outside local development', () => {

@@ -16,7 +16,7 @@ afterEach(() => {
   vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks(); document.body.replaceChildren();
 });
 
-const issue = { id: 'issue', number: 7, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', type: 'bug', severity: 'major', env_name: 'uat', url: location.origin + '/', locators: { testid: '[data-testid="save"]' }, author: { name: 'Reporter' }, own: false, comment_count: 0, comments: [], inserted_at: new Date().toISOString() };
+const issue = { id: 'issue', number: 7, title: 'Save is hidden', body: 'Save is hidden', status: 'open', state: 'open', env_name: 'uat', url: location.origin + '/', locators: { testid: '[data-testid="save"]' }, author: { name: 'Reporter' }, own: false, comment_count: 0, comments: [], inserted_at: new Date().toISOString() };
 
 function fixture(capture = { screenshot: false, console: false, network: false }) {
   vi.useFakeTimers(); vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
@@ -121,19 +121,20 @@ it('stays idle without the preference and draws stored markers without opening t
 
 it('draws stored fill markers without opening the sidebar, with the state color of the report', async () => {
   localStorage.setItem('tuix:markers:fixture', 'on:fill');
-  Object.assign(issue, { status: 'in_progress', state: 'in_progress' });
+  Object.assign(issue, { status: 'acknowledged', state: 'in_progress', turn_holder: { name: 'Anna', me: false, reporter: false } });
   const root = fixture();
   await vi.advanceTimersByTimeAsync(200);
   const fill = root.querySelector<HTMLElement>('.marker.fill')!;
-  expect(fill.dataset.state).toBe('warm');
+  expect(fill.dataset.state).toBe('open');
   expect(root.querySelector('.panel')).toBeNull();
-  Object.assign(issue, { status: 'in_review', state: 'in_review' });
+  Object.assign(issue, { status: 'in_review', state: 'in_review', turn_holder: { name: 'Me', me: true, reporter: true } });
   core!.destroy(); core = undefined; document.body.replaceChildren();
   const review = fixture();
   await vi.advanceTimersByTimeAsync(200);
   const marker = review.querySelector<HTMLElement>('.marker.fill')!;
-  expect(marker.dataset.state).toBe('verify');
-  expect(marker.classList.contains('verify-marker')).toBe(true);
+  // A fix to check is the viewer's turn: the same peach as any turn of theirs.
+  expect(marker.dataset.state).toBe('turn');
+  expect(marker.classList.contains('verify-marker')).toBe(false);
 });
 
 it('reconciles navigation that happened while markers and the sidebar were inactive', async () => {
@@ -228,27 +229,29 @@ it('migrates legacy filtering and only lists finished reports under All, never a
   const listed = () => [...root.querySelectorAll('.issue-item strong')].map(title => title.textContent);
   const shows = () => mock.request.mock.calls.map(([path]) => String(path)).filter(path => path.startsWith('/issues?')).map(path => new URLSearchParams(path.split('?')[1]).get('show'));
   expect(listed()).toEqual(['Save is hidden']);
-  expect(new Set(shows())).toEqual(new Set(['unresolved']));
+  // Markers ask for every unresolved report; the list asks for Open.
+  expect(new Set(shows())).toEqual(new Set(['unresolved', 'active']));
   expect(root.querySelectorAll('.pin')).toHaveLength(1);
-  const status = root.querySelector<HTMLSelectElement>('[data-filter=show] select')!;
-  expect(status.value).toBe('unresolved');
-  mock.request.mockClear(); status.value = 'all'; status.dispatchEvent(new Event('change', { bubbles: true })); await vi.advanceTimersByTimeAsync(100);
+  const show = (value: string) => root.querySelector<HTMLButtonElement>(`[data-filter=show] [data-value=${value}]`)!;
+  expect(show('open').getAttribute('aria-pressed')).toBe('true');
+  mock.request.mockClear(); show('all').click(); await vi.advanceTimersByTimeAsync(100);
   expect(listed()).toEqual(['Save is hidden', 'Fixed already']);
-  expect(shows()).toEqual(['all']);
-  expect(root.querySelectorAll('.pin')).toHaveLength(1);
+  expect(new Set(shows())).toEqual(new Set(['all']));
+  // Closed conversations are dots too, but only under All, and muted.
+  expect([...root.querySelectorAll<HTMLElement>('.pin')].map(pin => pin.dataset.state).sort()).toEqual(['closed', 'turn']);
   // Changing a stored list preference never closes an open thread.
   root.querySelectorAll<HTMLButtonElement>('.issue-item')[1].click(); await vi.advanceTimersByTimeAsync(200);
-  savePreferences('fixture', { show: 'unresolved' }); await vi.advanceTimersByTimeAsync(100);
-  expect(readPreferences('fixture').show).toBe('unresolved');
+  savePreferences('fixture', { show: 'open' }); await vi.advanceTimersByTimeAsync(100);
+  expect(readPreferences('fixture').show).toBe('open');
   expect(root.querySelector('.thread-body')?.textContent).toBe('Fixed already');
   root.querySelector<HTMLButtonElement>('.panel .content > button')!.click(); await vi.advanceTimersByTimeAsync(200);
   expect(listed()).toEqual(['Save is hidden']);
 });
 
-it('opens a report link to a closed report while the list defaults to Unresolved', async () => {
+it('opens a report link to a closed report while the list defaults to Open', async () => {
   history.replaceState({}, '', '/?tuix=' + done.id);
   const root = closedFixture();
   core!.open(); await vi.advanceTimersByTimeAsync(200);
-  expect(readPreferences('fixture').show).toBe('unresolved');
+  expect(readPreferences('fixture').show).toBe('open');
   expect(root.querySelector('.thread-body')?.textContent).toBe('Fixed already');
 });

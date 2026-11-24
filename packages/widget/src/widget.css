@@ -1,148 +1,158 @@
-/* tuix widget, Pinned notes. Colors come from tokens.ts (--tx-*), which follow the
-   visitor's light or dark setting. Class names are part of the tested surface: restyle
-   here, keep the markup in core.tsx stable. */
-.tuix-app{all:initial;font:15px/1.5 var(--tx-font);color:var(--tx-ink);pointer-events:none;-webkit-font-smoothing:antialiased;--rule:var(--tx-line-soft);--muted:var(--tx-muted)}
+/* tuix widget, Pinned notes, the quieter interface (one accent, hairlines, words instead of chips). Colors come from tokens.ts (--tx-*), which follow the
+   visitor's light or dark setting. Class names are part of the tested surface: restyle here, keep the markup in core.tsx stable.
+   One accent: peach marks the viewer's turn (the dot, the turn line's dot, the launcher's count) and the one primary button; everything
+   else is ink, muted ink and hairlines. Sizes and line boxes are whole pixels; text is never dimmed with opacity. */
+.tuix-app{all:initial;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;font:450 15px/22px var(--tx-font);color:var(--tx-ink);pointer-events:none;--rl:var(--tx-hairline) solid var(--tx-line-soft)}
 .tuix-app *{box-sizing:border-box}
 .tuix-app [hidden]{display:none!important}
 .tuix-app button,.tuix-app input,.tuix-app textarea,.tuix-app select{all:revert;box-sizing:border-box;font:inherit;letter-spacing:normal;color:inherit}
-.tuix-app button{cursor:pointer;border:1.5px solid var(--tx-line-control);background:transparent;color:var(--tx-ink);padding:0 16px;border-radius:12px;min-height:44px;font-weight:600;font-size:14px;pointer-events:auto;transition:border-color .2s,background-color .2s}
-.tuix-app button:hover{border-color:var(--tx-peach)}
-.tuix-app button:disabled{opacity:.5;cursor:wait}
+.tuix-app button{cursor:pointer;border:1px solid var(--tx-line-control);background:transparent;color:var(--tx-ink);padding:0 16px;border-radius:12px;min-height:44px;font-weight:600;font-size:14px;line-height:20px;pointer-events:auto;transition:border-color .2s,background-color .2s}
+.tuix-app button:hover{border-color:var(--tx-ink)}
+.tuix-app button:disabled{color:var(--tx-muted);border-color:var(--tx-line);cursor:wait}
 .tuix-app button.primary{background:var(--tx-peach);color:var(--tx-on-peach);border-color:var(--tx-peach)}
-.tuix-app button.primary:hover{opacity:.88}
+.tuix-app button.primary:hover{border-color:var(--tx-on-peach)}
+.tuix-app button.primary:disabled{background:var(--tx-raised);color:var(--tx-muted);border-color:var(--tx-line)}
 .tuix-app :focus-visible{outline:2px solid var(--tx-focus);outline-offset:3px}
 .tuix-app ::selection{background:var(--tx-accent-soft);color:var(--tx-ink)}
-.tuix-app input,.tuix-app textarea{caret-color:var(--tx-peach)}
-.tuix-app h2{font-size:20px;line-height:1.25;letter-spacing:-.015em;margin:0;font-weight:600;text-wrap:balance}
-.tuix-app h3{font-size:15px;font-weight:600;margin:0 0 8px}
+.tuix-app input,.tuix-app textarea{caret-color:var(--tx-ink)}
+.tuix-app h2{font-size:20px;line-height:26px;letter-spacing:-.015em;margin:0;font-weight:600;text-wrap:balance}
+.tuix-app h3{font-size:15px;line-height:22px;font-weight:600;margin:0 0 8px}
 .tuix-app p{margin:0 0 12px;overflow-wrap:anywhere}
-.tuix-app .muted{color:var(--tx-muted);font-size:13px}
-.tuix-app code{font-family:var(--tx-mono);font-size:.88em;color:var(--tx-peach-text)}
-.tuix-app a{color:var(--tx-peach-text)}
+.tuix-app .muted{color:var(--tx-muted);font-size:13px;line-height:20px}
+.tuix-app code{font-family:var(--tx-mono);font-size:13px;line-height:20px;color:var(--tx-ink)}
+.tuix-app a{color:var(--tx-ink);text-decoration:underline;text-underline-offset:3px}
 
-/* Side panel */
+/* Side panel: one hairline, a soft shadow because it floats */
 .tuix-app .panel,.tuix-app .composer{position:fixed;pointer-events:auto;background:var(--tx-surface);color:var(--tx-ink);overflow:auto;scrollbar-color:var(--tx-line) transparent;overscroll-behavior:contain}
-.tuix-app .panel{right:0;top:0;bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:360px;max-width:100vw;display:flex;flex-direction:column;border-left:1px solid var(--tx-line);border-bottom-left-radius:18px;box-shadow:var(--tx-shadow-panel);animation:tuix-enter .2s var(--tx-ease)}
-.tuix-app .panel.left{right:auto;left:0;border-left:0;border-right:1px solid var(--tx-line);border-radius:0 0 18px 0}
-.tuix-app header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px;border-bottom:1px solid var(--tx-line-soft)}
-.tuix-app .icon-button{padding:0;min-height:40px;width:40px;flex:none;display:grid;place-items:center;border:1px solid var(--tx-line-control);border-radius:12px;background:transparent}
+.tuix-app .panel{right:0;top:0;bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:360px;max-width:100vw;display:flex;flex-direction:column;border-left:var(--rl);border-bottom:var(--rl);border-bottom-left-radius:18px;box-shadow:var(--tx-shadow-panel);}
+.tuix-app .panel.left{right:auto;left:0;border-left:0;border-right:var(--rl);border-radius:0 0 18px 0}
+.tuix-app header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px;border-bottom:var(--rl)}
+.tuix-app .icon-button{padding:0;min-height:44px;width:44px;flex:none;display:grid;place-items:center;border:1px solid var(--tx-line-control);border-radius:12px;background:transparent}
 .tuix-app svg{width:20px;height:20px;display:block}
 .tuix-app .icon-button svg{width:16px;height:16px}
 .tuix-app .content{padding:20px;overflow:auto;flex:1}
-.tuix-app .toolbar{padding:16px 20px;border-bottom:1px solid var(--tx-line-soft);display:flex;flex-wrap:wrap;gap:12px}
-.tuix-app label{display:grid;gap:8px;font-size:13px;font-weight:600}
-.tuix-app input,.tuix-app textarea,.tuix-app select{width:100%;border:1.5px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg);color:var(--tx-ink);padding:8px 12px;font-size:15px;font-weight:400;min-height:44px;color-scheme:var(--tx-scheme)}
+.tuix-app .toolbar{padding:16px 20px;border-bottom:var(--rl);display:flex;flex-wrap:wrap;gap:12px}
+.tuix-app label{display:grid;gap:8px;font-size:13px;line-height:20px;font-weight:600}
+/* Inputs are the one place a heavier line stays: 1px in the control colour (3:1), focus drawn by the ring so nothing shifts. */
+.tuix-app input,.tuix-app textarea,.tuix-app select{width:100%;border:1px solid var(--tx-line-control);border-radius:12px;background:var(--tx-surface);color:var(--tx-ink);padding:9px 12px;font-size:15px;line-height:22px;font-weight:450;min-height:44px;color-scheme:var(--tx-scheme)}
 /* The drawn chevron keeps a gap from the right border (the native one sits against it). */
 .tuix-app select:not([multiple]){appearance:none;background-image:var(--tx-chevron);background-repeat:no-repeat;background-size:10px 6px;background-position:right 14px center;padding-right:40px}
-.tuix-app textarea{resize:vertical;min-height:100px;line-height:1.5}
+.tuix-app textarea{resize:vertical;min-height:100px}
+.tuix-app input[type=checkbox]:not([role=switch]){appearance:none;flex:none;display:inline-grid;place-content:center;width:20px;height:20px;min-height:0;padding:0;margin:0;border-radius:6px}
+.tuix-app input[type=checkbox]:not([role=switch]):checked{background:var(--tx-ink);border-color:var(--tx-ink)}
+.tuix-app input[type=checkbox]:not([role=switch]):checked:after{content:"";width:10px;height:5px;margin-top:-2px;border-left:2px solid var(--tx-surface);border-bottom:2px solid var(--tx-surface);transform:rotate(-45deg)}
 .tuix-app form{display:grid;gap:16px}
-.tuix-app .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .tuix-app .actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
-.tuix-app .notice{padding:12px 16px;background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink);margin-bottom:16px;border-radius:14px}
+.tuix-app .notice{padding:12px 16px;background:var(--tx-raised);color:var(--tx-ink);margin-bottom:16px;border:var(--rl);border-radius:12px}
 .tuix-app .error{color:var(--tx-err)}
 .tuix-app .empty{padding:36px 0}
-@keyframes tuix-enter{from{transform:translateX(8px);opacity:.4}to{transform:none;opacity:1}}
 
-/* Report list */
-.tuix-app .issue-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.tuix-app .issue-item{display:block;text-align:left;width:100%;background:var(--tx-bg);border:1px solid var(--tx-line-soft);border-radius:14px;padding:12px 16px;min-height:0;font-weight:400}
-.tuix-app .issue-item:hover{border-color:var(--tx-peach)}
-.tuix-app .issue-item strong{display:block;line-height:1.4;margin-bottom:8px;overflow-wrap:anywhere;font-weight:600}
-.tuix-app .issue-meta{display:flex;gap:8px 8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--tx-muted)}
-.tuix-app .report-kind{display:block;color:var(--tx-muted);font-size:13px;font-weight:600;margin:4px 0 8px}
-.tuix-app .status{display:inline-flex;align-items:center;min-height:22px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;line-height:1.3;background:var(--tx-s-done-bg);color:var(--tx-s-done-ink);white-space:nowrap}
-.tuix-app [data-status=open]>.status,.tuix-app .status[data-status=open]{background:var(--tx-s-open-bg);color:var(--tx-s-open-ink)}
-.tuix-app .status[data-status=in_progress]{background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink)}
-.tuix-app .status[data-status=in_review]{background:var(--tx-s-verify-bg);color:var(--tx-s-verify-ink)}
-.tuix-app .status[data-status=team]{background:var(--tx-aqua);color:var(--tx-on-aqua);text-transform:none;letter-spacing:0;font-size:10.5px}
+/* Report list: rows of words between hairlines. A peach dot says it is your turn; Fix ready and Fixed are quiet words. */
+.tuix-app .issue-list{list-style:none;margin:0;padding:0;border-top:var(--rl)}
+.tuix-app .issue-list li{border-bottom:var(--rl)}
+.tuix-app .issue-item{display:grid;gap:2px;text-align:left;width:100%;background:transparent;border:0;border-radius:0;padding:12px 0;min-height:44px;font-weight:450}
+.tuix-app .issue-item:hover strong{text-decoration:underline;text-underline-offset:3px}
+.tuix-app .row-title{display:flex;align-items:center;gap:8px;min-width:0}
+.tuix-app .row-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:15px;line-height:22px}
+.tuix-app .issue-number{flex:none;font-size:13px;line-height:20px;color:var(--tx-muted);font-variant-numeric:tabular-nums}
+.tuix-app .row-word{flex:none;margin-left:auto;padding-left:8px;font-size:13px;line-height:20px;color:var(--tx-muted);white-space:nowrap}
+.tuix-app .row-message{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;color:var(--tx-ink);padding-left:0}
+.tuix-app .turn-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-peach)}
+.tuix-app .turn-line{display:flex;align-items:center;gap:8px;margin:0;font-weight:600;color:var(--tx-ink)}
+.tuix-app .issue-meta{display:flex;gap:2px 8px;flex-wrap:wrap;align-items:baseline;font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .report-kind{display:flex;gap:8px;align-items:center;margin:4px 0 0}
+/* Urgent: the dashboard's small ink diamond and the word. */
+.tuix-app .urgent-mark{flex:none;font-size:13px;line-height:20px;font-weight:600;color:var(--tx-ink)}
+.tuix-app .urgent-mark:before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;vertical-align:1px;background:var(--tx-ink);transform:rotate(45deg)}
+.tuix-app .urgent-field{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:44px}
+.tuix-app .urgent-field input{width:20px}
 .tuix-app .report-filters{display:block}
 .tuix-app .report-filter{min-width:0;border:0;padding:0;margin:0 0 16px;display:flex;flex-wrap:wrap;gap:8px}
-.tuix-app .report-filter legend{margin-bottom:8px;font-size:13px;font-weight:600;color:var(--tx-muted)}
-.tuix-app .segmented button{min-height:34px;padding:0 12px;border-radius:6px;font-size:13px;font-weight:600}
-.tuix-app .segmented button[aria-pressed=true]{background:var(--tx-s-open-bg);border-color:var(--tx-peach);color:var(--tx-ink)}
-.tuix-app .page-report-group{padding-block:16px;border-bottom:1px solid var(--tx-line-soft)}
+.tuix-app .report-filter legend{margin-bottom:8px;font-size:13px;line-height:20px;font-weight:600;color:var(--tx-muted)}
+.tuix-app .segmented button{min-height:44px;padding:0 12px;border-radius:8px;font-size:13px;font-weight:600}
+.tuix-app .segmented button[aria-pressed=true]{background:var(--tx-pick);border-color:var(--tx-ink);color:var(--tx-ink)}
+.tuix-app .page-report-group{padding-block:16px;border-bottom:var(--rl)}
 .tuix-app .page-report-group h3{margin:0;font-size:15px;overflow-wrap:anywhere}
 .tuix-app .page-report-group p{margin:4px 0 12px}
 .tuix-app .page-report-group ul{list-style:none;margin:0;padding:0}
 .tuix-app .page-report-group li{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-block:12px}
-.tuix-app .page-report-group a{color:var(--tx-peach-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.tuix-app .page-report-group a{color:var(--tx-ink);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 .tuix-app .page-report-group li a{min-width:0}
-.tuix-app .page-report-group .status{flex-shrink:0}
 
-/* Thread */
+/* Thread: the report, then replies and small lines in time order, separated by one hairline. No cards inside cards. */
+.tuix-app .thread-state{margin:12px 0 4px}
+.tuix-app .thread-state:focus{outline:none}
 .tuix-app .design-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:8px 0}.tuix-app .design-row a{font-weight:600}.tuix-app .design-row code{overflow-wrap:anywhere}
-.tuix-app .thread-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;padding:12px 16px;border-radius:14px;background:var(--tx-bg)}
-.tuix-app .comment{margin:12px 0;padding:12px 16px;border-radius:14px;background:var(--tx-bg)}
-.tuix-app .comment:has(.status[data-status=team]){background:var(--tx-raised)}
-.tuix-app .comment p{white-space:pre-wrap;margin:0}
-.tuix-app .comment .issue-meta{margin-bottom:8px}
-.tuix-app .comment .issue-meta strong{color:var(--tx-ink);font-size:13px}
-/* Mentions: a soft "@Name" chip in replies (the "@" stays, so it never relies on color) and the reply
-   composer's suggestions, listed under the textarea at full width, up to six rows. */
-.tuix-app .mention{background:var(--tx-accent-soft);color:var(--tx-peach-text);border-radius:6px;padding:0 .3em;font-weight:600;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tuix-app .thread-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0}
+.tuix-app .comment{margin:0;padding:16px 0;border-top:var(--rl)}
+.tuix-app .comment p{white-space:pre-wrap;margin:4px 0 0}
+.tuix-app .comment .issue-meta strong{color:var(--tx-ink);font-weight:600}
+.tuix-app .comment time,.tuix-app .event-line time{margin-left:auto;font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .event-line{display:flex;flex-wrap:wrap;gap:0 8px;margin:0;padding:8px 0;font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .role{color:var(--tx-muted)}
+.tuix-app .sent{color:var(--tx-ink);font-weight:600}
+/* Mentions: "@Name" in a reply (the "@" stays, so it never relies on colour) and the composer's suggestions, listed under the textarea at full width, up to six rows. */
+.tuix-app .mention{background:var(--tx-raised);color:var(--tx-ink);border-radius:6px;padding:0 .3em;font-weight:600;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .tuix-app .mention-field{display:grid;gap:8px}
 .tuix-app .mention-field p{margin:0}
-.tuix-app .mention-list{list-style:none;margin:0;padding:4px;scroll-margin:12px;max-height:236px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--tx-line);border-radius:12px;background:var(--tx-surface);box-shadow:var(--tx-shadow)}
-.tuix-app .mention-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;padding:8px 8px;border-radius:8px;cursor:pointer;font-size:14px;overflow-wrap:anywhere}
+.tuix-app .mention-list{list-style:none;margin:0;padding:4px;scroll-margin:12px;max-height:236px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--tx-line-control);border-radius:12px;background:var(--tx-surface)}
+.tuix-app .mention-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:8px 8px;border-radius:8px;cursor:pointer;font-size:14px;line-height:20px;overflow-wrap:anywhere}
 .tuix-app .mention-list li:hover{background:var(--tx-raised)}
-.tuix-app .mention-list [aria-selected=true]{background:var(--tx-s-open-bg);outline:1.5px solid var(--tx-peach);outline-offset:-1.5px}
+.tuix-app .mention-list [aria-selected=true]{background:var(--tx-pick);outline:1px solid var(--tx-ink);outline-offset:-1px}
+.tuix-app .mention-list .role{font-size:13px}
 .tuix-app .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.tuix-app .thread-state{display:flex;flex-wrap:wrap;align-items:center;gap:8px 8px;margin:16px 0 4px;font-size:13px;color:var(--tx-muted)}
-.tuix-app .thread-state strong{color:var(--tx-ink);font-weight:600}
-.tuix-app .thread-state button{min-height:32px;padding:0 12px;font-size:13px;border-radius:6px;margin-left:auto}
-.tuix-app .fix-pending{display:inline-flex;align-items:center;gap:8px;margin:8px 0 0;padding:5px 12px;border-radius:6px;background:var(--tx-s-ack-bg);color:var(--tx-s-ack-ink);font-size:13px;font-weight:600}
-.tuix-app .fix-pending:before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-gold)}
-.tuix-app .thread-actions{margin:16px 0;display:flex;flex-wrap:wrap;gap:8px}
-.tuix-app .thread-actions button{min-height:36px;padding:0 16px;font-size:14px;border-radius:6px}
+.tuix-app .fix-pending{margin:8px 0 0;color:var(--tx-muted);font-size:13px;line-height:20px}
+.tuix-app .thread-actions{margin:16px 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tuix-app .closed-note{margin:16px 0;padding-top:16px;border-top:var(--rl)}
+.tuix-app .closed-note p{margin:0 0 12px}
+.tuix-app .closed-note .thread-actions{margin:0}
 .tuix-app .state-note{margin:16px 0}
-.tuix-app details{border-top:1px solid var(--tx-line-soft);padding:16px 0;font-size:13px}
+.tuix-app details{border-top:var(--rl);padding:16px 0;font-size:13px;line-height:20px}
 .tuix-app summary{cursor:pointer;font-weight:600;margin-bottom:12px}
 .tuix-app img{max-width:100%;height:auto;border-radius:8px;display:block;margin:12px 0}
 .tuix-app .evidence{margin:16px 0}
-.tuix-app .evidence figcaption{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--tx-muted)}
+.tuix-app .evidence figcaption{font-size:13px;line-height:20px;font-weight:600;margin-bottom:8px;color:var(--tx-muted)}
 .tuix-app .content img{max-height:220px;width:100%;object-fit:contain;background:var(--tx-bg)}
-.tuix-app .evidence-preview{display:block;overflow:hidden;border:1px solid var(--tx-line);border-radius:10px;background:var(--tx-bg);margin-block:8px;text-decoration:none;min-height:100px}
+.tuix-app .evidence-preview{display:block;overflow:hidden;border:var(--rl);border-radius:10px;background:var(--tx-bg);margin-block:8px;text-decoration:none;min-height:100px}
 .tuix-app .evidence-preview img[hidden]{display:none}
 .tuix-app .evidence-preview img{display:block;width:100%;height:auto;max-height:240px;object-fit:contain;margin:0}
-.tuix-app .evidence-unavailable{display:block;padding:20px;color:var(--tx-muted);font-size:13px;overflow-wrap:anywhere}
-.tuix-app .evidence-empty{padding:16px;border:1.5px dashed var(--tx-line);border-radius:10px;color:var(--tx-muted)}
-.tuix-app .text-button{min-height:32px;padding:4px 8px;border:0;background:transparent;color:var(--tx-peach-text);font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.tuix-app .evidence-unavailable{display:block;padding:20px;color:var(--tx-muted);font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.tuix-app .text-button{min-height:44px;padding:4px 8px;border:0;background:transparent;color:var(--tx-ink);font-size:13px;line-height:20px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .tuix-app .text-button:hover{background:transparent}
 
-/* Updates on your reports */
-.tuix-app .updates{margin:0 0 20px;padding:16px;border:1px solid var(--tx-line-soft);border-radius:14px;background:var(--tx-raised)}
+/* Updates on your reports: a quiet block, no box */
+.tuix-app .updates{margin:0 0 20px;padding:0 0 16px;border-bottom:var(--rl)}
 .tuix-app .updates-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:0 12px;margin-bottom:8px}
 .tuix-app .updates-head .text-button{white-space:nowrap;margin-left:auto}
-.tuix-app .updates-head h3{margin:0;font-size:14px}
+.tuix-app .updates-head h3{margin:0;font-size:14px;line-height:20px}
 .tuix-app .update-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;overscroll-behavior:contain;scrollbar-color:var(--tx-line) transparent}
-.tuix-app .update-list li+li{border-top:1px solid var(--tx-line-soft)}
-.tuix-app .update-item{display:grid;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-radius:0;padding:8px 0;min-height:0;color:inherit;text-decoration:none;font-weight:400}
+.tuix-app .update-list li+li{border-top:var(--rl)}
+.tuix-app .update-item{display:grid;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-radius:0;padding:8px 0;min-height:44px;color:inherit;text-decoration:none;font-weight:450}
 .tuix-app .update-item:hover strong{text-decoration:underline;text-underline-offset:3px}
-.tuix-app .update-item strong{font-size:13px;overflow-wrap:anywhere}
-.tuix-app .update-kind{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--tx-aqua-text)}
-.tuix-app .update-item time{font-size:12px;color:var(--tx-muted)}
-.tuix-app .switch-row{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:12px;border-top:1px solid var(--tx-line-soft);font-size:13px;font-weight:500}
-.tuix-app .switch-row input[role=switch]{appearance:none;flex:none;position:relative;width:34px;min-height:0;height:20px;padding:0;margin:0;border:1.5px solid var(--tx-line-control);border-radius:12px;background:var(--tx-bg);cursor:pointer}
-.tuix-app .switch-row input[role=switch]:after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--tx-muted);transition:transform .16s var(--tx-ease)}
-.tuix-app .switch-row input[role=switch]:checked{background:var(--tx-aqua);border-color:var(--tx-aqua)}
-.tuix-app .switch-row input[role=switch]:checked:after{transform:translateX(14px);background:var(--tx-on-aqua)}
-.tuix-app .schedule-row{display:grid;gap:8px;margin-top:8px;font-size:13px;font-weight:500}
-.tuix-app .schedule-row select{min-height:36px;padding-block:8px;font-size:13px}
+.tuix-app .update-item strong{font-size:13px;line-height:20px;font-weight:600;overflow-wrap:anywhere}
+.tuix-app .update-kind{font-size:13px;line-height:20px;font-weight:600;color:var(--tx-muted)}
+.tuix-app .update-item time{font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .switch-row{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:12px;border-top:var(--rl);font-size:13px;line-height:20px;font-weight:600}
+.tuix-app .switch-row input[role=switch]{appearance:none;flex:none;position:relative;width:34px;min-height:0;height:20px;padding:0;margin:0;border:1px solid var(--tx-line-control);border-radius:12px;background:var(--tx-surface);cursor:pointer}
+.tuix-app .switch-row input[role=switch]:after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--tx-muted);transition:transform .16s var(--tx-ease)}
+.tuix-app .switch-row input[role=switch]:checked{background:var(--tx-ink);border-color:var(--tx-ink)}
+.tuix-app .switch-row input[role=switch]:checked:after{transform:translateX(14px);background:var(--tx-surface)}
+.tuix-app .schedule-row{display:grid;gap:8px;margin-top:8px;font-size:13px;line-height:20px;font-weight:600}
+.tuix-app .schedule-row select{min-height:44px;padding-block:8px;font-size:13px}
 
 /* Settings flyout: updates and the quiet Open tuix.app link render into its slot */
-.tuix-app.flyout-extra{display:block;pointer-events:auto;font:13px/1.5 var(--tx-font);color:var(--tx-ink)}
-.tuix-app.flyout-extra .updates{margin:0;padding:12px}
+.tuix-app.flyout-extra{display:block;pointer-events:auto;font:450 13px/20px var(--tx-font);color:var(--tx-ink)}
+.tuix-app.flyout-extra .updates{margin:0;padding:0 0 12px}
 .tuix-app.flyout-extra p{margin:8px 0 0}
 .tuix-app .app-link-row,.tuix-app.flyout-extra .app-link-row{margin:12px 0 0}
-.tuix-app .app-link{font-size:13px;font-weight:600;color:var(--tx-muted);text-decoration:underline;text-decoration-color:var(--tx-line-control);text-underline-offset:3px;cursor:pointer}
+.tuix-app .app-link{font-size:13px;line-height:20px;font-weight:600;color:var(--tx-muted);text-decoration:underline;text-decoration-color:var(--tx-line-control);text-underline-offset:3px;cursor:pointer}
 .tuix-app .app-link:after{content:" ↗"}
-.tuix-app .app-link:hover{color:var(--tx-peach-text);text-decoration-color:currentColor}
-.tuix-app .app-link[aria-disabled=true]{cursor:wait;opacity:.7}
+.tuix-app .app-link:hover{color:var(--tx-ink);text-decoration-color:currentColor}
 
 /* Developer tools, fix and verify */
-.source-tools{margin-top:16px;padding-top:16px;border-top:1px solid var(--tx-line-soft)}.source-tools code{overflow-wrap:anywhere}.source-tools>a{display:inline-flex;align-items:center;min-height:40px;color:var(--tx-peach-text);text-decoration:underline;text-underline-offset:3px;font-weight:600}.source-tools form{display:grid;gap:12px}.source-tools input{width:100%;box-sizing:border-box}
-.fix-tools{margin:16px 0;padding:16px 0;border-top:1px solid var(--tx-line-soft);border-bottom:1px solid var(--tx-line-soft)}.fix-tools form{display:grid;gap:12px;margin-top:12px}.fix-tools p{margin:0}.fix-tools code{overflow-wrap:anywhere}.fix-tools>summary{min-height:40px;padding:8px 0;box-sizing:border-box}
-.verify-tools{margin:16px 0;padding:16px;border-radius:14px;background:var(--tx-s-verify-bg)}.verify-tools h3{font-size:15px;margin:0 0 8px;color:var(--tx-s-verify-ink)}.verify-tools .muted{color:var(--tx-ink)}.verify-tools form{display:grid;gap:16px}.fix-note{margin:16px 0}.fix-note p{white-space:pre-wrap;overflow-wrap:anywhere}.verification-actions{display:flex;flex-wrap:wrap;gap:8px}.verification-actions button{flex:1}.tuix-app .verify-tools img{max-height:180px}
+.source-tools{margin-top:16px;padding-top:16px;border-top:var(--rl)}.source-tools code{overflow-wrap:anywhere}.source-tools>a{display:inline-flex;align-items:center;min-height:44px;color:var(--tx-ink);text-decoration:underline;text-underline-offset:3px;font-weight:600}.source-tools form{display:grid;gap:12px}.source-tools input{width:100%;box-sizing:border-box}
+.fix-tools{margin:16px 0;padding:16px 0;border-top:var(--rl);border-bottom:var(--rl)}.fix-tools form{display:grid;gap:12px;margin-top:12px}.fix-tools p{margin:0}.fix-tools code{overflow-wrap:anywhere}.fix-tools>summary{min-height:44px;padding:12px 0;box-sizing:border-box}
+.verify-tools{margin:16px 0 0;padding:16px 0;border-top:var(--rl)}.verify-tools h3{font-size:15px;margin:0 0 8px}.verify-tools form{display:grid;gap:16px}.fix-note{margin:16px 0}.fix-note p{white-space:pre-wrap;overflow-wrap:anywhere}.verification-actions{display:flex;flex-wrap:wrap;gap:8px}.verification-actions button{flex:1}.tuix-app .verify-tools img{max-height:180px}
 
 /* Composer */
 .tuix-app .panel.composer{width:360px;max-width:100vw;max-height:none!important;padding:0;top:0!important;bottom:calc(72px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));left:auto!important;right:0!important;display:flex;flex-direction:column;overflow:hidden}
@@ -150,111 +160,97 @@
 .tuix-app .panel.composer header{flex:none;padding:20px;margin:0}
 .tuix-app .panel.composer form{padding:20px;overflow:auto;scrollbar-color:var(--tx-line) transparent}
 .tuix-app .composer .actions{position:sticky;bottom:-20px;background:var(--tx-surface);padding:12px 0 4px;margin-bottom:-4px}
-.tuix-app .selection-summary{display:grid;gap:8px;padding:8px 12px;border-radius:12px;background:var(--tx-bg);font-size:13px;color:var(--tx-muted)}
+.tuix-app .selection-summary{display:grid;gap:8px;padding:0 0 16px;border-bottom:var(--rl);font-size:13px;line-height:20px;color:var(--tx-muted)}
 .tuix-app .selection-summary p{margin:0}
-.tuix-app .selection-summary button{justify-self:start;min-height:32px;padding:0 12px;font-size:13px}
-.tuix-app .composer-evidence{display:grid;gap:8px;padding:12px 16px;border-radius:14px;border:1px solid var(--tx-line);background:var(--tx-raised)}
-.tuix-app .composer-evidence h3{margin:0;font-size:14px}
-.tuix-app .composer-evidence p{margin:0;font-size:13px;color:var(--tx-muted)}
-.tuix-app .composer-evidence img{max-height:200px;width:100%;object-fit:contain;margin:0;border:1px solid var(--tx-line);background:var(--tx-bg)}
-.tuix-app .composer details img{border:1px solid var(--tx-line)}
+.tuix-app .selection-summary button{justify-self:start;min-height:44px;padding:0 12px;font-size:13px}
+.tuix-app .composer-evidence{display:grid;gap:8px;padding:12px 0 0;border-top:var(--rl)}
+.tuix-app .composer-evidence h3{margin:0;font-size:14px;line-height:20px}
+.tuix-app .composer-evidence p{margin:0;font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .composer-evidence img{max-height:200px;width:100%;object-fit:contain;margin:0;border:var(--rl);background:var(--tx-bg)}
+.tuix-app .composer details img{border:var(--rl)}
 
-/* Picking */
+/* Picking: the selection frame is the one heavier line, and keeps the peach so it shows on any page */
 .tuix-app .pick-surface{position:fixed;inset:0;pointer-events:auto;cursor:crosshair;box-shadow:inset 0 0 0 3px var(--tx-peach)}
 .tuix-app .pick-surface.touch{pointer-events:none}
 .tuix-app .highlight{position:fixed;pointer-events:none;border:2px solid var(--tx-peach);border-radius:8px;background:var(--tx-hl-fill);box-shadow:none}
-.tuix-app .highlight span{position:absolute;left:-2px;bottom:calc(100% + 6px);background:var(--tx-peach);color:var(--tx-on-peach);font:500 11.5px/1 var(--tx-mono);padding:8px 8px;border-radius:8px;white-space:nowrap}
-.tuix-app .picker-hint{position:fixed;top:20px;left:50%;transform:translateX(-50%);pointer-events:none;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;padding:12px 16px;max-width:calc(100vw - 24px);width:max-content;display:flex;align-items:center;gap:20px;box-shadow:var(--tx-shadow);animation:tuix-hint .3s var(--tx-ease)}
+.tuix-app .highlight span{position:absolute;left:-2px;bottom:calc(100% + 6px);background:var(--tx-peach);color:var(--tx-on-peach);font:500 13px/20px var(--tx-mono);padding:2px 8px;border-radius:8px;white-space:nowrap}
+.tuix-app .picker-hint{position:fixed;top:20px;left:0;right:0;margin-inline:auto;pointer-events:none;background:var(--tx-surface);color:var(--tx-ink);border:var(--rl);border-radius:16px;padding:12px 16px;max-width:calc(100vw - 24px);width:max-content;display:flex;align-items:center;gap:20px;box-shadow:var(--tx-shadow);}
 .tuix-app .picker-hint p{margin:0;display:grid;gap:2px}
-.tuix-app .picker-hint strong{font-size:14px;font-weight:600}
-.tuix-app .picker-hint small{font-size:13px;color:var(--tx-muted)}
-.tuix-app .picker-hint[data-state=error]{background:var(--tx-s-open-bg);color:var(--tx-err);border-color:var(--tx-err)}
-.tuix-app .pick-confirm{position:fixed;z-index:4;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));pointer-events:auto;display:grid;gap:8px;padding:16px;background:var(--tx-raised);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;box-shadow:var(--tx-shadow);animation:tuix-hint-up .3s var(--tx-ease)}
-.tuix-app .pick-confirm p{margin:0;display:grid;gap:2px;font-size:13px}
-.tuix-app .pick-confirm .muted{font-size:12px}
-.tuix-app .pick-confirm strong{overflow-wrap:anywhere;font-family:var(--tx-mono);font-weight:500;color:var(--tx-peach-text)}
+.tuix-app .picker-hint strong{font-size:14px;line-height:20px;font-weight:600}
+.tuix-app .picker-hint small{font-size:13px;line-height:20px;color:var(--tx-muted)}
+.tuix-app .picker-hint[data-state=error]{color:var(--tx-err);border-color:var(--tx-err)}
+.tuix-app .pick-confirm{position:fixed;z-index:4;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));pointer-events:auto;display:grid;gap:8px;padding:16px;background:var(--tx-surface);color:var(--tx-ink);border:var(--rl);border-radius:16px;box-shadow:var(--tx-shadow);}
+.tuix-app .pick-confirm p{margin:0;display:grid;gap:2px;font-size:13px;line-height:20px}
+.tuix-app .pick-confirm strong{overflow-wrap:anywhere;font-family:var(--tx-mono);font-weight:500;color:var(--tx-ink)}
 .tuix-app .pick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tuix-app .pick-actions button{min-height:44px}
-@keyframes tuix-hint{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
-@keyframes tuix-hint-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(min-width:560px){.tuix-app .pick-confirm{left:auto;right:76px;width:360px}.tuix-app .pick-confirm.left{right:auto;left:76px}}
 
-/* Pins: a numbered note on the page. Color says where the conversation is:
-   peach open, gold in progress, an aqua ring in review (a fix waits for a check). */
-.tuix-app button.pin{position:fixed;width:28px;height:28px;min-height:0;padding:0;border:2px solid var(--tx-pin-ring);border-radius:50%;background:var(--tx-peach);color:var(--tx-on-peach);font-size:11px;font-weight:600;display:grid;place-items:center;box-shadow:var(--tx-shadow-pin);animation:none}
-.tuix-app button.pin[data-state=warm]{background:var(--tx-gold);color:var(--tx-on-gold);box-shadow:var(--tx-shadow-pin)}
-.tuix-app button.pin.verify-pin{background:var(--tx-surface);color:var(--tx-aqua-text);border-color:var(--tx-aqua);box-shadow:var(--tx-shadow-pin),0 0 0 2px var(--tx-pin-ring);animation:none}
-.tuix-app button.pin.verify-pin svg{width:14px;height:14px}
-.tuix-app button.pin.orphan{outline:2px dashed var(--tx-muted);outline-offset:3px}
-.tuix-app button.pin:hover,.tuix-app button.pin:focus-visible,.tuix-app button.pin.active{animation:none;outline:2px solid var(--tx-focus);outline-offset:3px}
-.tuix-app .pin.active{animation:tuix-card .16s var(--tx-ease)}
-.tuix-app .marker{position:fixed;box-sizing:border-box;pointer-events:none;border:4px solid var(--tx-peach);border-radius:6px;box-shadow:0 0 0 1px var(--tx-pin-ring),inset 0 0 0 1px var(--tx-pin-ring)}
-.tuix-app .marker[data-state=warm]{border-color:var(--tx-gold);box-shadow:0 0 0 1px var(--tx-pin-ring),inset 0 0 0 1px var(--tx-pin-ring)}
-.tuix-app .marker.verify-marker{border-color:var(--tx-aqua);border-width:6px;border-style:double}
-.tuix-app .marker.orphan{border-style:dashed}
-.tuix-app .marker.active{border-width:6px}
-/* Fill: the element's box in the state color at 50%, drawn by a layer so the frame stays solid; the layer takes the frame's inner radius (6px outer minus the frame). */
-.tuix-app .marker.fill{border-width:2px}
-.tuix-app .marker.fill:before{content:"";position:absolute;inset:0;border-radius:4px;background:var(--tx-peach);opacity:.5}
-.tuix-app .marker.fill[data-state=warm]:before{background:var(--tx-gold)}
-.tuix-app .marker.fill[data-state=verify]:before{background:var(--tx-aqua)}
-.tuix-app .marker.fill.active{border-width:4px}
-.tuix-app .marker.fill.active:before{border-radius:2px}
-.tuix-app .marker.fill.verify-marker{border-width:6px}
-.tuix-app .marker.fill.verify-marker:before{border-radius:0}
-/* Hover card: a report's number, state and latest reply (or the start of its description) beside its marker. A button, since clicking it opens the report; the size matches CARD_W in core.tsx. */
-.tuix-app button.hover-card{position:fixed;overflow:hidden;width:272px;max-width:calc(100vw - 16px);min-height:0;padding:8px 12px;display:grid;gap:8px;text-align:left;font-size:13px;font-weight:400;line-height:1.4;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:14px;box-shadow:var(--tx-shadow);animation:tuix-card .15s var(--tx-ease)}
-.tuix-app button.hover-card:hover{border-color:var(--tx-peach)}
+/* Dots: a small flat mark on the page. Filled peach is your turn; a muted outline is open; a smaller one is closed (shown under All).
+   The button is the 28px hit area (WCAG 2.5.8 asks 24px); the drawn dot is 14px, 10px inside its ring. No pulse, no glow, no shadow. */
+.tuix-app button.pin{position:fixed;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;display:grid;place-items:center;transition:none}
+.tuix-app button.pin:before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--tx-muted);background:var(--tx-surface)}
+.tuix-app button.pin[data-state=turn]:before{background:var(--tx-peach);border-color:var(--tx-pin-ring);outline:1px solid var(--tx-on-peach)}
+.tuix-app button.pin[data-state=closed]:before{width:10px;height:10px;border-width:1.5px}
+.tuix-app button.pin.orphan:before{border-style:dashed}
+.tuix-app button.pin:hover,.tuix-app button.pin:focus-visible,.tuix-app button.pin.active{outline:none;border:0}
+.tuix-app button.pin:hover:before,.tuix-app button.pin:focus-visible:before,.tuix-app button.pin.active:before{outline:2px solid var(--tx-focus);outline-offset:2px;box-shadow:0 0 0 6px var(--tx-surface)}
+.tuix-app .marker{position:fixed;box-sizing:border-box;pointer-events:none;border:2px solid var(--tx-muted);border-radius:6px;box-shadow:0 0 0 1px var(--tx-pin-ring)}
+.tuix-app .marker[data-state=turn]{border-color:var(--tx-peach)}
+.tuix-app .marker[data-state=closed]{border-style:dashed}
+.tuix-app .marker.active{border-width:3px}
+/* Fill: the element's box in the dot's colour, drawn by a layer so the frame stays solid; the layer takes the frame's inner radius. */
+.tuix-app .marker.fill:before{content:"";position:absolute;inset:0;border-radius:4px;background:var(--tx-muted);opacity:.2}
+.tuix-app .marker.fill[data-state=turn]:before{background:var(--tx-peach);opacity:.4}
+.tuix-app .marker.fill.active{border-width:3px}
+/* Hover card: "#n title", the turn line and one line of the newest message, beside its marker. A button, since clicking it opens the conversation; the size matches CARD_W in core.tsx. */
+.tuix-app button.hover-card{position:fixed;overflow:hidden;width:272px;max-width:calc(100vw - 16px);min-height:0;padding:12px 16px;display:grid;gap:4px;text-align:left;font-size:13px;line-height:20px;font-weight:450;background:var(--tx-surface);color:var(--tx-ink);border:var(--rl);border-radius:12px;box-shadow:var(--tx-shadow);}
 .tuix-app .card-title{display:flex;align-items:center;gap:8px;min-width:0}
-.tuix-app .card-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600}
-.tuix-app .unread-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-gold);box-shadow:none}
-.tuix-app .card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
-.tuix-app .turn{color:var(--tx-muted);font-size:12px;font-weight:600;overflow-wrap:anywhere}
-.tuix-app .chat-status{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
-.tuix-app .card-reply{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.tuix-app .card-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;font-weight:600}
+.tuix-app .unread-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--tx-ink)}
+.tuix-app .card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px}
+.tuix-app .card-meta .turn-line{font-size:13px}
+.tuix-app .turn{font-size:13px;line-height:20px;font-weight:600;overflow-wrap:anywhere}
+.tuix-app .turn-line .turn{font-size:inherit}
+.tuix-app .card-reply{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-ink)}
 .tuix-app .card-reply.muted{color:var(--tx-muted)}
-.tuix-app .card-excerpt{-webkit-line-clamp:4;white-space:pre-line}
-.tuix-app .card-reply strong{font-weight:600}
-@keyframes tuix-card{from{opacity:0}to{opacity:1}}
-/* Chat window: a report's thread beside its element (people-and-statuses §7 item 16). Position and max-height come from placeChat in chat-placement.ts; the width matches CHAT_W. */
-.tuix-app .chat-window{position:fixed;width:320px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;pointer-events:auto;background:var(--tx-surface);color:var(--tx-ink);border:1px solid var(--tx-line);border-radius:16px;box-shadow:var(--tx-shadow);overflow:hidden;font-size:14px;animation:tuix-card .15s var(--tx-ease)}
+/* Chat window: a conversation beside its element. Position and max-height come from placeChat in chat-placement.ts; the width matches CHAT_W. */
+.tuix-app .chat-window{position:fixed;width:320px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;pointer-events:auto;background:var(--tx-surface);color:var(--tx-ink);border:var(--rl);border-radius:16px;box-shadow:var(--tx-shadow);overflow:hidden;font-size:14px;line-height:20px;}
 .tuix-app .chat-window:focus{outline:none}
-/* The top edge carries the marker's colour: peach open, gold in progress, aqua in review. */
-.tuix-app .chat-window{border-top:3px solid var(--tx-peach)}
-.tuix-app .chat-window[data-state=warm]{border-top-color:var(--tx-gold)}
-.tuix-app .chat-window[data-state=verify]{border-top-color:var(--tx-aqua)}
-.tuix-app .chat-window header{flex:none;align-items:flex-start;padding:12px 12px 8px 16px;gap:8px}
-.tuix-app .chat-title{display:grid;justify-items:start;gap:8px;min-width:0}
-.tuix-app .chat-window h2{font-size:15px;line-height:1.35;overflow-wrap:anywhere}
-.tuix-app .chat-window .icon-button{min-height:32px;width:32px;border-radius:10px}
-.tuix-app .chat-body{flex:1;min-height:0;overflow:auto;padding:2px 16px 8px;scrollbar-color:var(--tx-line) transparent}
+.tuix-app .chat-window header{flex:none;align-items:flex-start;padding:12px 12px 8px 16px;gap:8px;border-bottom:0}
+.tuix-app .chat-title{display:grid;justify-items:start;gap:4px;min-width:0}
+.tuix-app .chat-window h2{font-size:15px;line-height:22px;letter-spacing:0;overflow-wrap:anywhere}
+.tuix-app .chat-window .icon-button{min-height:36px;width:36px;border-radius:10px}
+.tuix-app .chat-body{flex:1;min-height:0;overflow:auto;padding:0 16px 8px;scrollbar-color:var(--tx-line) transparent}
 .tuix-app .chat-body>p{margin:8px 0}
-.tuix-app .chat-report{white-space:pre-wrap;padding:8px 8px;border-radius:12px;background:var(--tx-bg)}
-.tuix-app .chat-window .comment{margin:8px 0;padding:8px 8px;border-radius:12px}
-.tuix-app .chat-window .verify-tools{margin:8px 0;padding:8px}
+.tuix-app .chat-report{white-space:pre-wrap;padding:8px 0 12px;margin:0}
+.tuix-app .chat-window .comment{margin:0;padding:12px 0}
+.tuix-app .chat-window .verify-tools{margin:8px 0;padding:12px 0}
 .tuix-app .chat-window .verification-actions button{min-height:36px;padding:0 12px;font-size:13px}
-.tuix-app .chat-window textarea{min-height:64px;font-size:14px}
-.tuix-app .chat-window footer{flex:none;display:grid;gap:8px;padding:8px 16px 8px;border-top:1px solid var(--tx-line-soft);max-height:50vh;overflow:auto;scrollbar-color:var(--tx-line) transparent}
+.tuix-app .chat-window textarea{min-height:64px;font-size:14px;line-height:20px}
+.tuix-app .chat-window footer{flex:none;display:grid;gap:8px;padding:12px 16px 8px;border-top:var(--rl);max-height:50vh;overflow:auto;scrollbar-color:var(--tx-line) transparent}
 /* A short list keeps the replies in sight while a mention is picked. */
 .tuix-app .chat-window .mention-list{max-height:140px}
 .tuix-app .chat-window footer form{gap:8px}
-.tuix-app .chat-window footer .primary{justify-self:end;min-height:36px}
-/* Reply & pass beside Reply: the primary action last, as in the other action rows. */
-.tuix-app .reply-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.tuix-app .chat-window .reply-actions button{min-height:36px;padding:0 12px;font-size:13px}
-.tuix-app .chat-window footer .text-button{justify-self:start}
-/* A finger needs a larger target than the drawn dot. */
-@media(pointer:coarse){.tuix-app button.pin:before{content:"";position:absolute;inset:-10px;border-radius:50%}.tuix-app button.pin{animation:none}}
+.tuix-app .chat-window footer .primary{justify-self:end}
+.tuix-app .chat-window .thread-actions,.tuix-app .chat-window .closed-note{margin:0;padding-top:0;border-top:0}
+.tuix-app .chat-window .thread-actions button{min-height:36px;padding:0 12px;font-size:13px}
+/* Send to beside Send: the primary action last, as in the other action rows. */
+.tuix-app .reply-actions{display:flex;flex-wrap:wrap;align-items:end;justify-content:flex-end;gap:8px}
+.tuix-app .reply-actions .send-to{flex:1 1 140px;min-width:0}
+.tuix-app .chat-window footer .text-button{justify-self:start;min-height:36px}
+/* A finger needs 44px: the pin's hit area grows around the drawn dot, and the compact controls of the chat window (36px under a mouse) grow with it. */
+@media(pointer:coarse){.tuix-app button.pin:after{content:"";position:absolute;inset:-8px;border-radius:50%}.tuix-app .chat-window .thread-actions button,.tuix-app .chat-window .verification-actions button,.tuix-app .chat-window .icon-button,.tuix-app .chat-window footer .text-button{min-height:44px}.tuix-app .chat-window .icon-button{width:44px}}
 
-/* Around the launcher */
-.tuix-app .badge{position:fixed;bottom:calc(46px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));right:10px;min-width:20px;height:20px;padding:0 5px;line-height:16px;border-radius:6px;border:2px solid var(--tx-pin-ring);background:var(--tx-surface);color:var(--tx-ink);text-align:center;font-size:10.5px;font-weight:600;box-shadow:var(--tx-shadow-pin)}
-.tuix-app .badge.left{right:auto;left:42px}
-.tuix-app .badge.attention-dot{min-width:12px;width:12px;height:12px;padding:0;bottom:calc(50px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));right:14px;background:var(--tx-peach);animation:none}
-.tuix-app .badge.attention-dot.left{right:auto;left:46px}
-.tuix-app .reply-dot{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:12px;height:12px;min-height:0;padding:0;background:var(--tx-gold);border:2px solid var(--tx-pin-ring);border-radius:50%;box-shadow:none}
+/* Around the launcher: a small dot says conversations exist on this page (peach when one is waiting for you), another that updates wait. */
+.tuix-app .attention-dot{position:fixed;bottom:calc(50px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));right:14px;width:12px;height:12px;border-radius:50%;border:2px solid var(--tx-muted);background:var(--tx-surface);pointer-events:none}
+.tuix-app .attention-dot[data-turn]{background:var(--tx-peach);border-color:var(--tx-pin-ring)}
+.tuix-app .attention-dot.left{right:auto;left:46px}
+.tuix-app .reply-dot{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));width:12px;height:12px;min-height:0;padding:0;background:var(--tx-ink);border:2px solid var(--tx-pin-ring);border-radius:50%}
 .tuix-app .reply-dot.left{right:auto;left:14px}
 /* The reply dot opens settings; a finger-sized target around the small light. */
 .tuix-app button.reply-dot:before{content:"";position:absolute;inset:-9px;border-radius:50%}
-.tuix-app button.reply-dot:hover,.tuix-app button.reply-dot:focus-visible{border-color:var(--tx-pin-ring);box-shadow:none}
+.tuix-app button.reply-dot:hover,.tuix-app button.reply-dot:focus-visible{border-color:var(--tx-pin-ring)}
 
 /* Local stacking inside the isolated widget host: page < markers < selection
    surface/highlight < panels < hover card < menu (10) and launcher controls (12). */
@@ -268,13 +264,11 @@
 .tuix-app .pin{z-index:3}
 #tuix-launcher{z-index:12}
 
-@media(prefers-reduced-motion:reduce){.tuix-app .hover-card,.tuix-app .chat-window,.tuix-app .panel,.tuix-app .picker-hint,.tuix-app .pick-confirm,.tuix-app button.pin,.tuix-app .pin.active,.tuix-app .badge.attention-dot{animation:none}}
 @media(max-width:480px){.tuix-app .panel,.tuix-app .panel.composer{width:100vw;border-radius:0}.tuix-app .picker-hint{align-items:flex-start;gap:12px}.tuix-app .picker-hint small{display:block;max-width:220px}}
 
-/* Longer status names use a labelled native select. */
+/* Show is a labelled native select. */
 .tuix-app .report-status{display:block}
-.tuix-app .report-status label{display:block;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--tx-muted)}
-.tuix-app .report-status select{width:100%;box-sizing:border-box;min-height:40px}
-.tuix-app .filter-help{margin:8px 0 0;font-size:13px;line-height:1.5;color:var(--tx-muted)}
+.tuix-app .report-status label{display:block;margin-bottom:8px;font-size:13px;line-height:20px;font-weight:600;color:var(--tx-muted)}
+.tuix-app .filter-help{margin:8px 0 0;font-size:13px;line-height:20px;color:var(--tx-muted)}
 
-@media(prefers-reduced-motion:reduce){.tuix-app *,.tuix-app *::before,.tuix-app *::after{animation:none!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){.tuix-app *,.tuix-app *::before,.tuix-app *::after{transition:none!important}}

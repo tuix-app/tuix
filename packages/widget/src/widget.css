@@ -235,12 +235,15 @@
 .tuix-app .chat-window footer .primary{justify-self:end}
 .tuix-app .chat-window .thread-actions,.tuix-app .chat-window .closed-note{margin:0;padding-top:0;border-top:0}
 .tuix-app .chat-window .thread-actions button{min-height:36px;padding:0 12px;font-size:13px}
+.tuix-app .thread-actions button.done-action{min-height:32px;padding:0 8px;border-color:transparent;font-size:13px;font-weight:500;color:var(--tx-muted);margin-left:auto}
+.tuix-app .thread-actions button.done-action:hover{border-color:var(--tx-line-control);color:var(--tx-ink)}
+.tuix-app .thread-actions button.done-action:disabled{color:var(--tx-line-control);border-color:var(--tx-line);cursor:wait}
 /* Send to beside Send: the primary action last, as in the other action rows. */
 .tuix-app .reply-actions{display:flex;flex-wrap:wrap;align-items:end;justify-content:flex-end;gap:8px}
 .tuix-app .reply-actions .send-to{flex:1 1 140px;min-width:0}
 .tuix-app .chat-window footer .text-button{justify-self:start;min-height:36px}
 /* A finger needs 44px: the pin's hit area grows around the drawn dot, and the compact controls of the chat window (36px under a mouse) grow with it. */
-@media(pointer:coarse){.tuix-app button.pin:after{content:"";position:absolute;inset:-8px;border-radius:50%}.tuix-app .chat-window .thread-actions button,.tuix-app .chat-window .verification-actions button,.tuix-app .chat-window .icon-button,.tuix-app .chat-window footer .text-button{min-height:44px}.tuix-app .chat-window .icon-button{width:44px}}
+@media(pointer:coarse){.tuix-app button.pin:after{content:"";position:absolute;inset:-8px;border-radius:50%}.tuix-app .chat-window .thread-actions button,.tuix-app .thread-actions button.done-action,.tuix-app .chat-window .verification-actions button,.tuix-app .chat-window .icon-button,.tuix-app .chat-window footer .text-button{min-height:44px}.tuix-app .chat-window .icon-button{width:44px}}
 
 /* Around the launcher: a small dot says conversations exist on this page (peach when one is waiting for you), another that updates wait. */
 .tuix-app .attention-dot{position:fixed;bottom:calc(50px + env(safe-area-inset-bottom,0px) + var(--tuix-lift,0px));right:14px;width:12px;height:12px;border-radius:50%;border:2px solid var(--tx-muted);background:var(--tx-surface);pointer-events:none}

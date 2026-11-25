@@ -78,7 +78,7 @@ it('opens a window beside the element when a dot is clicked, not the sidebar, an
   expect(chat.getAttribute('role')).toBe('dialog');
   expect(chat.querySelector('h2')?.textContent).toBe('#7 Save is hidden 7');
   expect(chat.querySelector('header .status')).toBeNull();
-  expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Close conversation');
+  expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Hide conversation');
   expect([...chat.querySelectorAll('.comment p')].map(item => item.textContent)).toEqual(['Reply 1', 'Reply 2']);
   expect(root.querySelector('.panel')).toBeNull();
   expect(mock.panel).not.toHaveBeenCalled();
@@ -537,7 +537,7 @@ it('is labelled in Polish', async () => {
   const { root } = await page([report(7, { ...review, comments: [1, 2, 3, 4, 5, 6].map(n => comment(n)) })], { 7: [100, 200, 40, 20] }, { lang: 'pl' });
   dots(root)[0].click(); await wait(200);
   const chat = win(root)!;
-  expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Zamknij rozmowę');
+  expect(chat.querySelector('[data-action="close-chat"]')?.getAttribute('aria-label')).toBe('Ukryj rozmowę');
   expect(chat.querySelector('header .status')).toBeNull();
   expect(chat.querySelector('[data-action="show-earlier"]')?.textContent).toBe('Pokaż wcześniejsze');
   expect(chat.querySelector('[data-action="open-full-thread"]')?.textContent).toBe('Otwórz pełną rozmowę');

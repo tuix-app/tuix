@@ -1,5 +1,11 @@
 # Widget changelog
 
+## 0.4.1
+
+- **Mark as done.** The thread's **Close** button is now **Mark as done** (Polish: "Oznacz jako załatwione"), so it is not mistaken for closing the widget. It is smaller and quieter and sits last. It still closes the conversation as Closed, not Fixed.
+- The chat window's close button is labelled "Hide conversation" for screen readers.
+- The core bundle is 64,342 bytes gzipped.
+
 ## 0.4.0
 
 A conversation, not a status board, and a quieter look. Needs a Tuix server with conversations (`urgent`, `turn`, `actions`, `timeline`, `sent_to`, `can_set_urgent`, `waiting`); against an older server the widget keeps the previous header, buttons and counts, and shows no urgent mark or toggle.

@@ -47,7 +47,7 @@ it.each(['uat', 'local', 'production'])('shows verification evidence in %s and r
   expect([...root.querySelectorAll('button.primary')].map(item => item.textContent)).toEqual(['Works']);
   // Done and Still broken live in the verification block; Close stays with the other actions.
   expect([...root.querySelectorAll('.verify-tools [data-state-action]')].map(item => item.textContent)).toEqual(['Works', 'Still broken']);
-  expect([...root.querySelectorAll('.thread-actions [data-state-action]')].map(item => item.textContent)).toEqual(['Close']);
+  expect([...root.querySelectorAll('.thread-actions [data-state-action]')].map(item => item.textContent)).toEqual(['Mark as done']);
   button(root, 'Works').click(); await vi.advanceTimersByTimeAsync(100);
   expect(mock.request).toHaveBeenCalledWith('/issues/issue/verify', 'POST', {outcome: 'works'});
   expect(root.textContent).toContain('Thank you. Marked as fixed.');

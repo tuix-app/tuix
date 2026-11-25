@@ -110,7 +110,7 @@ it('refuses replies on a closed conversation with the sentence, and offers Reope
 
 it('offers exactly what `actions` lists: Fix ready, Take it, Close, and the urgent toggle only while open', async () => {
   const root = await open({ actions: ['reply', 'fix_ready', 'close', 'take', 'urgent'] });
-  expect([...root.querySelectorAll('.thread-actions button')].map(item => item.textContent)).toEqual(['Fix ready', 'Close', 'Take it', 'Mark urgent']);
+  expect([...root.querySelectorAll('.thread-actions button')].map(item => item.textContent)).toEqual(['Fix ready', 'Take it', 'Mark urgent', 'Mark as done']);
   expect(root.querySelector('[data-action=urgent]')!.textContent).toBe('Mark urgent');
   // The header is the back link, one meta line and the turn line.
   expect(root.querySelector('.panel .meta')!.textContent).toBe('#3 · Ola · uat');

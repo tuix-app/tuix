@@ -108,8 +108,8 @@ export interface ActionProps {
   urgent: { on: boolean; toggle: () => void } | null;
   onAction: (action: string) => void; onPending: (action: string | null) => void; onSend: () => void; onTake: () => void;
 }
-const quiet = ['fix_ready', 'works', 'still_broken', 'close'] as const;
-/** What the caller may do besides replying, all quiet: Fix ready, Works for someone else's report, Take it, Close; on a closed conversation the one primary button, Reopen, and the line that says why there is no reply box. */
+const quiet = ['fix_ready', 'works', 'still_broken'] as const;
+/** What the caller may do besides replying, all quiet: Fix ready, Works for someone else's report, Take it, Mark as done (the close action, last and quietest); on a closed conversation the one primary button, Reopen, and the line that says why there is no reply box. */
 export function ThreadActions({ t, busy, available, local, verifying, closed, take, pending, note, onNote, urgent, onAction, onPending, onSend, onTake }: ActionProps) {
   const may = (action: string) => available.includes(action);
   const label: Record<string, string> = { fix_ready: t.actionFixReady, works: t.actionWorks, still_broken: t.stillBroken, close: t.actionClose, reopen: t.actionReopen };
@@ -122,10 +122,12 @@ export function ThreadActions({ t, busy, available, local, verifying, closed, ta
   }
   if (closed) return <div class="closed-note"><p>{may('reopen') ? t.closedNoReply : t.closedOnly}</p>{may('reopen') && <div class="thread-actions"><button type="button" class="primary" data-state-action="reopen" disabled={busy} onClick={() => onAction('reopen')}>{t.actionReopen}</button><button type="button" class="text-button" data-action="reopen-note" disabled={busy} onClick={() => onPending('reopen')}>{t.reopenWithNote}</button></div>}</div>;
   const shown = quiet.filter(action => may(action) && !(verifying && (action === 'works' || action === 'still_broken')) && !(local && action === 'fix_ready'));
-  if (!shown.length && !take && !urgent) return null;
+  const done = may('close');
+  if (!shown.length && !take && !urgent && !done) return null;
   return <div class="thread-actions">
     {shown.map(action => <button type="button" key={action} data-state-action={action} disabled={busy} onClick={() => action === 'still_broken' ? onPending(action) : onAction(action)}>{label[action]}</button>)}
     {take && <button type="button" data-action="assign" disabled={busy} onClick={onTake}>{t.takeIt}</button>}
     {urgent && <button type="button" class="text-button" data-action="urgent" disabled={busy} onClick={urgent.toggle}>{urgent.on ? t.clearUrgent : t.markUrgent}</button>}
+    {done && <button type="button" class="done-action" data-state-action="close" disabled={busy} onClick={() => onAction('close')}>{label.close}</button>}
   </div>;
 }

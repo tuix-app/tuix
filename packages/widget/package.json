@@ -1,6 +1,6 @@
 {
   "name": "@tuix/widget",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "Element-anchored feedback for web applications",
   "license": "MIT",

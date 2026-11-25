@@ -41,7 +41,7 @@ it('offers the reporter Works and Close from allowed_states alone (an older serv
   expect(root.querySelector('.fixer-line')).toBeNull();
   expect(root.querySelector('[data-action=assign]')).toBeNull();
   // The reporter of a report that is not in review: Works and Close, both quiet; Send is the one primary.
-  expect(actions(root)).toEqual(['Works', 'Close']);
+  expect(actions(root)).toEqual(['Works', 'Mark as done']);
   expect(root.querySelectorAll('button.primary')).toHaveLength(1);
   action(root, 'works').click(); await vi.advanceTimersByTimeAsync(100);
   expect(stateCalls()).toEqual([{ state: 'done' }]);
@@ -63,7 +63,7 @@ it('offers the fixer Fix ready and Close, which needs no note and retries after 
   });
   expect(root.querySelector('.fixer-line')).toBeNull();
   expect(root.querySelector('[data-action=assign]')).toBeNull();
-  expect(actions(root)).toEqual(['Fix ready', 'Close']);
+  expect(actions(root)).toEqual(['Fix ready', 'Mark as done']);
   press(action(root, 'close')); await vi.advanceTimersByTimeAsync(100);
   // Why it was closed goes in a reply: Close asks for no note.
   expect(root.querySelector('.state-note')).toBeNull();
@@ -131,7 +131,7 @@ it('asks for a note before Still broken when someone other than the reporter reo
     return { state: body.state };
   });
   expect(root.querySelector('.verify-tools')).toBeNull();
-  expect(actions(root)).toEqual(['Works', 'Still broken', 'Close']);
+  expect(actions(root)).toEqual(['Works', 'Still broken', 'Mark as done']);
   press(action(root, 'still_broken')); await vi.advanceTimersByTimeAsync(50);
   expect(root.activeElement).toBe(root.querySelector('.state-note textarea'));
   // Cancel removes the form; focus returns to the thread state above the actions.
@@ -206,7 +206,7 @@ const served = (extra: Payload): Payload => ({ state: 'open', state_name: 'open'
 it('draws the buttons from `actions` and sends the action name, with a note only for Still broken', async () => {
   const root = await open(served({ state: 'in_review', state_name: 'fix_ready', status: 'awaiting_verification', can_be_fixer: true, actions: ['reply', 'works', 'still_broken', 'close', 'urgent'] }),
     (_path, body) => body.state === 'close' ? { state: 'closed', state_name: 'closed', actions: ['reopen'] } : {});
-  expect(actions(root)).toEqual(['Works', 'Still broken', 'Close']);
+  expect(actions(root)).toEqual(['Works', 'Still broken', 'Mark as done']);
   press(action(root, 'still_broken')); await vi.advanceTimersByTimeAsync(50);
   expect(root.querySelector('.state-note textarea')).not.toBeNull();
   expect(stateCalls()).toEqual([]);
@@ -219,7 +219,7 @@ it('draws the buttons from `actions` and sends the action name, with a note only
 
 it('offers Fix ready and Take it only when `actions` lists them, and no Start, Ready for review or Done', async () => {
   const root = await open(served({ can_be_fixer: true, actions: ['reply', 'fix_ready', 'close', 'take', 'urgent'] }));
-  expect(actions(root)).toEqual(['Fix ready', 'Close']);
+  expect(actions(root)).toEqual(['Fix ready', 'Mark as done']);
   expect(root.querySelector('[data-action=assign]')!.textContent).toBe('Take it');
   for (const word of ['Start', 'Ready for review', 'Done']) expect(root.textContent).not.toContain(word);
   core!.destroy(); document.body.replaceChildren();
@@ -241,6 +241,6 @@ it('reads the closed words from state_name before state and status', async () =>
 it('keeps Mark fixed, not a Fix ready button, in a local environment', async () => {
   mock.environment = 'local';
   const root = await open(served({ can_be_fixer: true, actions: ['reply', 'fix_ready', 'close'] }));
-  expect(actions(root)).toEqual(['Close']);
+  expect(actions(root)).toEqual(['Mark as done']);
   expect(root.querySelector('.fix-tools summary')!.textContent).toBe('Mark fixed');
 });

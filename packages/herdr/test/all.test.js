@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { byProject, fixProjectFor, labelOf, mapLimit, mergeLoaded, mergeRead, queueReload, reloadFor, targetsFor, tagIssues, yourTurnAll } from "../mods/tuix/lib/all.js";
+import { byProject, fixProjectFor, labelOf, mapLimit, mergeLoaded, mergeRead, queueReload, reloadFor, targetsFor, tagIssues, uniqueById, yourTurnAll } from "../mods/tuix/lib/all.js";
 import { groupIssues } from "../mods/tuix/lib/issues.js";
 
 const P = { id: "p1", name: "Shop" }, Q = { id: "p2", name: "admin" };
@@ -131,4 +131,10 @@ test("reloadFor: the projects of the changed runs, everything if one has no proj
   assert.deepEqual([...reloadFor([{ projectId: "p1" }, { projectId: "p1" }, { projectId: "p2" }])], ["p1", "p2"]);
   assert.equal(reloadFor([{ projectId: "p1" }, {}]), null);
   assert.equal(reloadFor([]), null);
+});
+
+test("an issue read twice is listed once", () => {
+  assert.deepEqual(uniqueById([{ id: 1 }, { id: 2 }, { id: 1 }]).map((x) => x.id), [1, 2]);
+  const twice = mergeLoaded([{ project: P, issues: [{ id: "x", number: 1 }], people: [] }, { project: P, issues: [{ id: "x", number: 1 }], people: [] }]);
+  assert.equal(twice.issues.length, 1);
 });

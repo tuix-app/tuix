@@ -74,6 +74,11 @@ test("runLine describes each state of a run", () => {
   assert.deepEqual([pr.link, pr.stacked, pr.remove], ["https://github.com/example/app/pull/9", 5, true]);
   assert.equal(runLine(run({ state: "pr_open", prUrl: "javascript:alert(1)" }), at).link, null);
   assert.equal(runLine(run({ state: "pr_open", prUrl: null }), at).branch, "b");
+  const again = runLine(run({ state: "pr_open", reopened: true, auto: "merge", prUrl: "https://github.com/example/app/pull/9" }), at, { focusable: true, agentStatus: "idle" });
+  assert.deepEqual([again.text, again.link, again.remove], ["new reply since the pull request", "https://github.com/example/app/pull/9", true]);
+  // Its agent still at work comes first, without Remove.
+  const live = runLine(run({ state: "pr_open", reopened: true, auto: "merge" }), at, { focusable: true, agentStatus: "working" });
+  assert.deepEqual([live.text, live.remove], ["merging when checks pass", false]);
 });
 
 test("runLine: a PR-open run whose agent keeps going shows what it does", () => {
@@ -83,6 +88,9 @@ test("runLine: a PR-open run whose agent keeps going shows what it does", () => 
   assert.deepEqual([merge.link, merge.branch, merge.remove, merge.stacked], ["https://github.com/example/app/pull/9", "b", false, 5]); // no Remove while the agent acts
   assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).text, "merging, then Fix ready once deployed");
   assert.equal(runLine(pr({ auto: "review" }), at, { agentStatus: "working" }).focus, false);
+  assert.equal(runLine(pr({ auto: "watch" }), at, { focusable: true, agentStatus: "working" }).text, "reviewing · watching its checks");
+  assert.equal(runLine(pr({ auto: "watch" }), at, { focusable: true, agentStatus: "blocked" }).text, "needs you");
+  assert.equal(runLine(pr({ auto: "watch" }), at, { focusable: true, agentStatus: "idle" }).text, "agent idle · check its terminal");
   const blocked = runLine(pr({ auto: "merge" }), at, { focusable: true, agentStatus: "blocked" });
   assert.deepEqual([blocked.icon, blocked.tone, blocked.text, blocked.focus, blocked.remove, blocked.stacked], ["dot", "alert", "needs you", true, false, 5]);
   // Idle or done with its terminal still there: the row points at the terminal, and Remove is back.

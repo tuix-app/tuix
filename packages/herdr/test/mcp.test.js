@@ -152,3 +152,15 @@ test("an empty token sends no request and is unauthorized", async () => {
     assert.equal(f.last, undefined);
   }
 });
+
+test("collect keeps a row repeated on a later page once", async () => {
+  const pages = { "": { items: [{ id: "a" }, { id: "b" }], next_cursor: "2" }, 2: { items: [{ id: "b" }, { id: "c" }], next_cursor: null } };
+  const client = { call: async (_tool, args) => pages[args.cursor ?? ""] };
+  assert.deepEqual((await collect(client, "t", "items")).map((x) => x.id), ["a", "b", "c"]);
+});
+
+test("collect passes items without an id through, and survives a page of repeats", async () => {
+  const pages = { "": { items: [1, { id: "a" }, 1], next_cursor: "2" }, 2: { items: [{ id: "a" }], next_cursor: null } };
+  const client = { call: async (_tool, args) => pages[args.cursor ?? ""] };
+  assert.deepEqual(await collect(client, "t", "items"), [1, { id: "a" }, 1]);
+});

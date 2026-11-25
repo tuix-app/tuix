@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { advance, closingComment, retirePrOpen, stackable, startTimeout, toStart } from "../mods/tuix/lib/runs.js";
+import { REPLY_CHECK_EVERY, advance, closingComment, repliedSince, replyCheckDue, replySig, retirePrOpen, stackable, startTimeout, toStart } from "../mods/tuix/lib/runs.js";
 
 const r = (id, state, queuedAt = 0, extra = {}) => ({ issueId: id, number: 1, branch: `b-${id}`, state, queuedAt, startedAt: null, seenWorking: false, ...extra });
 const live = (...ids) => new Set(ids);
@@ -144,4 +144,38 @@ test("toStart with a machine starts only that machine's queue; old records count
   const ids = new Set(["a", "b", "c"]);
   assert.deepEqual(toStart(rs, ids, { repoMain: "/r", machine: "vps" }).map((r) => r.issueId), ["a"]);
   assert.deepEqual(toStart(rs, ids, { repoMain: "/r", machine: null }).map((r) => r.issueId), ["b", "c"]);
+});
+
+test("repliedSince: a person's reply after the agent's closing reply, from Tuix or the panel", () => {
+  const run = r("a", "pr_open", 0, { startedAt: Date.parse("2026-11-01T09:00:00Z") });
+  const closing = c("Claude Code", "2026-11-01T10:00:00Z");
+  assert.equal(repliedSince([closing], run, "Herdr"), false);
+  assert.equal(repliedSince([c(null, "2026-11-01T09:30:00Z"), closing], run, "Herdr"), false); // before the closing reply
+  assert.equal(repliedSince([closing, c("Claude Code", "2026-11-01T11:00:00Z")], run, "Herdr"), false); // the agent again
+  assert.equal(repliedSince([closing, c(null, "2026-11-01T11:00:00Z")], run, "Herdr"), true);
+  assert.equal(repliedSince([closing, c("Herdr", "2026-11-01T11:00:00Z")], run, "Herdr"), true);
+  assert.equal(repliedSince([c(null, "2026-11-01T11:00:00Z")], run, "Herdr"), false); // no closing reply: nothing to come after
+  assert.equal(repliedSince(null, run, "Herdr"), false);
+});
+
+test("repliedSince ignores what came before the run and before the closing reply", () => {
+  const run = r("a", "pr_open", 0, { startedAt: Date.parse("2026-11-01T09:00:00Z") });
+  const closing = c("Claude Code", "2026-11-01T10:00:00Z");
+  assert.equal(repliedSince([c("Claude Code", "2026-11-01T08:00:00Z"), c(null, "2026-11-01T09:30:00Z"), closing], run, "Herdr"), false);
+});
+
+test("replyCheckDue: when the list shows a change, else every ten minutes; never for a reopened or unfinished run", () => {
+  const issue = { turn: "reporter", turn_person: "end_user:1", updated_at: "2026-11-01T10:00:00Z" };
+  const run = r("a", "pr_open", 0, { replySig: replySig(issue), replyCheckedAt: 1000 });
+  assert.equal(replyCheckDue(r("a", "pr_open"), issue, 1000), true); // never looked at
+  assert.equal(replyCheckDue(run, issue, 1000 + REPLY_CHECK_EVERY - 1), false);
+  assert.equal(replyCheckDue(run, issue, 1000 + REPLY_CHECK_EVERY), true);
+  assert.equal(replyCheckDue(run, { ...issue, turn: "team", turn_person: "member:2" }, 2000), true);
+  assert.equal(replyCheckDue({ ...run, reopened: true }, { ...issue, turn: "team" }, 1e12), false);
+  assert.equal(replyCheckDue(r("a", "running"), issue, 1e12), false);
+});
+
+test("stackable leaves out a fix a person replied to since", () => {
+  const pr = (id, extra) => r(id, "pr_open", 0, { repoMain: "/r", ...extra });
+  assert.deepEqual(stackable([pr("a"), pr("b", { reopened: true })], "/r").map((s) => s.branch), ["b-a"]);
 });

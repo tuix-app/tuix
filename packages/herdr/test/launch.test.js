@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyIfCurrent, claudeMissing, listedOf, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, qualify, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
+import { agentArgv, agentChoices, agentMissing, applyIfCurrent, isClaude, listedOf, probe, AGENT_ARGV, hasWorktree, parseSpaceNew, qualify, queueRun, removeRun, spaceNewArgs, startRun, stackedOn, trackRun } from "../mods/tuix/lib/launch.js";
 
 const repo = { top: "/code/app", main: "/code/app", name: "app" };
 const issue = { id: "i1", number: 7, title: "Broken", reference: "Tuix #7", app_url: "https://tuix.app/i/7" };
@@ -266,11 +266,76 @@ test("trackRun asks the run's machine for the pull request", async () => {
   assert.deepEqual(seen.map((s) => s[1]), ["vps", "vps"]);
 });
 
-test("claudeMissing counts only an explicit not-installed Claude Code", () => {
-  assert.equal(claudeMissing([{ id: "claude", run: ["claude"], installed: false }]), true);
-  assert.equal(claudeMissing([{ name: "Claude", run: ["/usr/local/bin/claude"], installed: true }]), false);
-  assert.equal(claudeMissing([{ id: "codex", run: ["codex"], installed: false }]), false);
-  assert.equal(claudeMissing(null), false);
+const codex = { id: "codex", name: "Codex", run: ["codex", "--yolo"], installed: true };
+
+test("agentMissing: Claude Code is missing only when explicitly not installed", () => {
+  assert.equal(agentMissing([{ id: "claude", run: ["claude"], installed: false }], null), true);
+  assert.equal(agentMissing([{ name: "Claude", run: ["/usr/local/bin/claude"], installed: true }], null), false);
+  assert.equal(agentMissing([{ id: "codex", run: ["codex"], installed: false }], null), false);
+  assert.equal(agentMissing(null, null), false);
+  assert.equal(agentMissing(undefined, undefined), false);
+  assert.equal(isClaude({ run: ["/opt/bin/Claude"] }), true);
+  assert.equal(isClaude({ id: "codex" }), false);
+});
+
+test("agentMissing: another agent is missing unless Herdr lists it as installed, so a null list blocks it", () => {
+  const codexRef = { id: "codex", name: "Codex" };
+  assert.equal(agentMissing([codex], codexRef), false);
+  assert.equal(agentMissing([{ ...codex, installed: false }], codexRef), true);
+  assert.equal(agentMissing([{ id: "claude", run: ["claude"] }], codexRef), true);
+  assert.equal(agentMissing(null, codexRef), true);
+  assert.equal(agentMissing([{ id: "codex", installed: true }], codexRef), true); // no command known
+});
+
+test("agentChoices offers installed agents with a command, besides Claude Code, once each", () => {
+  const known = [
+    { id: "claude", name: "Claude Code", run: ["claude"], installed: true },
+    codex,
+    { ...codex, name: "Codex again" },
+    { id: "gemini", run: ["gemini"] },
+    { id: "off", run: ["off"], installed: false },
+    { id: "norun", name: "No run", installed: true },
+    { id: "empty", run: [], installed: true },
+    { id: "bad", run: ["x", 5], installed: true },
+    { id: "", run: ["x"] },
+    { name: "No id", run: ["x"] },
+    { id: "pi", name: "Pi", run: ["/bin/claude"] },
+    null, 7,
+  ];
+  assert.deepEqual(agentChoices(known), [{ id: "codex", name: "Codex" }, { id: "gemini", name: "gemini" }]);
+  assert.deepEqual(agentChoices(null), []);
+  assert.deepEqual(agentChoices(undefined), []);
+});
+
+test("agentArgv: Claude Code's own command, or the installed agent's run (a copy), or null", () => {
+  assert.deepEqual(agentArgv(null, null), ["claude", "--permission-mode", "auto"]);
+  assert.deepEqual(agentArgv([], null), AGENT_ARGV);
+  const argv = agentArgv([codex], { id: "codex", name: "Codex" });
+  assert.deepEqual(argv, ["codex", "--yolo"]);
+  argv.push("x");
+  assert.deepEqual(codex.run, ["codex", "--yolo"]);
+  assert.equal(agentArgv([{ ...codex, installed: false }], { id: "codex" }), null);
+  assert.equal(agentArgv([codex], { id: "other" }), null);
+  assert.equal(agentArgv(null, { id: "codex" }), null);
+});
+
+test("spaceNewArgs passes the agent's argv", () => {
+  assert.deepEqual(JSON.parse(spaceNewArgs({ worktree: "/w", task: "t", argv: ["codex", "--yolo"] })[2]).argv, ["codex", "--yolo"]);
+});
+
+test("startRun with another agent runs its command and records its name; a missing agent stops the run", async () => {
+  const rules = { agent: { id: "codex", name: "Codex" }, until: "reviewed", deploy: "", extra: "" };
+  const go = (known) => { const f = fake(); return startRun({ run: queued(), issue, runs: [queued()], repo, home: "/home/u", exec: f.exec, now: () => 500, rules, known }).then((run) => ({ run, f })); };
+  const ok1 = await go([codex]);
+  assert.equal(ok1.run.state, "running");
+  assert.equal(ok1.run.auto, "watch");
+  assert.deepEqual(JSON.parse(ok1.f.calls.find((c) => c[0] === "herdr-app")[3]).argv, ["codex", "--yolo"]);
+  for (const known of [null, [], [{ ...codex, installed: false }]]) {
+    const gone = await go(known);
+    assert.equal(gone.run.state, "stopped");
+    assert.equal(gone.run.error, "Codex isn't installed here.");
+    assert.equal(gone.f.calls.some((c) => c[0] === "herdr-app"), false);
+  }
 });
 
 test("listedOf finds a remote terminal listed prefixed, or bare with its machine, never a local one", () => {
@@ -291,16 +356,35 @@ test("probe sees a remote agent listed bare with its machine", () => {
 test("startRun records how far the agent goes and tells it so; queueRun records nothing", async () => {
   assert.equal(queued().auto, null);
   const taskOf = (f) => JSON.parse(f.calls.find((c) => c[0] === "herdr-app")[3]).task;
-  const go = (rules) => { const f = fake(); return startRun({ run: queued(), issue, runs: [queued()], repo, home: "/home/u", exec: f.exec, now: () => 500, rules }).then((run) => ({ run, task: taskOf(f) })); };
-  const off = await go(undefined), allOff = await go({ merge: false, review: false, deploy: "" });
+  const go = (rules) => { const f = fake(); return startRun({ run: queued(), issue, runs: [queued()], repo, home: "/home/u", exec: f.exec, now: () => 500, rules }).then((run) => ({ run, task: taskOf(f), argv: JSON.parse(f.calls.find((c) => c[0] === "herdr-app")[3]).argv })); };
+  const off = await go(undefined), allOff = await go({ agent: null, until: "pr", deploy: "", extra: "" });
   assert.equal(off.run.auto, null);
+  assert.deepEqual(off.argv, AGENT_ARGV);
   assert.equal(allOff.run.auto, null);
   assert.equal(allOff.task, off.task);
-  const merge = await go({ merge: true, review: false, deploy: "" });
+  const watch = await go({ agent: null, until: "reviewed", deploy: "", extra: "" });
+  assert.equal(watch.run.auto, "watch");
+  assert.match(watch.task, /ready to merge/);
+  const merge = await go({ agent: null, until: "merged", deploy: "", extra: "" });
   assert.equal(merge.run.auto, "merge");
   assert.match(merge.task, /\n5\. If you opened a pull request/);
   assert.doesNotMatch(merge.task, /\n6\. /);
-  const review = await go({ merge: true, review: true, deploy: "Deploy is green" });
+  const review = await go({ agent: null, until: "fix_ready", deploy: "Deploy is green", extra: "Use gh stack." });
   assert.equal(review.run.auto, "review");
   assert.match(review.task, /How I tell that it is deployed: Deploy is green\./);
+  assert.match(review.task, /repository: Use gh stack\. Where/);
+});
+
+test("an agent whose id the setting can't keep is not offered", () => {
+  const known = [{ id: "a  b", run: ["x"], installed: true }, { id: "codex", run: ["codex"], installed: true }];
+  assert.deepEqual(agentChoices(known), [{ id: "codex", name: "codex" }]);
+  assert.equal(agentArgv(known, { id: "a  b", name: "X" }), null);
+});
+
+test("a fix after an open pull request remembers it, and its agent is told to go on from it", async () => {
+  const old = { ...queueRun([], issue, { branch: "b", repoMain: "/r", now: 1 })[0], state: "pr_open", prUrl: "https://github.com/example/app/pull/9", reopened: true };
+  const [again] = queueRun([old], issue, { branch: "b", repoMain: "/r", now: 2 });
+  assert.deepEqual([again.again, again.reopened, again.state], [{ prUrl: "https://github.com/example/app/pull/9" }, undefined, "queued"]);
+  assert.equal(queueRun([{ ...old, state: "stopped" }], issue, { branch: "b", repoMain: "/r", now: 2 })[0].again, null);
+  assert.equal(queued().again, null);
 });

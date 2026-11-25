@@ -57,7 +57,9 @@ export function runLine(run, now, { focusable = false, agentStatus = null } = {}
     case "pr_open": {
       const pr = { ...base, remove: true, link: isHttps(run.prUrl) ? run.prUrl : null, branch: run.branch };
       if (run.auto && agentStatus === "blocked") return { ...pr, remove: false, icon: "dot", tone: "alert", text: "needs you", focus: reach };
-      if (run.auto && agentStatus === "working") return { ...pr, remove: false, icon: "spinner", tone: null, text: run.auto === "review" ? "merging, then Fix ready once deployed" : "merging when checks pass", focus: reach };
+      if (run.auto && agentStatus === "working") return { ...pr, remove: false, icon: "spinner", tone: null, text: run.auto === "review" ? "merging, then Fix ready once deployed" : run.auto === "watch" ? "reviewing · watching its checks" : "merging when checks pass", focus: reach };
+      // Back among the open issues: the earlier pull request stays one click away.
+      if (run.reopened) return { ...pr, text: "new reply since the pull request" };
       // Idle or done with the issue not yet Fix ready: it merged and has nothing more to do, or it stopped to ask.
       // The row can't tell which, so it points at the terminal.
       if (run.auto && reach && (agentStatus === "idle" || agentStatus === "done")) return { ...pr, text: "agent idle · check its terminal", focus: true };

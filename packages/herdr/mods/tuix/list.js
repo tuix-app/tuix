@@ -29,7 +29,7 @@ function runRow(v, t, issue, run) {
 }
 
 function issueRow(v, t, r) {
-  const { issue } = r, run = r.section === "fixing" || r.section === "prOpen" ? v.runs.find((x) => x.issueId === issue.id) : null, label = turnLabel(issue, { me: v.meOf(issue), names: v.names }), picked = v.selected.has(issue.id);
+  const { issue } = r, found = v.runs.find((x) => x.issueId === issue.id), run = r.section === "fixing" || r.section === "prOpen" || (found?.state === "pr_open" && found.reopened) ? found : null, label = turnLabel(issue, { me: v.meOf(issue), names: v.names }), picked = v.selected.has(issue.id);
   const who = issue.author?.name ?? "the reporter";
   return v_flex().id(`issue-${issue.id}`).hover((s) => s.bg(t.hover))
     .child(h_flex().px(14).py(6).gap(8).items_start()

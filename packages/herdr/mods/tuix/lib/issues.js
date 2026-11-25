@@ -18,16 +18,21 @@ export function matchProject(repoName, projects) {
   return hits.length === 1 ? { project: hits[0] } : { choices: projects };
 }
 
+// Each issue lands in exactly one group, once, however often the list names it.
+// A PR-open issue a person replied to since (`reopened` on its run) is open again: it can be fixed again.
 export function groupIssues(issues, runs) {
-  const stateByIssue = new Map();
-  for (const r of runs) stateByIssue.set(r.issueId, r.state);
-  const groups = { open: [], fixing: [], prOpen: [], inReview: [] };
+  const runByIssue = new Map();
+  for (const r of runs) runByIssue.set(r.issueId, r);
+  const groups = { open: [], fixing: [], prOpen: [], inReview: [] }, seen = new Set();
   for (const issue of issues) {
+    if (seen.has(issue.id)) continue;
+    seen.add(issue.id);
     const shown = stateOf(issue);
     if (FINISHED.has(shown)) continue;
-    const state = stateByIssue.get(issue.id);
+    const run = runByIssue.get(issue.id), state = run?.state;
     if (shown === "fix_ready") groups.inReview.push(issue);
-    else if (state === "pr_open") groups.prOpen.push(issue);
+    else if (state === "pr_open" && !run.reopened) groups.prOpen.push(issue);
+    else if (state === "pr_open") groups.open.push(issue);
     else if (FIXING_RUN_STATES.has(state)) groups.fixing.push(issue);
     else groups.open.push(issue);
   }

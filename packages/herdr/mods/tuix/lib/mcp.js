@@ -81,10 +81,14 @@ export function createClient({ url, token, fetch }) {
 export async function collect(client, tool, key, args = {}, pages = 20) {
   const out = [];
   Object.defineProperty(out, "truncated", { value: false, writable: true });
-  let cursor = null;
+  let cursor = null; const seen = new Set();
   for (let i = 0; i < pages; i++) {
     const result = await client.call(tool, cursor ? { ...args, cursor } : args);
-    out.push(...(result?.[key] ?? []));
+    // A row can come back on a later page when it moved while the pages were read (urgent sorts first): once is enough.
+    for (const item of result?.[key] ?? []) {
+      if (item?.id != null) { if (seen.has(item.id)) continue; seen.add(item.id); }
+      out.push(item);
+    }
     const next = result?.next_cursor ?? null;
     if (!next || next === cursor) break;
     if (i === pages - 1) out.truncated = true;

@@ -26,11 +26,17 @@ export function byProject(issues) {
     .map((x) => x.issue);
 }
 
+// The first of each id: a project listed twice, or a row repeated across pages, is still one issue.
+export function uniqueById(items) {
+  const seen = new Set();
+  return items.filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)));
+}
+
 // `loaded`: [{ project, issues, people }]; `projects` all of them (for labels). The shapes the single project view keeps.
 export function mergeLoaded(loaded, projects = loaded.map((l) => l.project)) {
   const people = loaded.map((l) => l.people ?? []);
   return {
-    issues: byProject(loaded.flatMap((l) => tagIssues(l.issues, l.project, labelOf(l.project, projects)))),
+    issues: byProject(uniqueById(loaded.flatMap((l) => tagIssues(l.issues, l.project, labelOf(l.project, projects))))),
     peopleBy: Object.fromEntries(loaded.map((l, i) => [l.project.id, people[i]])),
     meBy: Object.fromEntries(loaded.map((l, i) => [l.project.id, people[i].find((p) => p.me)?.id ?? null])),
     names: Object.fromEntries(people.flat().map((p) => [p.id, p.name])),

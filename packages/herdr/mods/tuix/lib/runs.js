@@ -4,8 +4,10 @@
 // here assumes it. A run is { issueId, number, reference, appUrl, branch, base, stackedOn,
 // worktree, terminal, state, queuedAt, startedAt, seenWorking, prUrl, repoMain, machine }; times are epoch ms.
 // `machine` is null (or missing, in records saved before it existed) for this computer.
+// `reopened` is set on a PR-open run once a person replied after the agent's closing reply: the issue is listed as open again.
 // `auto` is what the agent was told to do after the fix: null (or missing, in older records) for nothing more,
-// "merge" (watch the pull request and merge it) or "review" (merge, then set Fix ready once deployed).
+// "watch" (review its change and keep the pull request green, you merge), "merge" (watch the pull request and
+// merge it) or "review" (merge, then set Fix ready once deployed). `agent` is the agent's name (missing in older records).
 
 import { stateOf } from "./issues.js";
 
@@ -57,10 +59,31 @@ export function closingComment(comments, run, panelLabel) {
   );
 }
 
+// Did a person write on the issue after the agent's closing reply? Their reply (from Tuix, the widget, or this
+// panel) continues the conversation, so the issue can be fixed again. An agent's own later replies don't count.
+export function repliedSince(comments, run, panelLabel) {
+  const closing = closingComment(comments, run, panelLabel);
+  if (!closing) return false;
+  const at = Date.parse(closing.inserted_at);
+  return (comments ?? []).some((c) => c !== closing && (!c.via || c.via === panelLabel) && Date.parse(c.inserted_at) > at);
+}
+
+export const REPLY_CHECK_EVERY = 10 * 60000;
+
+// What the list says about an issue that a reply usually changes: who holds the turn, and when it last changed.
+export const replySig = (issue) => `${issue?.turn ?? ""}|${issue?.turn_person ?? ""}|${issue?.updated_at ?? ""}`;
+
+// Is it time to read a PR-open run's comments for a person's reply? When the list shows the issue changed since
+// the last look, and otherwise every ten minutes: a reply that keeps the turn where it was changes nothing in the list.
+export function replyCheckDue(run, issue, now) {
+  if (run.state !== "pr_open" || run.reopened) return false;
+  return run.replySig !== replySig(issue) || now - (run.replyCheckedAt ?? 0) >= REPLY_CHECK_EVERY;
+}
+
 // Fixes whose pull request is open, so a new fix can stack on them.
-// Only the given repo's: a branch pushed in another repository is no base for this one.
+// Only the given repo's: a branch pushed in another repository is no base for this one. Not one a person replied to since.
 export function stackable(runs, repoMain) {
-  return runs.filter((r) => r.state === "pr_open" && r.repoMain === repoMain).map((r) => ({ number: r.number, branch: r.branch }));
+  return runs.filter((r) => r.state === "pr_open" && !r.reopened && r.repoMain === repoMain).map((r) => ({ number: r.number, branch: r.branch }));
 }
 
 // After a complete read of a project's issues: its PR-open runs whose issue is no longer open (moved on,

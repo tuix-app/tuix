@@ -9,7 +9,7 @@ import { createSession, signinMessage, withRefresh } from "./lib/session.js";
 import { groupIssues, matchProject, relocation, stateOf } from "./lib/issues.js";
 import { ALL, fixProjectFor, labelOf, mapLimit, mergeRead, queueReload, targetsFor, yourTurnAll } from "./lib/all.js";
 import { defaultBase, repoOf } from "./lib/git.js";
-import { claudeMissing } from "./lib/launch.js";
+import { agentMissing } from "./lib/launch.js";
 import { CHECK_EVERY, applyUpdate, checkDue, cleanUp, hashOf, latestHash, updateAvailable } from "./lib/update.js";
 
 // Read off the module, not imported by name, so a Herdr without them still loads the panel:
@@ -18,7 +18,7 @@ const machineUp = (name) => { const list = herdr.machines?.(); return !list || l
 const knownAgentsOn = (on) => Promise.resolve().then(() => herdr.knownAgents?.({ on }) ?? null);
 import { signinView } from "./signin.js";
 import { rulesView } from "./rules.js";
-import { normalize, rulesFor, summary } from "./lib/rules.js";
+import { agentName, normalize, rulesFor, summary } from "./lib/rules.js";
 import { listView } from "./list.js";
 import { shotBox, threadView } from "./thread.js";
 import { cacheShot, pruneShots } from "./shots.js";
@@ -59,7 +59,7 @@ export default class Tuix extends View {
     this.state = "signin"; // signin | project | list | thread
     this.notice = null; this.connecting = false; this.loading = false; this.loadGen = 0; this.loadingSince = 0; this.locating = false;
     this.url = null; this.session = null; this.client = null; this.canWrite = false; this.device = null; this.authGen = 0; this.panelLabel = PANEL_LABEL;
-    this.projects = []; this.project = null; this.all = false; this.fixProject = null; this.loadedBy = {}; this.peopleBy = {}; this.meBy = {}; this.repo = null; this.hasOrigin = false; this.machine = null; this.noClaude = false; this.locKey = null;
+    this.projects = []; this.project = null; this.all = false; this.fixProject = null; this.loadedBy = {}; this.peopleBy = {}; this.meBy = {}; this.repo = null; this.hasOrigin = false; this.machine = null; this.known = null; this.agentGone = false; this.locKey = null;
     this.issues = []; this.people = []; this.names = {}; this.me = null; this.runs = read("runs", []); this.pumping = false; this.tracking = false; this.trackSig = ""; this.selected = new Set();
     this.groups = groupIssues([], []); this.cut = false; this.cutNames = []; this.again = false; // again: a load asked for while one runs ("all" or a Set of project ids)
     this.selKey = null;
@@ -68,10 +68,13 @@ export default class Tuix extends View {
     this.th = null; this.confirming = null; this.drafts = {}; this.paneW = 0;
     this.reply = TextareaState.new({ placeholder: "Reply…" });
     this.reply.set_auto_grow(2, 8);
-    // The After a fix setting: shown in place of the list while rulesOpen; deployInput is its free text.
-    this.rulesOpen = false;
+    // The fix setting: shown in place of the list while rulesOpen; deployInput and extraInput are its free texts.
+    // `known` is the last knownAgents() list of the shown location (null when unknown); `agentGone`: the chosen agent isn't there.
+    this.rulesOpen = false; this.promptOpen = false;
     this.deployInput = TextareaState.new({ placeholder: "How do you see that a deploy finished?" });
     this.deployInput.set_auto_grow(2, 6);
+    this.extraInput = TextareaState.new({ placeholder: "For example: Stack pull requests with gh stack." });
+    this.extraInput.set_auto_grow(2, 8);
 
     const auth = read("auth", null);
     this.urlInput = InputState.new({ placeholder: DEFAULT_URL, value: auth?.url ?? DEFAULT_URL });
@@ -287,7 +290,7 @@ export default class Tuix extends View {
       const here = (c, a, o) => exec(c, a, { ...o, on: loc.on });
       const repo = loc.cwd ? await repoOf(loc.cwd, here) : null;
       const origin = repo ? await defaultBase(repo, here).then(() => true, () => false) : false;
-      const noClaude = repo && origin ? claudeMissing(await knownAgentsOn(loc.on).catch(() => null)) : false;
+      const known = repo && origin ? await knownAgentsOn(loc.on).catch(() => null) : null;
       if (this.locKey !== key || !this.client) return;
       this.locating = false;
       const stored = repo ? read("projects", {})[repo.main] : null;
@@ -298,7 +301,8 @@ export default class Tuix extends View {
       const selKey = `${repo?.main ?? ""}|${all ? ALL : project?.id ?? ""}`;
       const keep = relocation({ state: this.state, key: this.selKey }, { key: selKey, hasProject: Boolean(project) || all }) === "keep";
       if (!keep) this.closeRules(); // before this.repo changes: the deploy text belongs to the repo it was typed for
-      this.repo = repo; this.hasOrigin = origin; this.machine = loc.on ?? null; this.noClaude = noClaude;
+      this.repo = repo; this.hasOrigin = origin; this.machine = loc.on ?? null; this.known = known;
+      this.agentGone = agentMissing(known, rulesFor(read("rules", {}), repo?.main).agent);
       if (!keep) {
         if (this.state === "list" || this.state === "thread") this.saveDraft();
         this.th = null; this.confirming = null; this.project = null; this.all = false; this.loadedBy = {}; this.issues = []; this.groups = groupIssues([], []);
@@ -334,7 +338,7 @@ export default class Tuix extends View {
 
   saveRuns() { write("runs", this.runs); }
 
-  // The rules of the shown repository (all off without one); read when an agent starts and when the setting is drawn.
+  // The rules of the shown repository (the defaults without one); read when an agent starts and when the setting is drawn.
   rules() { return rulesFor(read("rules", {}), this.repo?.main); }
 
   // Merges `patch` into this repository's rules, normalised, and keeps them. Only fixes started afterwards use them.
@@ -343,19 +347,28 @@ export default class Tuix extends View {
     if (typeof main !== "string") return;
     const stored = read("rules", {}), next = normalize({ ...rulesFor(stored, main), ...patch });
     write("rules", { ...(stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {}), [main]: next });
+    this.agentGone = agentMissing(this.known, next.agent);
     cx?.notify();
   }
 
   openRules(cx) {
-    this.deployInput.set_value(this.rules().deploy);
-    this.rulesOpen = true; cx.notify();
+    const r = this.rules();
+    this.deployInput.set_value(r.deploy); this.extraInput.set_value(r.extra);
+    this.rulesOpen = true; this.promptOpen = false; cx.notify();
+    // Agents installed since the folder was last looked at show up now. A failed check keeps the list it had.
+    const main = this.repo?.main, on = this.machine;
+    cx.spawn(async (cx) => {
+      const known = await knownAgentsOn(on).catch(() => null);
+      if (!known || this.repo?.main !== main || this.machine !== on) return;
+      this.known = known; this.agentGone = agentMissing(known, this.rules().agent); cx.notify();
+    });
   }
 
-  // Saves the deploy text and closes the setting. Safe to call when it isn't open or there is no repository.
+  // Saves the texts and closes the setting. Safe to call when it isn't open or there is no repository.
   closeRules(cx) {
     if (!this.rulesOpen) return;
-    this.rulesOpen = false;
-    if (this.repo) this.setRules({ deploy: this.deployInput.value() });
+    this.rulesOpen = false; this.promptOpen = false;
+    if (this.repo) this.setRules({ deploy: this.deployInput.value(), extra: this.extraInput.value() });
     cx?.notify();
   }
 
@@ -596,12 +609,13 @@ export default class Tuix extends View {
     cx.notify();
   }
 
-  fixBlock() {
+  // Why Fix is off, or null. `agent: false` leaves out the missing agent: the setting stays reachable to pick another.
+  fixBlock({ agent = true } = {}) {
     if (!this.canWrite) return "Fix needs a connection that can change issues.";
     if (this.machine && !machineUp(this.machine)) return `${this.machine} isn't connected.`;
     if (!this.all && this.project?.archived) return "Archived: read only.";
     if (!this.repo || !this.hasOrigin) return "Fix needs a git repository with an origin remote.";
-    if (this.noClaude) return this.machine ? `Fix needs Claude Code on ${this.machine}.` : "Fix needs Claude Code on this computer.";
+    if (agent && this.agentGone) { const name = agentName(this.rules()); return this.machine ? `Fix needs ${name} on ${this.machine}.` : `Fix needs ${name} on this computer.`; }
     return null;
   }
 
@@ -665,7 +679,7 @@ export default class Tuix extends View {
         .child(this.button("tuix-update", this.upd.busy ? "Updating…" : this.upd.error ? "Try again" : "Update", (_e, cx) => this.update(cx), { primary: true, disabled: this.upd.busy }))))
       .when(Boolean(this.client) && !this.canWrite, (e) => e.child(note(READ_ONLY)))
       .when(this.state === "list" && this.all && this.canWrite, (e) => e.child(note("Fix works in the matched project's repository.")))
-      .when(this.state === "list" && !this.rulesOpen && !this.fixBlock() && (!this.all || Boolean(this.fixProject)), (e) => e.child(h_flex().px(14).py(4).gap(8).items_center()
+      .when(this.state === "list" && !this.rulesOpen && !this.fixBlock({ agent: false }) && (!this.all || Boolean(this.fixProject)), (e) => e.child(h_flex().px(14).py(4).gap(8).items_center()
         .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(summary(this.rules())))
         .child(div().id("tuix-rules").flex_none().text_size(11).text_color(t.accent).cursor_pointer().on_click((_e, cx) => this.openRules(cx)).child("Change"))))
       .when(this.state === "list" && this.cut, (e) => e.child(note(this.all ? `List cut off in ${this.cutNames.join(", ")}.` : `List cut off — showing the first ${this.issues.length}.`, t.blocked)))

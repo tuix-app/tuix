@@ -92,3 +92,10 @@ test("relocation keeps an open list or thread within the same repo and project",
   assert.equal(relocation({ state: "project", key: "/code/app|p1" }, next), "reset");
   assert.equal(relocation({ state: "list", key: "/code/app|p1" }, { key: "/code/app|", hasProject: false }), "reset");
 });
+
+test("groupIssues: an issue listed twice is one row, and a PR-open issue replied to since is open again", () => {
+  const g = groupIssues([i(1, "open"), i(1, "open"), i(2, "open"), i(2, "open"), i(3, "open")], [run(2, "pr_open"), { ...run(3, "pr_open"), reopened: true }]);
+  assert.deepEqual(ids(g), { open: [1, 3], fixing: [], prOpen: [2], inReview: [] });
+  // Fix ready wins over the reply: the reporter is checking.
+  assert.deepEqual(ids(groupIssues([i(3, "in_review")], [{ ...run(3, "pr_open"), reopened: true }])).inReview, [3]);
+});

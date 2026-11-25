@@ -4,14 +4,17 @@
 // through exec's `on`, and Herdr opens its space there. Only `herdr-app` itself always runs here.
 import { addWorktree, defaultBase, prUrl, remoteIsGithub, worktreePath } from "./git.js";
 import { fixPrompt } from "./prompt.js";
-import { autoOf } from "./rules.js";
+import { agentName, autoOf, validAgentId } from "./rules.js";
 import { advance, closingComment, stackable, startTimeout } from "./runs.js";
 
 export const AGENT_ARGV = ["claude", "--permission-mode", "auto"];
 
 // A queued run for an issue; it replaces any earlier record of the same issue.
+// `again` ({ prUrl }) when it replaces a run whose pull request was open: the agent is told to go on from it.
 export function queueRun(runs, issue, { branch, repoMain, machine = null, projectId = null, now }) {
+  const old = runs.find((r) => r.issueId === issue.id);
   const run = {
+    again: old?.state === "pr_open" ? { prUrl: old.prUrl ?? null } : null,
     issueId: issue.id, number: issue.number, title: issue.title ?? "", reference: issue.reference, appUrl: issue.app_url,
     branch, base: null, stackedOn: null, worktree: null, terminal: null, state: "queued",
     queuedAt: now, startedAt: null, seenWorking: false, prUrl: null, error: null, repoMain, machine, projectId, auto: null,
@@ -23,8 +26,8 @@ export const removeRun = (runs, issueId) => runs.filter((r) => r.issueId !== iss
 
 // The arguments of `herdr-app do space.new`. The space stays unnamed; Herdr's spaces mod nests it under the repo's space by git worktree linkage, not by name.
 // With `machine`, the space (and the agent's terminal) opens on that machine; without, on this computer.
-export const spaceNewArgs = ({ worktree, task, machine = null }) =>
-  ["do", "space.new", JSON.stringify({ folder: worktree, argv: AGENT_ARGV, task, ...(machine ? { machine } : {}) })];
+export const spaceNewArgs = ({ worktree, task, machine = null, argv = AGENT_ARGV }) =>
+  ["do", "space.new", JSON.stringify({ folder: worktree, argv, task, ...(machine ? { machine } : {}) })];
 
 // An exec that runs on the run's machine (unchanged for this computer).
 export const execOn = (exec, machine) => (machine ? (cmd, args, opts) => exec(cmd, args, { ...opts, on: machine }) : exec);
@@ -65,25 +68,54 @@ async function worktreeFor({ repo, branch, base, home, exec }) {
   return addWorktree({ repo, branch, base, home, exec });
 }
 
-// Is Claude Code known NOT to be installed on the machine? `known` is knownAgents()'s list; an agent
-// Herdr doesn't list (or a failed check, null) proves nothing, so only an explicit "not installed" counts.
-export function claudeMissing(known) {
-  const isClaude = (a) => [a?.id, a?.name, String(a?.run?.[0] ?? "").split("/").pop()].some((x) => String(x ?? "").toLowerCase() === "claude");
-  const entry = (known ?? []).find(isClaude);
+// `known` is knownAgents()'s list: entries { id, name, run: [argv...], installed }, any field may be missing, and the
+// whole list is null when the check failed or Herdr can't say.
+export const isClaude = (a) => [a?.id, a?.name, String(a?.run?.[0] ?? "").split("/").pop()].some((x) => String(x ?? "").toLowerCase() === "claude");
+
+const runOf = (a) => (Array.isArray(a?.run) && a.run.length && a.run.every((x) => typeof x === "string") ? [...a.run] : null);
+const usable = (a) => a && a.installed !== false && validAgentId(a.id) && runOf(a) !== null;
+
+// The agents the setting offers besides Claude Code: installed, with a command to run.
+export function agentChoices(known) {
+  const seen = new Set(), out = [];
+  for (const a of Array.isArray(known) ? known : []) {
+    if (!usable(a) || isClaude(a) || seen.has(a.id)) continue;
+    seen.add(a.id);
+    out.push({ id: a.id, name: typeof a.name === "string" && a.name ? a.name : a.id });
+  }
+  return out;
+}
+
+// The command that starts `agent` (null: Claude Code, always the same); null when Herdr doesn't list it as installed.
+export function agentArgv(known, agent) {
+  if (!agent) return [...AGENT_ARGV];
+  const entry = (Array.isArray(known) ? known : []).find((a) => usable(a) && a.id === agent.id);
+  return entry ? runOf(entry) : null;
+}
+
+// Is the agent known NOT to be there? For Claude Code only an explicit "not installed" counts: an agent Herdr
+// doesn't list (or a failed check, null) proves nothing. Another agent needs its command from Herdr, so it is
+// missing unless found.
+export function agentMissing(known, agent) {
+  if (agent) return agentArgv(known, agent) === null;
+  const entry = (Array.isArray(known) ? known : []).find(isClaude);
   return Boolean(entry) && entry.installed === false;
 }
 
 // Starts one queued run. Never throws: a failure leaves the run stopped with the reason in `error`.
 // `home` is this computer's; a run on another machine asks that machine for its own.
-// `rules` (see rules.js) say what the agent does after the fix; the record keeps how far (`auto`) for the row.
-export async function startRun({ run, issue, runs, repo, home, exec, now, rules }) {
+// `rules` (see rules.js) say which agent fixes and how far it goes; `known` is knownAgents()'s list, for the agent's command.
+// The record keeps how far (`auto`) for the row.
+export async function startRun({ run, issue, runs, repo, home, exec, now, rules, known }) {
   const machine = run.machine ?? null, there = execOn(exec, machine);
   try {
+    const argv = agentArgv(known, rules?.agent ?? null);
+    if (!argv) throw new Error(`${agentName(rules)} isn't installed here.`);
     const base = await defaultBase(repo, there);
     const homeDir = machine ? await remoteHome(there, machine) : home;
     const worktree = await worktreeFor({ repo, branch: run.branch, base, home: homeDir, exec: there });
-    const task = fixPrompt({ issue, branch: run.branch, stackable: stackable(runs, repo.main), rules });
-    const space = parseSpaceNew(await exec("herdr-app", spaceNewArgs({ worktree, task, machine }), {}));
+    const task = fixPrompt({ issue, branch: run.branch, stackable: stackable(runs, repo.main), rules, again: run.again ?? null });
+    const space = parseSpaceNew(await exec("herdr-app", spaceNewArgs({ worktree, task, machine, argv }), {}));
     return { ...run, base, worktree, terminal: qualify(space.terminal, machine), state: "running", startedAt: now(), seenWorking: false, error: null, auto: autoOf(rules) };
   } catch (e) {
     return { ...run, state: "stopped", error: String(e?.message ?? e) };
